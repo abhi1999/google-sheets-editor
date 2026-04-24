@@ -1,13 +1,3 @@
 {
-  "type": "service_account",
-  "project_id": "abhishek-nayca-schedule-sheet",
-  "private_key_id": "8d55fe48a8e86cd6b9d11294c337bc2dacfc8a7c",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCuFUOY8POWDWpv\n/4qcrNrURaIvmQfZK8h/z+KIH1Rew53NmYHXT/nM9dWmbKnnlsxiQWSWsOk7xBGZ\n32ynziYWHZyvWciZgBwC9snE7LS/fhvCwsPxrCuaPru/0aSx0vzks1hBHI7agwje\nxw6HbfmhSS/+RkyihbB3Za2738Ozf9ctyvq9s696Kl4yiy7+RcuxG5LetQye2mPM\ns9Px5vmcPZgFFz3rqq8jifLy9gB6PCShLw6Oqkvi8/6ziwB4Ac5qa2TpD2W6f29p\nSrWgDvnZ09+BVHTOxu9CvwOIcSDzDlTqJp16Dy7f5vyAaQZTli6fIunGwnF2kfcs\nK3JYsTGrAgMBAAECggEAQq4UcW3B7/T9kx7P6klvnKV7hT3Zur7Bkut++uL9Pzsw\no8Mr79xLc82qY4/12KZzbSNdMzdabzEgCM+C4BffkNMQ5D3Az8M5d40uJgcBCOR2\nH7jYsyZeoTtsUQItUovdoIBtyqr0sRBGAoc+snNWjgfpoT0uN4Z73JAO5wrD/GnW\nMS4LE7IivqcbEtNewFEkpx8UsFndB4TmJKf1EX1mm75KH/Qxx12ikY7PHIGrHgJ7\nXWFaM93CzHarha0638kJo0qK2PMZQLwJ5LPqRicZEoBKm1qkeBLhCc/Xs0RtOGP/\nteUeeLQ2kkO9ddheIjlMWK85RgBHVJcps7Sh3AwTmQKBgQDk+tZvisCvO4mufjt7\nbXoMHCgZA91+eVXxmV9/Dn8j/TaEC5aplCVpcFqamxdu7wsy6ieoZBG+1kK0dif7\nadeYnYSqrbSD2K+jbWPgJr9HPCVmKLi4gG7zygZFGnE8XhDG/VngGz7NhTYB0OP1\ncOxEwMfw544BNWrxK4ZyF++G/QKBgQDCoBI/c3g+SpTMXIMqLnprdLpo9mwDfajG\nVqJB2BdcdR1u8Cr4WQkvEZLZpoS9AsRCrZvdl77L/T99p4zjFe/IFk310uhl0Kp5\n2iC/m9PkUzOzCixQb0T43TGDbEuTzj1ctep7x1tTNGzhQY6CbxXnhfF22GWrxXIj\niYdW6JM/xwKBgQCM5SPpgpFJwfLYIehr7FM6/GBX9B7oYbTWcq9mOP9Wn8pZud+8\n/OGAXZgCpgfnRMO5UoeQf/LDYIevDz1O4DO/Pr2RYE1BC6YXg4n/NRhhtsq0b74q\nGS0saVUuVDT1FlRwfRg+Y8VjJOK0f1qlfhSDwbPFslWYvMvPFh8mOUAz6QKBgQC1\nIkkZaJwmTT9DG26vmWYyEAdVnNJWRWMIhKSqZzUGxbDJCRjU3figJ9jmXAX561NB\nQ1Zm282lCGNIzOFgj5AERk30VYAZEiU3Fv2Xlq2UOKNLJFKt4YDtpN9qEyYbv7x4\nRo6e+KFURNx4oIzDdCOMwKpEE448WZyq2lptVjOFDQKBgQDFaDqH7GdbyujgpkbO\nNEmyxei4mzdJ3w8T2Z6Nkzs57vy1NDPTG7KOoQ6iMzGR7TANRk8lfDHES/2TeVb+\nybrCImm4bem3Ssz5zt0WOPFa73+U7La/t8okVccm9vVC5cPUUEH0eOp/j1sMdnr3\noyqfKGcXg1P6hrBKk3x7URLDMA==\n-----END PRIVATE KEY-----\n",
-  "client_email": "sheetsedit@abhishek-nayca-schedule-sheet.iam.gserviceaccount.com",
-  "client_id": "114394507937016957458",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/sheetsedit%40abhishek-nayca-schedule-sheet.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
+  
 }
