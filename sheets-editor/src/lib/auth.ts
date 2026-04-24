@@ -4,7 +4,7 @@
  */
 
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { isEditor } from '@/config';
 import type { AppUser } from '@/types';
 

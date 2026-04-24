@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { getSheetsClient } from '@/lib/sheets-client';
 import { getSheetsConfig } from '@/config';
 
 /**
