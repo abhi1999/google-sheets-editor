@@ -1,0 +1,8 @@
+{
+  "editors": [
+    "admin1@gmail.com",
+    "coach1@gmail.com",
+    "manager@club.com"
+  ],
+  "description": "List of Google account emails permitted to edit data. All other authenticated users get read-only access."
+}
