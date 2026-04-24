@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.npm
+
+# Next.js
+.next/
+out/
+build/
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Sensitive credentials — NEVER commit these
+service-account-key.json
+editors.json
+*.key.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Vercel
+.vercel
