@@ -13,9 +13,9 @@ export async function GET() {
     const user = await requireAuth();
 
     const config = getSheetsConfig();
-    console.log('iamhere config', config)
+    //console.log('iamhere config', config)
     const { headers, rows } = await readSheetData();
-    console.log('iamhere', headers)
+    //console.log('iamhere', headers)
     const response: SheetData = {
       headers,
       rows,

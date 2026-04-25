@@ -15,7 +15,7 @@ import type { AppUser } from '@/types';
 export async function getCurrentUser(): Promise<AppUser | null> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return null;
-
+console.log('user email id',session.user.email)
   return {
     email: session.user.email,
     name: session.user.name || 'Unknown',

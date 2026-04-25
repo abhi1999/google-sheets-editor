@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     const invalidColumns = body.edits.filter(
       (edit) => !config.editableColumns.includes(edit.column)
     );
-    console.log('iamhere with invalid columns', invalidColumns)
+    
     if (invalidColumns.length > 0) {
       return NextResponse.json(
         {
