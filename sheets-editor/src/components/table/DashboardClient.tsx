@@ -117,7 +117,7 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
       const filterVal = filters[filters.column];
       if (filterVal) {
         rows = rows.filter((row) =>
-          filterVal.type ==="includes"? filterVal.split(',').map(v=> v.toLowerCase()).includes(String(row[filters.column!] || '').toLowerCase()):String(row[filters.column!] || '').toLowerCase() === filterVal.toLowerCase()
+          String(row[filters.column!] || '').toLowerCase() === filterVal.toLowerCase()
         );
       }
     }
