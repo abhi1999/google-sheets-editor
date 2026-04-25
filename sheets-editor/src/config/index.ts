@@ -78,7 +78,7 @@ export function getSheetsConfig(): SheetsConfig {
     sheetId,
     range: process.env.SHEET_RANGE || 'Sheet1!A1:Z1000',
     auditSheetName: process.env.AUDIT_SHEET_NAME || 'AuditLog',
-    editableColumns: (process.env.EDITABLE_COLUMNS || '')
+    editableColumns: (process.env.EDITABLE_COLUMNS || '').replace(/\\n/g, '\n')
       .split(',')
       .map((c) => c.trim())
       .filter(Boolean),
