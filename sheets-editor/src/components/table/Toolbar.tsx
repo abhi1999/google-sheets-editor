@@ -58,7 +58,7 @@ export function Toolbar({
             </svg>
           </div>
           <span className="font-semibold text-sm hidden sm:block" style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>
-            Sheet Editor
+            NAYCA 2026 Schedule
           </span>
         </div>
 

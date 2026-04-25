@@ -3,8 +3,8 @@ import { Providers } from '@/components/auth/Providers';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Sheet Editor — Collaborative Data Management',
-  description: 'Securely view and edit Google Sheets data with role-based access control.',
+  title: 'NAYCA 2026 Scheduling Sheet',
+  description: 'Securely view and edit NAYCA 2026 Scheduling Google Sheets.',
 };
 
 export default function RootLayout({

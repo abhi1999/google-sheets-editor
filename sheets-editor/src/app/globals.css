@@ -7,27 +7,51 @@
   --font-display: 'Fraunces', Georgia, serif;
   --font-mono: 'DM Mono', monospace;
 
-  /* Color palette */
-  --bg-base: #080c14;
-  --bg-surface: #0d1525;
-  --bg-elevated: #111d33;
-  --bg-hover: #162240;
-  --border: #1e2f4a;
-  --border-bright: #2a4068;
-  --text-primary: #e8edf5;
-  --text-secondary: #8a9bb5;
-  --text-muted: #4a5f7a;
-  --accent: #3b82f6;
-  --accent-dim: #1d3d6f;
-  --accent-bright: #60a5fa;
-  --success: #22c55e;
+  /* === USACricket-inspired palette === */
+
+  /* Backgrounds (deep navy base) */
+  --bg-base: #0b1e3c;          /* primary navy */
+  --bg-surface: #0f2a54;       /* card surface */
+  --bg-elevated: #14366b;      /* elevated panels */
+  --bg-hover: #1a4485;         /* hover state */
+
+  /* Borders */
+  --border: #1f3f73;
+  --border-bright: #2f5aa3;
+
+  /* Text */
+  --text-primary: #f5f7fb;     /* near white */
+  --text-secondary: #b6c4e0;   /* soft blue-gray */
+  --text-muted: #7f95bd;
+
+  /* Primary Accent (USACricket blue) */
+  --accent: #1d4ed8;           /* strong royal blue */
+  --accent-dim: #1e3a8a;
+  --accent-bright: #3b82f6;
+
+  /* Secondary Accent (USACricket red) */
+  /*--danger: #d72638;           /* brand red */
+  /*--danger-dim: #7f1d1d;*/
+
+  /* Secondary Accent (USACricket red system) */
+--red: #d72638;            /* primary brand red */
+--red-dim: #7f1d1d;
+--red-soft: #ef4444;
+--red-bg: rgba(215, 38, 56, 0.12);
+
+/* Map to semantic usage */
+--danger: var(--red);
+--danger-dim: var(--red-dim);
+  /* Success / Warning (kept balanced with palette) */
+  --success: #16a34a;
   --success-dim: #14532d;
+
   --warning: #f59e0b;
-  --warning-dim: #451a03;
-  --danger: #ef4444;
-  --danger-dim: #450a0a;
-  --editable: #0ea5e9;
-  --editable-dim: #0c2340;
+  --warning-dim: #78350f;
+
+  /* Editable highlight (blue tint) */
+  --editable: #38bdf8;
+  --editable-dim: #0c4a6e;
 }
 
 * {

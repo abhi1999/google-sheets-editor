@@ -62,7 +62,7 @@ export default function LoginPage() {
             className="text-2xl font-semibold mb-1"
             style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}
           >
-            Sheet Editor
+            NAYCA 2026 Scheduling Sheet
           </h1>
           <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
             Sign in to access your data workspace

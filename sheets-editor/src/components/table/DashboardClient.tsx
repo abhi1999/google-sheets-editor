@@ -29,7 +29,9 @@ const PREDEFINED_FILTERS: PredefinedFilter[] = [
   { id: 'Week2-Sun', label: 'Week2-Sun', column: 'Date', value: '04/26/2026', color: 'green' },
   // { id: 'pending', label: 'Pending', column: 'Status', value: 'Pending', color: 'yellow' },
    { id: 'u13a', label: 'U13A', column: 'Cat', value: 'U13A', color: 'blue' },
-   { id: 'u13b', label: 'U13B', column: 'Cat', value: 'U13B', color: 'blue' }
+   { id: 'u13b', label: 'U13B', column: 'Cat', value: 'U13B', color: 'blue' },
+   { id: 'u15a', label: 'U15A', column: 'Cat', value: 'U15A', color: 'yellow' },
+   { id: 'u15b', label: 'U15B', column: 'Cat', value: 'U15B', color: 'yellow' }
 ];
 
 const DEFAULT_PAGE_SIZE = 25;
