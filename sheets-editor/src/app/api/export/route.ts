@@ -33,10 +33,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (filterColumn && filterValue) {
-      filteredRows = filteredRows.filter(
-        (row) => String(row[filterColumn] || '').toLowerCase() === filterValue.toLowerCase()
-      );
+    const filterColumns = searchParams.getAll('filterColumn');
+    const filterValues = searchParams.getAll('filterValue');
+
+    if (filterColumns.length === filterValues.length && filterColumns.length > 0) {
+      filterColumns.forEach((column, index) => {
+        const value = filterValues[index];
+        if (!column || !value) return;
+        filteredRows = filteredRows.filter(
+          (row) => String(row[column] || '').toLowerCase() === value.toLowerCase()
+        );
+      });
     }
 
     // Apply sorting

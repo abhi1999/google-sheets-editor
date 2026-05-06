@@ -25,13 +25,16 @@ interface DashboardClientProps {
 // ----------------------------------------------------------------
 const PREDEFINED_FILTERS: PredefinedFilter[] = [
   // Examples — customize to match your actual sheet columns:
-  { id: 'Week4-Sat', label: 'Week4-Sat', column: 'Date', value: '05/09/2026', color: 'green' },
-  { id: 'Week4-Sun', label: 'Week4-Sun', column: 'Date', value: '05/10/2026', color: 'green' },
-  // { id: 'pending', label: 'Pending', column: 'Status', value: 'Pending', color: 'yellow' },
-   { id: 'u13a', label: 'U13A', column: 'Cat', value: 'U13A', color: 'blue' },
-   { id: 'u13b', label: 'U13B', column: 'Cat', value: 'U13B', color: 'blue' },
-   { id: 'u15a', label: 'U15A', column: 'Cat', value: 'U15A', color: 'yellow' },
-   { id: 'u15b', label: 'U15B', column: 'Cat', value: 'U15B', color: 'yellow' }
+  { id: 'Week1', label: 'Week1', column: 'Date', value: '04/18/2026,04/19/2026', color: 'green' },
+  { id: 'Week2', label: 'Week2', column: 'Date', value: '04/25/2026,04/26/2026', color: 'green' },
+  { id: 'Week3', label: 'Week3', column: 'Date', value: '05/02/2026,05/03/2026', color: 'green' },
+  { id: 'Week4', label: 'Week4', column: 'Date', value: '05/09/2026,05/10/2026', color: 'green' },
+  { id: 'Week5', label: 'Week5', column: 'Date', value: '05/16/2026,05/17/2026', color: 'green' },
+  { id: 'Week6', label: 'Week6', column: 'Date', value: '05/30/2026,06/01/2026', color: 'green' },
+  { id: 'Week7', label: 'Week7', column: 'Date', value: '06/06/2026,06/07/2026', color: 'green' },
+  { id: 'u11', label: 'U11', column: 'Cat', value: 'U11A,U11B', color: 'blue' },
+  { id: 'u13', label: 'U13', column: 'Cat', value: 'U13A,U13B', color: 'blue' },
+  { id: 'u15', label: 'U15', column: 'Cat', value: 'U15A,U15B', color: 'blue' },
 ];
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -55,7 +58,7 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
   const [filters, setFilters] = useState<FilterState>({
     search: '',
     column: null,
-    predefined: null,
+    predefined: [],
   });
   const [sortState, setSortState] = useState<SortState>({ column: null, direction: null });
 
@@ -114,15 +117,20 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
       );
     }
 
-    // Column filter (from predefined or manual)
-    if (filters.column) {
-      const filterVal = filters[filters.column];
-      if (filterVal) {
-        rows = rows.filter((row) =>
-          String(row[filters.column!] || '').toLowerCase() === filterVal.toLowerCase()
-        );
-      }
-    }
+    // Column filters: support multiple active column filters together
+    const activeColumnFilters = Object.entries(filters).filter(
+      ([key, value]) =>
+        key !== 'search' && key !== 'column' && key !== 'predefined' && value
+    ) as [string, string | string[]][];
+
+    activeColumnFilters.forEach(([column, value]) => {
+      rows = rows.filter((row) => {
+        const cellValue = String(row[column] || '').toLowerCase();
+        return Array.isArray(value)
+          ? value.some((item) => cellValue === item.toLowerCase())
+          : cellValue === value.toLowerCase();
+      });
+    });
 
     // Sort
     if (sortState.column && sortState.direction) {
@@ -240,9 +248,28 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
   const handleExport = () => {
     const params = new URLSearchParams();
     if (filters.search) params.set('search', filters.search);
-    if (filters.column) params.set('filterColumn', filters.column);
-    if (filters.column && filters[filters.column]) params.set('filterValue', filters[filters.column] as string);
-    if (sortState.column) { params.set('sortColumn', sortState.column); params.set('sortDirection', sortState.direction || 'asc'); }
+
+    const activeColumnFilters = Object.entries(filters).filter(
+      ([key, value]) =>
+        key !== 'search' && key !== 'column' && key !== 'predefined' && value
+    ) as [string, string | string[]][];
+
+    activeColumnFilters.forEach(([column, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((item) => {
+          params.append('filterColumn', column);
+          params.append('filterValue', item);
+        });
+      } else {
+        params.append('filterColumn', column);
+        params.append('filterValue', value);
+      }
+    });
+
+    if (sortState.column) {
+      params.set('sortColumn', sortState.column);
+      params.set('sortDirection', sortState.direction || 'asc');
+    }
     window.location.href = `/api/export?${params}`;
     toast('Downloading CSV…', 'info');
   };

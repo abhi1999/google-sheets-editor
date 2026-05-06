@@ -73,8 +73,8 @@ export interface SortState {
 export interface FilterState {
   search: string;
   column: string | null;
-  predefined: string | null;
-  [key: string]: string | null;
+  predefined: string[];
+  [key: string]: string | string[] | null;
 }
 
 export interface PredefinedFilter {
