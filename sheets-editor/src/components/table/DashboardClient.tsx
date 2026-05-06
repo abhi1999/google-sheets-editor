@@ -448,7 +448,7 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
         {/* Filter bar */}
         {sheetData && (
           <FilterBar
-            headers={sheetData.headers}
+            headers={sheetData.headers.filter((header) => header !== 'Season')}
             filters={filters}
             onFiltersChange={setFilters}
             predefinedFilters={PREDEFINED_FILTERS}
@@ -507,7 +507,7 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
           ) : sheetData ? (
             <>
               <DataTable
-                headers={sheetData.headers}
+                headers={sheetData.headers.filter((header) => header !== 'Season')}
                 rows={paginatedRows}
                 editableColumns={editableColumns}
                 isEditor={user.isEditor}

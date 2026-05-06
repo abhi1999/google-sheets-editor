@@ -109,10 +109,6 @@ export function DataTable({
                 />
               </th>
             )}
-            {/* Row number */}
-            <th className="w-12 px-3 py-3 text-left text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
-              #
-            </th>
             {headers.map((header) => (
               <th
                 key={header}
@@ -140,7 +136,6 @@ export function DataTable({
         <tbody>
           {rows.map((row, rowIdx) => {
             const isSelected = selectedRows.has(row.__rowIndex);
-            const displayRowNum = (page - 1) * pageSize + rowIdx + 1;
 
             return (
               <tr
@@ -159,10 +154,6 @@ export function DataTable({
                     />
                   </td>
                 )}
-                {/* Row number */}
-                <td className="px-3 py-2.5 text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
-                  {displayRowNum}
-                </td>
                 {/* Data cells */}
                 {headers.map((header) => {
                   const isEditable = isEditor && editableColumns.includes(header);
