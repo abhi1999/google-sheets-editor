@@ -46,17 +46,12 @@ export function Toolbar({
       {/* Left: Brand + status */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2.5">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent)' }}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--accent-bright)' }}>
-              <rect x="2" y="2" width="12" height="12" rx="1.5" />
-              <line x1="2" y1="6" x2="14" y2="6" />
-              <line x1="2" y1="10" x2="14" y2="10" />
-              <line x1="6" y1="6" x2="6" y2="14" />
-            </svg>
-          </div>
+          <img
+            src="/NAYCA.jpg"
+            alt="NAYCA Logo"
+            className="w-8 h-8 rounded-lg object-cover"
+            style={{ border: '1px solid var(--accent)' }}
+          />
           <span className="font-semibold text-sm hidden sm:block" style={{ fontFamily: 'var(--font-display)', color: 'white' }}>
             NAYCA 2026 Schedule
           </span>

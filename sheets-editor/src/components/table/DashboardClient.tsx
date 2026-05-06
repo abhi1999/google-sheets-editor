@@ -192,6 +192,32 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // ── Load saved predefined filters from localStorage ──────────
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('selectedPredefinedFilters');
+      if (saved) {
+        const savedIds: string[] = JSON.parse(saved);
+        // Filter out IDs that no longer exist in PREDEFINED_FILTERS
+        const validIds = savedIds.filter(id => PREDEFINED_FILTERS.some(pf => pf.id === id));
+        if (validIds.length > 0) {
+          setFilters(prev => ({ ...prev, predefined: validIds }));
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load saved filters from localStorage:', error);
+    }
+  }, []);
+
+  // ── Save predefined filters to localStorage when they change ──
+  useEffect(() => {
+    try {
+      localStorage.setItem('selectedPredefinedFilters', JSON.stringify(filters.predefined));
+    } catch (error) {
+      console.warn('Failed to save filters to localStorage:', error);
+    }
+  }, [filters.predefined]);
+
   // ── Derived: filtered + sorted + paginated rows ──────────────
   const processedRows = useMemo(() => {
     if (!sheetData) return [];
