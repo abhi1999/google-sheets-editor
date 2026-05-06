@@ -35,8 +35,9 @@ export function Toolbar({
   onSignOut,
 }: ToolbarProps) {
   return (
-    <header
-      className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 sticky top-0 z-40 transition-all duration-300"
+    <div
+      role="banner"
+      className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-40 transition-all duration-300"
       style={{
         background: 'linear-gradient(135deg, rgba(4,30,66,0.98) 0%, rgba(4,30,66,0.95) 50%, rgba(6,45,98,0.92) 100%)',
         borderBottom: '1px solid rgba(255,255,255,0.15)',
@@ -44,20 +45,21 @@ export function Toolbar({
         boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
       }}
     >
-      {/* Left: Enhanced Brand + status */}
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-3 group">
+      {/* Mobile: Compact Brand + Status Row */}
+      <div className="flex items-center justify-between w-full sm:w-auto sm:justify-start gap-3 sm:gap-6">
+        {/* Mobile-optimized Brand */}
+        <div className="flex items-center gap-2 sm:gap-3 group">
           <div className="relative">
             <img
               src="/NAYCA.jpg"
               alt="NAYCA Logo"
-              className="w-10 h-10 rounded-xl object-cover transition-transform duration-300 group-hover:scale-105 shadow-lg"
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl object-cover transition-transform duration-300 group-hover:scale-105 shadow-lg"
               style={{ border: '2px solid var(--accent)', boxShadow: '0 0 20px rgba(246,181,8,0.3)' }}
             />
-            <div className="absolute -inset-1 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{ background: 'linear-gradient(45deg, var(--accent), transparent)', filter: 'blur(8px)' }} />
+            <div className="absolute -inset-1 rounded-lg sm:rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{ background: 'linear-gradient(45deg, var(--accent), transparent)', filter: 'blur(8px)' }} />
           </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-lg tracking-tight hidden sm:block transition-colors duration-300" style={{ fontFamily: 'var(--font-display)', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-0 sm:gap-2">
+            <span className="font-bold text-base sm:text-lg tracking-tight transition-colors duration-300" style={{ fontFamily: 'var(--font-display)', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
               NAYCA 2026
             </span>
             <span className="text-xs font-medium opacity-90 hidden sm:block" style={{ color: 'rgba(255,255,255,0.8)' }}>
@@ -66,28 +68,17 @@ export function Toolbar({
           </div>
         </div>
 
-        {/* Enhanced Permission badge */}
-        <div className="flex items-center gap-2">
+        {/* Mobile: Permission badge in header row */}
+        <div className="sm:hidden">
           <span
-            className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 hover:scale-105 shadow-sm"
+            className="px-2 py-1 rounded-full text-xs font-semibold transition-all duration-300 hover:scale-105 shadow-sm"
             style={
               user.isEditor
-                ? {
-                    background: 'linear-gradient(135deg, var(--success-dim), var(--success))',
-                    color: 'white',
-                    border: '1px solid var(--success)',
-                    boxShadow: '0 2px 8px rgba(21,128,61,0.3)'
-                  }
-                : {
-                    background: 'rgba(255,255,255,0.15)',
-                    color: 'rgba(255,255,255,0.95)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    backdropFilter: 'blur(10px)'
-                  }
+                ? { background: 'var(--success-dim)', color: 'var(--success)', border: '1px solid var(--success)' }
+                : { background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.95)', border: '1px solid rgba(255,255,255,0.2)' }
             }
           >
-            <span className="mr-1.5">{user.isEditor ? '✦' : '👁'}</span>
-            {user.isEditor ? 'Editor Access' : 'View Only'}
+            {user.isEditor ? '✦ Editor' : '👁 Viewer'}
           </span>
         </div>
       </div>
@@ -115,14 +106,14 @@ export function Toolbar({
         </div>
       )}
 
-      {/* Right: Enhanced Actions */}
-      <div className="flex items-center gap-3">
-        {/* Refresh button */}
+      {/* Mobile/Desktop: Enhanced Actions */}
+      <div className="flex items-center justify-center sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto mt-2 sm:mt-0">
+        {/* Refresh button - Better mobile touch target */}
         <button
           onClick={onRefresh}
           disabled={isLoading}
           title="Refresh data"
-          className="w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-300 hover:scale-110 hover:rotate-12 disabled:opacity-40 disabled:hover:scale-100 disabled:hover:rotate-0 shadow-lg"
+          className="w-11 h-11 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl transition-all duration-300 hover:scale-110 hover:rotate-12 disabled:opacity-40 disabled:hover:scale-100 disabled:hover:rotate-0 shadow-lg touch-manipulation"
           style={{
             background: 'rgba(255,255,255,0.15)',
             border: '1px solid rgba(255,255,255,0.2)',
@@ -130,16 +121,16 @@ export function Toolbar({
             backdropFilter: 'blur(10px)'
           }}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${isLoading ? 'animate-spin' : ''}`}>
-            <path d="M2 8A6 6 0 1 1 8 14" />
-            <polyline points="2,5 2,8 5,8" />
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${isLoading ? 'animate-spin' : ''}`}>
+            <path d="M3 9A6 6 0 1 1 9 15" />
+            <polyline points="3,6 3,9 6,9" />
           </svg>
         </button>
 
-        {/* Export button */}
+        {/* Export button - Mobile optimized */}
         <button
           onClick={onExport}
-          className="flex items-center gap-2 px-4 h-10 rounded-xl text-sm font-medium transition-all duration-300 hover:scale-105 shadow-lg"
+          className="flex items-center gap-2 px-3 sm:px-4 h-11 sm:h-10 rounded-xl text-sm font-medium transition-all duration-300 hover:scale-105 shadow-lg touch-manipulation min-w-[44px]"
           style={{
             background: 'rgba(255,255,255,0.15)',
             border: '1px solid rgba(255,255,255,0.2)',
@@ -147,17 +138,17 @@ export function Toolbar({
             backdropFilter: 'blur(10px)'
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M7 1v8M4 5l3 3 3-3M1 11v1a1 1 0 001 1h10a1 1 0 001-1v-1" />
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 1v9M5 5l3 3 3-3M1 12v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
           </svg>
           <span className="hidden sm:inline">Export</span>
         </button>
 
-        {/* Bulk edit button */}
+        {/* Bulk edit button - Mobile optimized */}
         {user.isEditor && selectedCount > 0 && (
           <button
             onClick={onBulkEdit}
-            className="flex items-center gap-2 px-4 h-10 rounded-xl text-sm font-semibold transition-all duration-300 hover:scale-105 shadow-lg"
+            className="flex items-center gap-2 px-3 sm:px-4 h-11 sm:h-10 rounded-xl text-sm font-semibold transition-all duration-300 hover:scale-105 shadow-lg touch-manipulation min-w-[44px]"
             style={{
               background: 'linear-gradient(135deg, var(--accent-dim), var(--accent))',
               border: '1px solid var(--accent-bright)',
@@ -165,9 +156,9 @@ export function Toolbar({
               boxShadow: '0 4px 12px rgba(246,181,8,0.4)'
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9.5 2.5l2 2-7 7H2.5v-2l7-7z" />
-              <line x1="8" y1="4" x2="10" y2="6" />
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.5 3.5l2 2-8 8H2.5v-2l8-8z" />
+              <line x1="9" y1="5" x2="11" y2="7" />
             </svg>
             <span className="hidden sm:inline">Bulk Edit</span>
             <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs font-bold ml-1">
@@ -176,12 +167,12 @@ export function Toolbar({
           </button>
         )}
 
-        {/* Discard button */}
+        {/* Discard button - Mobile optimized */}
         {pendingCount > 0 && (
           <button
             onClick={onDiscard}
             disabled={isSaving}
-            className="flex items-center gap-2 px-4 h-10 rounded-xl text-sm font-medium transition-all duration-300 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100 shadow-lg"
+            className="flex items-center gap-2 px-3 sm:px-4 h-11 sm:h-10 rounded-xl text-sm font-medium transition-all duration-300 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100 disabled:cursor-not-allowed shadow-lg touch-manipulation min-w-[44px]"
             style={{
               background: 'rgba(239,68,68,0.2)',
               border: '1px solid rgba(239,68,68,0.3)',
@@ -196,12 +187,12 @@ export function Toolbar({
           </button>
         )}
 
-        {/* Save button */}
+        {/* Save button - Mobile optimized */}
         {user.isEditor && pendingCount > 0 && (
           <button
             onClick={onSave}
             disabled={isSaving || pendingCount === 0}
-            className="flex items-center gap-2 px-4 h-10 rounded-xl text-sm font-bold transition-all duration-300 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100 disabled:cursor-not-allowed shadow-lg"
+            className="flex items-center gap-2 px-3 sm:px-4 h-11 sm:h-10 rounded-xl text-sm font-bold transition-all duration-300 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100 disabled:cursor-not-allowed shadow-lg touch-manipulation min-w-[44px]"
             style={{
               background: 'linear-gradient(135deg, var(--success), #16a34a)',
               border: '1px solid #22c55e',
@@ -212,19 +203,19 @@ export function Toolbar({
             {isSaving ? (
               <div className="w-4 h-4 rounded-full border-2 border-white/30 animate-spin" style={{ borderTopColor: 'white' }} />
             ) : (
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4L6 9 3 6" />
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M13 4L6 11 3 8" />
               </svg>
             )}
-            <span>{isSaving ? 'Saving…' : `Save (${pendingCount})`}</span>
+            <span className="hidden sm:inline">{isSaving ? 'Saving…' : `Save (${pendingCount})`}</span>
           </button>
         )}
 
-        {/* Enhanced User avatar */}
+        {/* Enhanced User avatar - Mobile optimized */}
         <div className="ml-2 relative group">
           <button
             type="button"
-            className="flex items-center gap-3 pl-3 pr-2 py-2 rounded-xl transition-all duration-300 hover:scale-105 shadow-lg"
+            className="flex items-center gap-3 pl-3 pr-2 py-2 h-11 sm:h-10 rounded-xl transition-all duration-300 hover:scale-105 shadow-lg touch-manipulation"
             style={{
               background: 'rgba(255,255,255,0.15)',
               border: '1px solid rgba(255,255,255,0.2)',
@@ -285,6 +276,6 @@ export function Toolbar({
           </div>
         </div>
       </div>
-    </header>
+    </div>
   );
 }

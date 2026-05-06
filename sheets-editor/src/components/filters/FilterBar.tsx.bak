@@ -19,7 +19,7 @@ export function FilterBar({
   predefinedFilters,
   totalRows,
   filteredRows
-}: FilterBarProps) {
+}) {
   const normalizeFilterValue = (value: string | string[] | null): string | string[] | null => {
     if (!value) return null;
     if (Array.isArray(value)) {
@@ -92,12 +92,7 @@ export function FilterBar({
   const hasActiveFilters =
     Boolean(filters.search) || filters.predefined.length > 0 || activeColumnFilters.length > 0;
 
-  return (
-    <div
-      className="p-4 sm:p-6 rounded-2xl space-y-4 transition-all duration-300 hover:shadow-lg"
-      style={{
-        background: 'var(--bg-surface)',
-        border: '1px solid var(--border)',
+  return <div>test</div>;
         boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
       }}
     >
@@ -174,8 +169,7 @@ export function FilterBar({
         </div>
       </div>
 
-      {/* Mobile/Desktop: Actions row */}
-      <div className="flex items-center gap-3">
+        {/* Enhanced Clear button - Mobile optimized */}
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
@@ -211,7 +205,10 @@ export function FilterBar({
             </span>
           )}
         </div>
+        </div>
       </div>
+
+      {/* Enhanced Active column filters */}
       {activeColumnFilters.length > 0 && (
         <div className="flex flex-wrap gap-3 p-3 rounded-xl animate-fade-in" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>

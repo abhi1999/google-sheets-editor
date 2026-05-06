@@ -36,9 +36,37 @@ export function DataTable({
 }: DataTableProps) {
   const [editingCell, setEditingCell] = useState<{ rowIndex: number; column: string } | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
   const allSelected = rows.length > 0 && rows.every((r) => selectedRows.has(r.__rowIndex));
   const someSelected = rows.some((r) => selectedRows.has(r.__rowIndex));
+
+  // Swipe gesture handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+
+    // For now, we'll just log the swipe direction
+    // In a full implementation, this could trigger pagination or column scrolling
+    if (isLeftSwipe) {
+      console.log('Swiped left - could scroll right or go to next page');
+    }
+    if (isRightSwipe) {
+      console.log('Swiped right - could scroll left or go to previous page');
+    }
+  }, [touchStart, touchEnd]);
 
   const startEdit = useCallback((row: SheetRow, column: string) => {
     if (!isEditor || !editableColumns.includes(column)) return;
@@ -92,19 +120,25 @@ export function DataTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl shadow-sm" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-      <table className="w-full border-collapse text-sm" style={{ minWidth: `${headers.length * 140}px` }}>
+    <div
+      className="overflow-x-auto rounded-xl shadow-sm"
+      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <table className="w-full border-collapse text-sm" style={{ minWidth: `${Math.max(headers.length * 140, 600)}px` }}>
         <thead>
           <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-elevated)' }}>
-            {/* Checkbox column */}
+            {/* Checkbox column - Mobile optimized */}
             {isEditor && (
-              <th className="w-12 px-4 py-4 text-left">
+              <th className="w-12 px-3 sm:px-4 py-3 sm:py-4 text-left">
                 <input
                   type="checkbox"
                   checked={allSelected}
                   ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
                   onChange={(e) => onSelectAll(e.target.checked)}
-                  className="rounded border-2 transition-all duration-200 hover:scale-110"
+                  className="w-5 h-5 rounded border-2 transition-all duration-200 hover:scale-110 touch-manipulation"
                   style={{
                     accentColor: 'var(--accent)',
                     cursor: 'pointer',
@@ -117,7 +151,7 @@ export function DataTable({
             {headers.map((header) => (
               <th
                 key={header}
-                className="px-4 py-4 text-left font-semibold cursor-pointer select-none group whitespace-nowrap transition-all duration-200 hover:bg-gray-50"
+                className="px-3 sm:px-4 py-3 sm:py-4 text-left font-semibold cursor-pointer select-none group whitespace-nowrap transition-all duration-200 hover:bg-gray-50 touch-manipulation"
                 style={{ color: 'var(--text-primary)', borderRight: '1px solid var(--border)' }}
                 onClick={() => onSort(header)}
               >
@@ -160,14 +194,14 @@ export function DataTable({
                       : 'var(--bg-elevated)',
                 }}
               >
-                {/* Checkbox */}
+                {/* Checkbox - Mobile optimized */}
                 {isEditor && (
-                  <td className="px-4 py-3">
+                  <td className="px-3 sm:px-4 py-2 sm:py-3">
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={(e) => onSelectRow(row.__rowIndex, e.target.checked)}
-                      className="rounded border-2 transition-all duration-200 hover:scale-110"
+                      className="w-5 h-5 rounded border-2 transition-all duration-200 hover:scale-110 touch-manipulation"
                       style={{
                         accentColor: 'var(--accent)',
                         cursor: 'pointer',
@@ -177,7 +211,7 @@ export function DataTable({
                     />
                   </td>
                 )}
-                {/* Data cells */}
+                {/* Data cells - Mobile optimized */}
                 {headers.map((header) => {
                   const isEditable = isEditor && editableColumns.includes(header);
                   const isEditing = editingCell?.rowIndex === row.__rowIndex && editingCell?.column === header;
@@ -187,7 +221,7 @@ export function DataTable({
                   return (
                     <td
                       key={header}
-                      className={`px-4 py-3 transition-all duration-200 hover:bg-opacity-50 ${
+                      className={`px-3 sm:px-4 py-2 sm:py-3 transition-all duration-200 hover:bg-opacity-50 ${
                         isEditable ? 'editable-cell' : ''
                       }`}
                       style={{
@@ -195,7 +229,7 @@ export function DataTable({
                           ? 'rgba(59,130,246,0.08)'
                           : 'transparent',
                         cursor: isEditable ? 'text' : 'default',
-                        maxWidth: '280px',
+                        maxWidth: '200px',
                         borderRight: '1px solid var(--border)',
                         position: 'relative'
                       }}
@@ -209,7 +243,7 @@ export function DataTable({
                           onChange={(e) => setEditValue(e.target.value)}
                           onBlur={() => commitEdit(row, header)}
                           onKeyDown={(e) => handleKeyDown(e, row, header)}
-                          className="cell-input w-full px-2 py-1 rounded border-2 transition-all duration-200 focus:ring-2"
+                          className="cell-input w-full px-2 py-1 h-9 rounded border-2 transition-all duration-200 focus:ring-2 touch-manipulation"
                           style={{
                             background: 'var(--bg-surface)',
                             borderColor: 'var(--accent)',
