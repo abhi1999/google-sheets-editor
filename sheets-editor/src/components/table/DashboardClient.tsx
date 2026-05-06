@@ -30,10 +30,6 @@ const ACADEMY_TEAMS = [
     "teams": "CCCA Panthers, CCCA Cubs, CCCA Jaguars, CCCA Cheetahs, CCCA Tigers, CCCA Pumas, CCCA U17, CCCA Lions"
   },
   {
-    "academy": "Knight Riders",
-    "teams": "KRA Eagles, KRA Hawks, KRA Phoenix, KRA Cardinals, KRA Jersey City Blue Jays, KRA Tigers, KRA Cheetahs, KRA Lions, KRA Leopards, KRA Panthers, KRA Destroyers, KRA Crushers, KRA Rangers, KRA Challengers, Cricmax Dominators, KRA Knights"
-  }, 
-  {
     "academy": "Delhi Capitals",
     "teams": "Delhi Capitals Atomics, Delhi Capitals Dragons, Delhi Capitals Challengers, Delhi Capitals Raiders, Delhi Capitals Dominators, Delhi Capitals Giants, Delhi Capitals Jr. Blackcaps"
   },
@@ -69,6 +65,10 @@ const ACADEMY_TEAMS = [
     "academy": "KCR",
     "teams": "KCR Cobras, KCR Pythons, KCR Dare Devils, KCR TrailBlazers, KCR Raptors, KCR Knights"
   },
+  {
+    "academy": "Knight Riders",
+    "teams": "KRA Eagles, KRA Hawks, KRA Phoenix, KRA Cardinals, KRA Jersey City Blue Jays, KRA Tigers, KRA Cheetahs, KRA Lions, KRA Leopards, KRA Panthers, KRA Destroyers, KRA Crushers, KRA Rangers, KRA Challengers, Cricmax Dominators, KRA Knights"
+  }, 
   {
     "academy": "NJ Royals",
     "teams": "NJ Royal Blazers, NJ Royal Titans, NJRoyal Mavericks"
