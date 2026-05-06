@@ -38,7 +38,7 @@ export function Toolbar({
     <header
       className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 sticky top-0 z-40"
       style={{
-        background: 'rgba(8,12,20,0.95)',
+        background: 'rgba(255,255,255,0.88)',
         borderBottom: '1px solid var(--border)',
         backdropFilter: 'blur(12px)',
       }}

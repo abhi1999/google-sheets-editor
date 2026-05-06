@@ -22,31 +22,27 @@ interface DashboardClientProps {
 
 const ACADEMY_TEAMS = [
   {
-    "academy": "22 Yards Cricket Academy",
+    "academy": "22 Yards",
     "teams": "22 Yards Strikers"
   },
   {
-    "academy": "Chester County Cricket Academy (CCCA)",
+    "academy": "CCCA",
     "teams": "CCCA Panthers, CCCA Cubs, CCCA Jaguars, CCCA Cheetahs, CCCA Tigers, CCCA Pumas, CCCA U17"
   },
   {
-    "academy": "Knight Riders Cricket Academy (KRCA)",
-    "teams": "Knight Riders Eagles, Knight Riders Hawks, Knight Riders Phoenix, Knight Riders Cardinals, Knight Riders Jersey City Blue Jays, Knight Riders Tigers, Knight Riders Cheetahs, Knight Riders Lions, Knight Riders Leopards, Knight Riders Panthers, Knight Riders Destroyers, Knight Riders Crushers, Knight Riders Rangers, Knight Riders Challengers"
-  },
+    "academy": "Knight Riders",
+    "teams": "Knight Riders Eagles, Knight Riders Hawks, Knight Riders Phoenix, Knight Riders Cardinals, Knight Riders Jersey City Blue Jays, Knight Riders Tigers, Knight Riders Cheetahs, Knight Riders Lions, Knight Riders Leopards, Knight Riders Panthers, Knight Riders Destroyers, Knight Riders Crushers, Knight Riders Rangers, Knight Riders Challengers, Cricmax Dominators"
+  }, 
   {
-    "academy": "Knight Riders Cricket Academy",
-    "teams": "Cricmax Dominators"
-  },
-  {
-    "academy": "Delhi Capitals Cricket Academy",
+    "academy": "Delhi Capitals",
     "teams": "Delhi Capitals Atomics, Delhi Capitals Dragons, Delhi Capitals Challengers, Delhi Capitals Raiders, Delhi Capitals Dominators, Delhi Capitals Giants, Delhi Capitals Jr. Blackcaps"
   },
   {
-    "academy": "DreamCricket Drona Sports",
+    "academy": "DC Drona Sports",
     "teams": "DreamCricket Drona Thunderbolts, DreamCricket Drona Elite"
   },
   {
-    "academy": "DreamCricket Willow Academy",
+    "academy": "DreamCricket",
     "teams": "DreamCricket Lightning, DreamCricket Tornado, DreamCricket Thunder, DreamCricket Whirlwind Girls, DreamCricket Blue Jays, DreamCricket Cubs, DreamCricket Dragons (Girls), DreamCricket Cheetahs, DreamCricket Colts Jr, DreamCricket Jaguars, DreamCricket Panthers, DreamCricket Leopards, DreamCricket Pumas, DreamCricket Warriors"
   },
   {
@@ -54,11 +50,11 @@ const ACADEMY_TEAMS = [
     "teams": "Drona Sports Apollo, Drona Sports Atlas, Drona Sports Aviators, Drona Sports Asteroids, Drona Sports Comets, Drona Sports Centaurus, Drona Sports Cosmos, Drona Sports Quasars, Drona Archers"
   },
   {
-    "academy": "Falcons Jr Sports Club",
+    "academy": "Falcons",
     "teams": "FJSC Titans, FJSC Supergiants, FJSC Blazers"
   },
   {
-    "academy": "GamedayCricket Academy",
+    "academy": "Gameday",
     "teams": "Gameday Stars, Gameday Bears, Gameday Warriors, Gameday Trailblazers, Gameday SuperStrikers, Gameday Renegades, Gameday Avengers, Gameday Firebirds, Gameday Lions"
   },
   {
@@ -70,7 +66,7 @@ const ACADEMY_TEAMS = [
     "teams": "Jersey Titans Atlas, Jersey Titans Knights, Jersey Titans Defenders, Jersey Titans Cronus, Jersey Titans Guardians, Jersey Titans Phoenix, Jersey Titans Destroyers, Jersey Titans Gladiators, Jersey Titans Spartans, Jersey Titans Helios, Jersey Titans Warriors, Jersey Titans Crusaders, Jersey Titans Lapetus"
   },
   {
-    "academy": "KCR Cricket Academy",
+    "academy": "KCR",
     "teams": "KCR Cobras, KCR Pythons, KCR Dare Devils, KCR TrailBlazers, KCR Raptors, KCR Knights"
   },
   {
@@ -82,19 +78,19 @@ const ACADEMY_TEAMS = [
     "teams": "Princeton Yodhas U13, Princeton Yodhas U15"
   },
   {
-    "academy": "Rajasthan Royals Academy New Jersey",
+    "academy": "RRA NJ",
     "teams": "RRA NJ Comets, RRA NJ Astros, RRA NJ Nebula, RRA NJ Apex, RRA NJ Asteroids, RRA NJ Supergiants, RRA NJ Supernovas, RRA NJ Superstrikers, RRA SuperStars, RRA NJ Superpulsers, RRA SuperRadients, RRA NJ Orions, RRA NJ Lynx, RRA NJ Solaris, RRA NJ - Phoenix, RRA NJ Polaris, RRA NJ - COSMOS, RRA NJ - GALAXY, RRA NJ - UNIVERSE"
   },
   {
-    "academy": "Rising Star Cricket Academy",
+    "academy": "Rising Stars",
     "teams": "Rising Stars Strikers, Rising Stars Chargers, Rising Stars Mavericks"
   },
   {
-    "academy": "SparC Cricket Academy",
+    "academy": "SparC",
     "teams": "SparC Rising Stars"
   },
   {
-    "academy": "Sparta Cricket Club",
+    "academy": "Sparta Cricket",
     "teams": "Sparta Cricket Club"
   },
   {
