@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --font-body: 'DM Sans', system-ui, sans-serif;
-  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Montserrat', system-ui, sans-serif;
+  --font-display: 'Montserrat', system-ui, sans-serif;
   --font-mono: 'DM Mono', monospace;
 
   /* === USACricket-inspired palette === */
