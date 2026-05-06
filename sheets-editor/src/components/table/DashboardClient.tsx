@@ -27,11 +27,11 @@ const ACADEMY_TEAMS = [
   },
   {
     "academy": "CCCA",
-    "teams": "CCCA Panthers, CCCA Cubs, CCCA Jaguars, CCCA Cheetahs, CCCA Tigers, CCCA Pumas, CCCA U17"
+    "teams": "CCCA Panthers, CCCA Cubs, CCCA Jaguars, CCCA Cheetahs, CCCA Tigers, CCCA Pumas, CCCA U17, CCCA Lions"
   },
   {
     "academy": "Knight Riders",
-    "teams": "Knight Riders Eagles, Knight Riders Hawks, Knight Riders Phoenix, Knight Riders Cardinals, Knight Riders Jersey City Blue Jays, Knight Riders Tigers, Knight Riders Cheetahs, Knight Riders Lions, Knight Riders Leopards, Knight Riders Panthers, Knight Riders Destroyers, Knight Riders Crushers, Knight Riders Rangers, Knight Riders Challengers, Cricmax Dominators"
+    "teams": "KRA Eagles, KRA Hawks, KRA Phoenix, KRA Cardinals, KRA Jersey City Blue Jays, KRA Tigers, KRA Cheetahs, KRA Lions, KRA Leopards, KRA Panthers, KRA Destroyers, KRA Crushers, KRA Rangers, KRA Challengers, Cricmax Dominators, KRA Knights"
   }, 
   {
     "academy": "Delhi Capitals",
@@ -55,7 +55,7 @@ const ACADEMY_TEAMS = [
   },
   {
     "academy": "Gameday",
-    "teams": "Gameday Stars, Gameday Bears, Gameday Warriors, Gameday Trailblazers, Gameday SuperStrikers, Gameday Renegades, Gameday Avengers, Gameday Firebirds, Gameday Lions"
+    "teams": "Gameday Stars, Gameday Bears, Gameday Warriors, Gameday Trailblazers, Gameday SuperStrikers, Gameday Renegades, Gameday Avengers, Gameday Firebirds, Gameday Lions,Gameday U11 A, Gameday U15A,Gameday U15B - Team 1,Gameday U15B - Team 2,Gameday U13A Team 2, Gameday U13A Team 1"
   },
   {
     "academy": "ICUSA",
@@ -95,7 +95,7 @@ const ACADEMY_TEAMS = [
   },
   {
     "academy": "StarSports US",
-    "teams": "StarSportsUS Knights, StarSportsUS Rising Stars, StarSportsUS Warriors, StarSportsUS Crushers, StarSportsUS Flyers, StarSports US Knights, StarSportsUS Lions, StarSportsUS Crushers, StarSportsUS Gladiators (TBD)"
+    "teams": "StarSportsUS Knights, StarSportsUS Rising Stars, StarSportsUS Warriors, StarSportsUS Crushers, StarSportsUS Flyers, StarSports US Knights, StarSportsUS Lions, StarSportsUS Crushers, StarSportsUS Gladiators (TBD),StarSports US New Team"
   },
   {
     "academy": "Staten Island",
@@ -249,13 +249,12 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
       ([key, value]) =>
         key !== 'search' && key !== 'column' && key !== 'predefined' && value
     ) as [string, string | string[]][];
-
     activeColumnFilters.forEach(([column, value]) => {
       rows = rows.filter((row) => {
-        const cellValue = String(row[column] || '').toLowerCase();
+        const cellValue = String(row[column] || '').trim().toLowerCase();
         return Array.isArray(value)
-          ? value.some((item) => cellValue === item.toLowerCase())
-          : cellValue === value.toLowerCase();
+          ? value.some((item) => cellValue === item.trim().toLowerCase())
+          : cellValue === String(value).trim().toLowerCase();
       });
     });
 
@@ -287,7 +286,7 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
       rows = rows.filter((row) => {
         return Array.from(groupedPredefined.values()).every(({ columns, values }) => {
           return columns.some((column) => {
-            const cellValue = String(row[column] || '').toLowerCase();
+            const cellValue = String(row[column] || '').trim().toLowerCase();
             return values.some((value) => cellValue === value.toLowerCase());
           });
         });

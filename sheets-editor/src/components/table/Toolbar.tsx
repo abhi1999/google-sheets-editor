@@ -63,7 +63,7 @@ export function Toolbar({
               NAYCA 2026
             </span>
             <span className="text-xs font-medium opacity-90 hidden sm:block" style={{ color: 'rgba(255,255,255,0.8)' }}>
-              Championship Schedule
+              Summer Schedule
             </span>
           </div>
         </div>
