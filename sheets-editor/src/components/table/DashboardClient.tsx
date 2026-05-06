@@ -138,7 +138,7 @@ const PREDEFINED_FILTERS: PredefinedFilter[] = [
   })),
 ];
 
-const DEFAULT_PAGE_SIZE = 100;
+const DEFAULT_PAGE_SIZE = 25;
 
 export function DashboardClient({ user, editableColumns }: DashboardClientProps) {
   const { toast } = useToast();
@@ -538,7 +538,7 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
         {/* Footer */}
         <div className="text-center text-xs pb-4" style={{ color: 'var(--text-muted)' }}>
           {sheetData && (
-            <span>Last fetched: {new Date(sheetData.lastFetched).toLocaleTimeString()}</span>
+            <span>Last refreshed: {new Date(sheetData.lastFetched).toLocaleString()}</span>
           )}
         </div>
       </main>

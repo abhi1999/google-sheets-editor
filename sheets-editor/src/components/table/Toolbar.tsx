@@ -164,7 +164,7 @@ export function Toolbar({
 
         {/* User avatar */}
         <div className="ml-1 relative group">
-          <button className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-lg transition-colors hover:opacity-80" style={{ border: '1px solid transparent' }}>
+          <button type="button" className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-lg transition-colors hover:opacity-80" style={{ border: '1px solid transparent' }}>
             {user.image ? (
               <img src={user.image} alt={user.name} className="w-6 h-6 rounded-full" />
             ) : (
@@ -178,7 +178,7 @@ export function Toolbar({
           </button>
           {/* Dropdown */}
           <div
-            className="absolute right-0 top-full mt-2 w-56 rounded-xl p-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto z-50"
+            className="absolute right-0 top-full mt-1 w-56 rounded-xl p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 ease-out z-50"
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}
           >
             <div className="mb-2 pb-2" style={{ borderBottom: '1px solid var(--border)' }}>
