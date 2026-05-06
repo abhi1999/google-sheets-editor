@@ -40,10 +40,10 @@ export default function LoginPage() {
         }}
       />
 
-      {/* Glow */}
+      {/* Brand glow */}
       <div
         className="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%)' }}
+        style={{ background: 'radial-gradient(circle, rgba(4,30,66,0.12) 0%, transparent 50%), radial-gradient(circle, rgba(246,181,8,0.18) 0%, transparent 40%)' }}
       />
 
       <div
@@ -82,9 +82,10 @@ export default function LoginPage() {
           disabled={loading}
           className="w-full flex items-center justify-center gap-3 rounded-xl py-3 px-4 font-medium text-sm transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
           style={{
-            background: loading ? 'var(--bg-elevated)' : 'white',
-            color: '#1a1a1a',
-            border: '1px solid var(--border)',
+            background: loading ? 'var(--bg-elevated)' : 'var(--accent)',
+            color: loading ? 'var(--text-primary)' : 'white',
+            border: loading ? '1px solid var(--border)' : '1px solid rgba(255,255,255,0.18)',
+            boxShadow: loading ? undefined : '0 8px 24px rgba(246,181,8,0.15)',
           }}
         >
           {loading ? (

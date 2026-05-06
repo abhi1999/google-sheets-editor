@@ -120,7 +120,7 @@ const PREDEFINED_FILTERS: PredefinedFilter[] = [
   { id: 'Week3', label: 'Week3', category: 'Week', column: 'Date', value: '05/02/2026,05/03/2026', color: 'green' },
   { id: 'Week4', label: 'Week4', category: 'Week', column: 'Date', value: '05/09/2026,05/10/2026', color: 'green' },
   { id: 'Week5', label: 'Week5', category: 'Week', column: 'Date', value: '05/16/2026,05/17/2026', color: 'green' },
-  { id: 'Week6', label: 'Week6', category: 'Week', column: 'Date', value: '05/30/2026,06/01/2026', color: 'green' },
+  { id: 'Week6', label: 'Week6', category: 'Week', column: 'Date', value: '05/30/2026,05/31/2026', color: 'green' },
   { id: 'Week7', label: 'Week7', category: 'Week', column: 'Date', value: '06/06/2026,06/07/2026', color: 'green' },
   { id: 'u11', label: 'U11', category: 'Age category', column: 'Cat', value: 'U11A,U11B', color: 'blue' },
   { id: 'u13', label: 'U13', category: 'Age category', column: 'Cat', value: 'U13A,U13B', color: 'blue' },

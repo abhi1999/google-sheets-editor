@@ -9,63 +9,57 @@
 
   /* === USACricket-inspired palette === */
 
-  /* Backgrounds (light sky tones) */
-  --bg-base: #f4f7fb;          /* page background */
+  /* Backgrounds */
+  --bg-base: #f7f8fb;          /* page background */
   --bg-surface: #ffffff;       /* card surface */
-  --bg-elevated: #eef3fb;      /* elevated panels */
-  --bg-hover: #e2e8f7;         /* hover state */
+  --bg-elevated: #f2f5fb;      /* elevated panels */
+  --bg-hover: #e8eff9;         /* hover state */
+  --bg-strong: #e2e7f5;        /* stronger elevated surface */
 
   /* Borders */
-  --border: #d6e0f0;
-  --border-bright: #bac8e0;
+  --border: #d8dce8;
+  --border-bright: #b8c4dd;
 
   /* Text */
-  --text-primary: #0f172a;     /* dark navy */
-  --text-secondary: #475569;   /* soft slate */
-  --text-muted: #64748b;
+  --text-primary: #091b3d;     /* deep navy */
+  --text-secondary: #3f506f;   /* slate blue */
+  --text-muted: #5f6f89;
 
-  /* Primary Accent (blue) */
-  --accent: #2563eb;           /* strong blue */
-  --accent-dim: #1d4ed8;
-  --accent-bright: #3b82f6;
+  /* Brand colors */
+  --brand: #041e42;            /* USACricket navy */
+  --brand-soft: #e7effd;       /* pale navy tint */
+  --accent: #f6b508;           /* USACricket gold */
+  --accent-dim: #d99a08;
+  --accent-bright: #ffe16a;
+  --accent-soft: #fff5d0;
 
-  /* Secondary Accent (USACricket red) */
-  /*--danger: #d72638;           /* brand red */
-  /*--danger-dim: #7f1d1d;*/
-
-  /* Secondary Accent (USACricket red system) */
---red: #d72638;            /* primary brand red */
---red-dim: #7f1d1d;
---red-soft: #ef4444;
---red-bg: rgba(215, 38, 56, 0.12);
-
-/* Map to semantic usage */
---danger: var(--red);
---danger-dim: var(--red-dim);
-  /* Success / Warning (kept balanced with palette) */
-  --success: #16a34a;
+  /* Semantic colors */
+  --success: #15803d;
   --success-dim: #14532d;
-
   --warning: #f59e0b;
   --warning-dim: #78350f;
+  --danger: #d72638;
+  --danger-dim: #7f1d1d;
 
-  /* Editable highlight (blue tint) */
-  --editable: #38bdf8;
-  --editable-dim: #0c4a6e;
-}
-
-* {
-  box-sizing: border-box;
+  /* Editable highlight */
+  --editable: #3b82f6;
+  --editable-dim: #1d4ed8;
 }
 
 html, body {
   background-color: var(--bg-base);
+  background-image: radial-gradient(circle at top left, rgba(6,30,82,0.08), transparent 22%),
+                    radial-gradient(circle at top right, rgba(246,181,8,0.12), transparent 30%);
   color: var(--text-primary);
   font-family: var(--font-body);
   font-size: 14px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 /* Scrollbar */
@@ -159,7 +153,7 @@ html, body {
 
 /* Filter chip active state */
 .filter-chip-active {
-  background: var(--accent-dim);
+  background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--accent-bright);
+  color: var(--brand);
 }

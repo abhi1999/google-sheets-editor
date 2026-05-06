@@ -38,9 +38,9 @@ export function Toolbar({
     <header
       className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 sticky top-0 z-40"
       style={{
-        background: 'rgba(255,255,255,0.88)',
-        borderBottom: '1px solid var(--border)',
-        backdropFilter: 'blur(12px)',
+        background: 'linear-gradient(180deg, rgba(4,30,66,0.96), rgba(4,30,66,0.92))',
+        borderBottom: '1px solid rgba(255,255,255,0.12)',
+        backdropFilter: 'saturate(180%) blur(12px)',
       }}
     >
       {/* Left: Brand + status */}
@@ -57,7 +57,7 @@ export function Toolbar({
               <line x1="6" y1="6" x2="6" y2="14" />
             </svg>
           </div>
-          <span className="font-semibold text-sm hidden sm:block" style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>
+          <span className="font-semibold text-sm hidden sm:block" style={{ fontFamily: 'var(--font-display)', color: 'white' }}>
             NAYCA 2026 Schedule
           </span>
         </div>
@@ -68,7 +68,7 @@ export function Toolbar({
           style={
             user.isEditor
               ? { background: 'var(--success-dim)', color: 'var(--success)', border: '1px solid var(--success)' }
-              : { background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border)' }
+              : { background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.82)', border: '1px solid rgba(255,255,255,0.14)' }
           }
         >
           {user.isEditor ? '✦ Editor' : '◎ Viewer'}
@@ -108,7 +108,7 @@ export function Toolbar({
         <button
           onClick={onExport}
           className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium transition-colors hover:opacity-80"
-          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+          style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.14)', color: 'white' }}
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M6 1v7M3 5l3 3 3-3M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9" />
