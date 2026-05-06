@@ -25,8 +25,8 @@ interface DashboardClientProps {
 // ----------------------------------------------------------------
 const PREDEFINED_FILTERS: PredefinedFilter[] = [
   // Examples — customize to match your actual sheet columns:
-  { id: 'Week2-Sat', label: 'Week2-Sat', column: 'Date', value: '04/25/2026', color: 'green' },
-  { id: 'Week2-Sun', label: 'Week2-Sun', column: 'Date', value: '04/26/2026', color: 'green' },
+  { id: 'Week4-Sat', label: 'Week4-Sat', column: 'Date', value: '05/09/2026', color: 'green' },
+  { id: 'Week4-Sun', label: 'Week4-Sun', column: 'Date', value: '05/10/2026', color: 'green' },
   // { id: 'pending', label: 'Pending', column: 'Status', value: 'Pending', color: 'yellow' },
    { id: 'u13a', label: 'U13A', column: 'Cat', value: 'U13A', color: 'blue' },
    { id: 'u13b', label: 'U13B', column: 'Cat', value: 'U13B', color: 'blue' },
