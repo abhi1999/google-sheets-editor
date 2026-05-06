@@ -92,42 +92,49 @@ export function DataTable({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-xl shadow-sm" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
       <table className="w-full border-collapse text-sm" style={{ minWidth: `${headers.length * 140}px` }}>
         <thead>
-          <tr style={{ borderBottom: '1px solid var(--border)' }}>
+          <tr style={{ borderBottom: '2px solid var(--border)', background: 'var(--bg-elevated)' }}>
             {/* Checkbox column */}
             {isEditor && (
-              <th className="w-10 px-3 py-3 text-left">
+              <th className="w-12 px-4 py-4 text-left">
                 <input
                   type="checkbox"
                   checked={allSelected}
                   ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
                   onChange={(e) => onSelectAll(e.target.checked)}
-                  className="rounded"
-                  style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                  className="rounded border-2 transition-all duration-200 hover:scale-110"
+                  style={{
+                    accentColor: 'var(--accent)',
+                    cursor: 'pointer',
+                    borderColor: 'var(--border)',
+                    background: 'var(--bg-base)'
+                  }}
                 />
               </th>
             )}
             {headers.map((header) => (
               <th
                 key={header}
-                className="px-4 py-3 text-left font-medium cursor-pointer select-none group whitespace-nowrap"
-                style={{ color: 'var(--text-secondary)' }}
+                className="px-4 py-4 text-left font-semibold cursor-pointer select-none group whitespace-nowrap transition-all duration-200 hover:bg-gray-50"
+                style={{ color: 'var(--text-primary)', borderRight: '1px solid var(--border)' }}
                 onClick={() => onSort(header)}
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
                   {editableColumns.includes(header) && (
-                    <span
-                      className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                      style={{ background: 'var(--editable)' }}
+                    <div
+                      className="w-2 h-2 rounded-full flex-shrink-0 transition-all duration-200 group-hover:scale-125"
+                      style={{ background: 'var(--editable)', boxShadow: '0 0 6px rgba(59,130,246,0.4)' }}
                       title="Editable column"
                     />
                   )}
-                  <span>{header}</span>
-                  <SortIcon
-                    direction={sortState.column === header ? sortState.direction : null}
-                  />
+                  <span className="text-xs font-bold uppercase tracking-wider">{header}</span>
+                  <div className="transition-transform duration-200 group-hover:scale-110">
+                    <SortIcon
+                      direction={sortState.column === header ? sortState.direction : null}
+                    />
+                  </div>
                 </div>
               </th>
             ))}
@@ -136,21 +143,37 @@ export function DataTable({
         <tbody>
           {rows.map((row, rowIdx) => {
             const isSelected = selectedRows.has(row.__rowIndex);
+            const isEvenRow = rowIdx % 2 === 0;
 
             return (
               <tr
                 key={row.__rowIndex}
-                className={`data-row transition-colors ${isSelected ? 'selected' : ''}`}
-                style={{ borderBottom: '1px solid var(--border)' }}
+                className={`data-row transition-all duration-200 hover:shadow-md ${
+                  isSelected ? 'selected' : ''
+                } ${isEvenRow ? 'even-row' : 'odd-row'}`}
+                style={{
+                  borderBottom: '1px solid var(--border)',
+                  background: isSelected
+                    ? 'linear-gradient(135deg, rgba(246,181,8,0.1), rgba(246,181,8,0.05))'
+                    : isEvenRow
+                      ? 'var(--bg-base)'
+                      : 'var(--bg-elevated)',
+                }}
               >
                 {/* Checkbox */}
                 {isEditor && (
-                  <td className="px-3 py-2.5">
+                  <td className="px-4 py-3">
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={(e) => onSelectRow(row.__rowIndex, e.target.checked)}
-                      style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                      className="rounded border-2 transition-all duration-200 hover:scale-110"
+                      style={{
+                        accentColor: 'var(--accent)',
+                        cursor: 'pointer',
+                        borderColor: 'var(--border)',
+                        background: 'var(--bg-surface)'
+                      }}
                     />
                   </td>
                 )}
@@ -164,11 +187,17 @@ export function DataTable({
                   return (
                     <td
                       key={header}
-                      className={`px-4 py-2.5 ${isEditable ? 'editable-cell' : ''}`}
+                      className={`px-4 py-3 transition-all duration-200 hover:bg-opacity-50 ${
+                        isEditable ? 'editable-cell' : ''
+                      }`}
                       style={{
-                        background: hasPending ? 'rgba(59,130,246,0.08)' : undefined,
+                        background: hasPending
+                          ? 'rgba(59,130,246,0.08)'
+                          : 'transparent',
                         cursor: isEditable ? 'text' : 'default',
-                        maxWidth: '260px',
+                        maxWidth: '280px',
+                        borderRight: '1px solid var(--border)',
+                        position: 'relative'
                       }}
                       onDoubleClick={() => startEdit(row, header)}
                       title={isEditable && !isEditing ? 'Double-click to edit' : undefined}
@@ -180,19 +209,35 @@ export function DataTable({
                           onChange={(e) => setEditValue(e.target.value)}
                           onBlur={() => commitEdit(row, header)}
                           onKeyDown={(e) => handleKeyDown(e, row, header)}
-                          className="cell-input"
+                          className="cell-input w-full px-2 py-1 rounded border-2 transition-all duration-200 focus:ring-2"
+                          style={{
+                            background: 'var(--bg-surface)',
+                            borderColor: 'var(--accent)',
+                            color: 'var(--text-primary)',
+                            outline: 'none'
+                          }}
                         />
                       ) : (
-                        <span
-                          className="block truncate text-sm"
-                          style={{
-                            color: hasPending ? 'var(--accent-bright)' : 'var(--text-primary)',
-                          }}
-                        >
-                          {cellValue || (
-                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>—</span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="block truncate text-sm leading-relaxed"
+                            style={{
+                              color: hasPending
+                                ? 'var(--accent-bright)'
+                                : cellValue
+                                  ? 'var(--text-primary)'
+                                  : 'var(--text-muted)',
+                              fontWeight: hasPending ? '600' : '400'
+                            }}
+                          >
+                            {cellValue || (
+                              <span className="italic opacity-60">—</span>
+                            )}
+                          </span>
+                          {hasPending && (
+                            <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--accent)' }} />
                           )}
-                        </span>
+                        </div>
                       )}
                     </td>
                   );

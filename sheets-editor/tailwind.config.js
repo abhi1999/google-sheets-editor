@@ -21,6 +21,9 @@ module.exports = {
         'slide-in': 'slideIn 0.2s ease-out',
         'fade-in': 'fadeIn 0.3s ease-out',
         'pulse-subtle': 'pulseSubtle 2s ease-in-out infinite',
+        'spin': 'spin 1s linear infinite',
+        'bounce-subtle': 'bounceSubtle 0.6s ease-in-out',
+        'scale-in': 'scaleIn 0.2s ease-out',
       },
       keyframes: {
         slideIn: {
@@ -34,6 +37,14 @@ module.exports = {
         pulseSubtle: {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.7' },
+        },
+        bounceSubtle: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-2px)' },
+        },
+        scaleIn: {
+          '0%': { transform: 'scale(0.95)', opacity: '0' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
         },
       },
     },

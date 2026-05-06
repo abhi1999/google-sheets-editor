@@ -86,17 +86,85 @@ html, body {
   content: '';
   position: absolute;
   top: 0; left: 0;
-  width: 3px; height: 100%;
-  background: var(--editable);
-  opacity: 0.6;
+  width: 4px; height: 100%;
+  background: linear-gradient(180deg, var(--editable), var(--editable-dim));
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  border-radius: 0 2px 2px 0;
 }
 .editable-cell:hover::before {
-  opacity: 1;
+  opacity: 0.8;
 }
 
-/* Table row hover */
+/* Enhanced table row hover */
 .data-row:hover td {
-  background-color: var(--bg-hover);
+  background-color: rgba(246,181,8,0.06);
+  transform: translateY(-1px);
+  transition: all 0.2s ease;
+}
+
+.data-row:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Selected row styling */
+.data-row.selected {
+  box-shadow: 0 4px 12px rgba(246,181,8,0.2);
+}
+
+.data-row.selected td {
+  background: linear-gradient(135deg, rgba(246,181,8,0.08), rgba(246,181,8,0.04));
+}
+
+/* Cell input styling */
+.cell-input {
+  width: 100%;
+  padding: 4px 8px;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.cell-input:focus {
+  box-shadow: 0 0 0 3px rgba(246,181,8,0.2);
+  border-color: var(--accent);
+}
+
+/* Additional micro-animations and polish */
+button {
+  transition: all 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+input:focus, select:focus {
+  transform: scale(1.01);
+  transition: all 0.2s ease;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+
+.loading-shimmer {
+  background: linear-gradient(90deg, var(--bg-base) 25%, var(--bg-elevated) 50%, var(--bg-base) 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 .data-row.selected td {
   background-color: var(--accent-dim);
