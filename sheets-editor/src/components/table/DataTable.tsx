@@ -229,12 +229,11 @@ export function DataTable({
                           ? 'rgba(59,130,246,0.08)'
                           : 'transparent',
                         cursor: isEditable ? 'text' : 'default',
-                        maxWidth: '200px',
                         borderRight: '1px solid var(--border)',
                         position: 'relative'
                       }}
                       onDoubleClick={() => startEdit(row, header)}
-                      title={isEditable && !isEditing ? 'Double-click to edit' : undefined}
+                      title={cellValue && !isEditing ? String(cellValue) : isEditable && !isEditing ? 'Double-click to edit' : undefined}
                     >
                       {isEditing ? (
                         <input
@@ -254,7 +253,7 @@ export function DataTable({
                       ) : (
                         <div className="flex items-center gap-2">
                           <span
-                            className="block truncate text-sm leading-relaxed"
+                            className="block whitespace-normal break-words text-sm leading-relaxed"
                             style={{
                               color: hasPending
                                 ? 'var(--accent-bright)'
