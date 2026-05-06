@@ -20,24 +20,129 @@ interface DashboardClientProps {
   editableColumns: string[];
 }
 
+const ACADEMY_TEAMS = [
+  {
+    "academy": "22 Yards Cricket Academy",
+    "teams": "22 Yards Strikers"
+  },
+  {
+    "academy": "Chester County Cricket Academy (CCCA)",
+    "teams": "CCCA Panthers, CCCA Cubs, CCCA Jaguars, CCCA Cheetahs, CCCA Tigers, CCCA Pumas, CCCA U17"
+  },
+  {
+    "academy": "Knight Riders Cricket Academy (KRCA)",
+    "teams": "Knight Riders Eagles, Knight Riders Hawks, Knight Riders Phoenix, Knight Riders Cardinals, Knight Riders Jersey City Blue Jays, Knight Riders Tigers, Knight Riders Cheetahs, Knight Riders Lions, Knight Riders Leopards, Knight Riders Panthers, Knight Riders Destroyers, Knight Riders Crushers, Knight Riders Rangers, Knight Riders Challengers"
+  },
+  {
+    "academy": "Knight Riders Cricket Academy",
+    "teams": "Cricmax Dominators"
+  },
+  {
+    "academy": "Delhi Capitals Cricket Academy",
+    "teams": "Delhi Capitals Atomics, Delhi Capitals Dragons, Delhi Capitals Challengers, Delhi Capitals Raiders, Delhi Capitals Dominators, Delhi Capitals Giants, Delhi Capitals Jr. Blackcaps"
+  },
+  {
+    "academy": "DreamCricket Drona Sports",
+    "teams": "DreamCricket Drona Thunderbolts, DreamCricket Drona Elite"
+  },
+  {
+    "academy": "DreamCricket Willow Academy",
+    "teams": "DreamCricket Lightning, DreamCricket Tornado, DreamCricket Thunder, DreamCricket Whirlwind Girls, DreamCricket Blue Jays, DreamCricket Cubs, DreamCricket Dragons (Girls), DreamCricket Cheetahs, DreamCricket Colts Jr, DreamCricket Jaguars, DreamCricket Panthers, DreamCricket Leopards, DreamCricket Pumas, DreamCricket Warriors"
+  },
+  {
+    "academy": "Drona Sports",
+    "teams": "Drona Sports Apollo, Drona Sports Atlas, Drona Sports Aviators, Drona Sports Asteroids, Drona Sports Comets, Drona Sports Centaurus, Drona Sports Cosmos, Drona Sports Quasars, Drona Archers"
+  },
+  {
+    "academy": "Falcons Jr Sports Club",
+    "teams": "FJSC Titans, FJSC Supergiants, FJSC Blazers"
+  },
+  {
+    "academy": "GamedayCricket Academy",
+    "teams": "Gameday Stars, Gameday Bears, Gameday Warriors, Gameday Trailblazers, Gameday SuperStrikers, Gameday Renegades, Gameday Avengers, Gameday Firebirds, Gameday Lions"
+  },
+  {
+    "academy": "ICUSA",
+    "teams": "ICUSA Parsippany Generals, ICUSA Sons Of Liberty, ICUSA Black Mambas"
+  },
+  {
+    "academy": "Jersey Titans",
+    "teams": "Jersey Titans Atlas, Jersey Titans Knights, Jersey Titans Defenders, Jersey Titans Cronus, Jersey Titans Guardians, Jersey Titans Phoenix, Jersey Titans Destroyers, Jersey Titans Gladiators, Jersey Titans Spartans, Jersey Titans Helios, Jersey Titans Warriors, Jersey Titans Crusaders, Jersey Titans Lapetus"
+  },
+  {
+    "academy": "KCR Cricket Academy",
+    "teams": "KCR Cobras, KCR Pythons, KCR Dare Devils, KCR TrailBlazers, KCR Raptors, KCR Knights"
+  },
+  {
+    "academy": "NJ Royals",
+    "teams": "NJ Royal Blazers, NJ Royal Titans, NJRoyal Mavericks"
+  },
+  {
+    "academy": "Princeton Cricket Club",
+    "teams": "Princeton Yodhas U13, Princeton Yodhas U15"
+  },
+  {
+    "academy": "Rajasthan Royals Academy New Jersey",
+    "teams": "RRA NJ Comets, RRA NJ Astros, RRA NJ Nebula, RRA NJ Apex, RRA NJ Asteroids, RRA NJ Supergiants, RRA NJ Supernovas, RRA NJ Superstrikers, RRA SuperStars, RRA NJ Superpulsers, RRA SuperRadients, RRA NJ Orions, RRA NJ Lynx, RRA NJ Solaris, RRA NJ - Phoenix, RRA NJ Polaris, RRA NJ - COSMOS, RRA NJ - GALAXY, RRA NJ - UNIVERSE"
+  },
+  {
+    "academy": "Rising Star Cricket Academy",
+    "teams": "Rising Stars Strikers, Rising Stars Chargers, Rising Stars Mavericks"
+  },
+  {
+    "academy": "SparC Cricket Academy",
+    "teams": "SparC Rising Stars"
+  },
+  {
+    "academy": "Sparta Cricket Club",
+    "teams": "Sparta Cricket Club"
+  },
+  {
+    "academy": "StarSports US",
+    "teams": "StarSportsUS Knights, StarSportsUS Rising Stars, StarSportsUS Warriors, StarSportsUS Crushers, StarSportsUS Flyers, StarSports US Knights, StarSportsUS Lions, StarSportsUS Crushers, StarSportsUS Gladiators (TBD)"
+  },
+  {
+    "academy": "Staten Island",
+    "teams": "Staten Island"
+  },
+  {
+    "academy": "Stelton Sports",
+    "teams": "Stelton Acers, Stelton Avengers"
+  },
+  {
+    "academy": "SuperKings Academy NJ",
+    "teams": "SKA Cubs, SKA Prides, SKA Roar, SKA Lions, SKA Kings"
+  }
+]
 // ----------------------------------------------------------------
 // Predefined filters — extend this list freely
 // ----------------------------------------------------------------
 const PREDEFINED_FILTERS: PredefinedFilter[] = [
   // Examples — customize to match your actual sheet columns:
-  { id: 'Week1', label: 'Week1', column: 'Date', value: '04/18/2026,04/19/2026', color: 'green' },
-  { id: 'Week2', label: 'Week2', column: 'Date', value: '04/25/2026,04/26/2026', color: 'green' },
-  { id: 'Week3', label: 'Week3', column: 'Date', value: '05/02/2026,05/03/2026', color: 'green' },
-  { id: 'Week4', label: 'Week4', column: 'Date', value: '05/09/2026,05/10/2026', color: 'green' },
-  { id: 'Week5', label: 'Week5', column: 'Date', value: '05/16/2026,05/17/2026', color: 'green' },
-  { id: 'Week6', label: 'Week6', column: 'Date', value: '05/30/2026,06/01/2026', color: 'green' },
-  { id: 'Week7', label: 'Week7', column: 'Date', value: '06/06/2026,06/07/2026', color: 'green' },
-  { id: 'u11', label: 'U11', column: 'Cat', value: 'U11A,U11B', color: 'blue' },
-  { id: 'u13', label: 'U13', column: 'Cat', value: 'U13A,U13B', color: 'blue' },
-  { id: 'u15', label: 'U15', column: 'Cat', value: 'U15A,U15B', color: 'blue' },
+  { id: 'Week1', label: 'Week1', category: 'Week', column: 'Date', value: '04/18/2026,04/19/2026', color: 'green' },
+  { id: 'Week2', label: 'Week2', category: 'Week', column: 'Date', value: '04/25/2026,04/26/2026', color: 'green' },
+  { id: 'Week3', label: 'Week3', category: 'Week', column: 'Date', value: '05/02/2026,05/03/2026', color: 'green' },
+  { id: 'Week4', label: 'Week4', category: 'Week', column: 'Date', value: '05/09/2026,05/10/2026', color: 'green' },
+  { id: 'Week5', label: 'Week5', category: 'Week', column: 'Date', value: '05/16/2026,05/17/2026', color: 'green' },
+  { id: 'Week6', label: 'Week6', category: 'Week', column: 'Date', value: '05/30/2026,06/01/2026', color: 'green' },
+  { id: 'Week7', label: 'Week7', category: 'Week', column: 'Date', value: '06/06/2026,06/07/2026', color: 'green' },
+  { id: 'u11', label: 'U11', category: 'Age category', column: 'Cat', value: 'U11A,U11B', color: 'blue' },
+  { id: 'u13', label: 'U13', category: 'Age category', column: 'Cat', value: 'U13A,U13B', color: 'blue' },
+  { id: 'u15', label: 'U15', category: 'Age category', column: 'Cat', value: 'U15A,U15B', color: 'blue' },
+  ...ACADEMY_TEAMS.map((entry) => ({
+    id: entry.academy
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, ''),
+    label: entry.academy,
+    category: 'Academy',
+    column: ['Home Team', 'Away Team'],
+    value: entry.teams,
+    color: 'blue',
+  })),
 ];
 
-const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 100;
 
 export function DashboardClient({ user, editableColumns }: DashboardClientProps) {
   const { toast } = useToast();
@@ -117,7 +222,7 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
       );
     }
 
-    // Column filters: support multiple active column filters together
+    // Column filters: support manual column filters and predefined filter groups
     const activeColumnFilters = Object.entries(filters).filter(
       ([key, value]) =>
         key !== 'search' && key !== 'column' && key !== 'predefined' && value
@@ -131,6 +236,41 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
           : cellValue === value.toLowerCase();
       });
     });
+
+    const selectedPredefinedFilters = PREDEFINED_FILTERS.filter((pf) =>
+      filters.predefined.includes(pf.id)
+    );
+
+    if (selectedPredefinedFilters.length > 0) {
+      const groupedPredefined = new Map<string, { columns: string[]; values: string[] }>();
+
+      selectedPredefinedFilters.forEach((pf) => {
+        const columns = Array.isArray(pf.column)
+          ? pf.column
+          : pf.column.split(',').map((col) => col.trim()).filter(Boolean);
+        const values = Array.isArray(pf.value)
+          ? pf.value
+          : pf.value.split(',').map((value) => value.trim()).filter(Boolean);
+        const key = columns.join('|');
+
+        const current = groupedPredefined.get(key) ?? { columns, values: [] };
+        values.forEach((value) => {
+          if (!current.values.includes(value)) {
+            current.values.push(value);
+          }
+        });
+        groupedPredefined.set(key, current);
+      });
+
+      rows = rows.filter((row) => {
+        return Array.from(groupedPredefined.values()).every(({ columns, values }) => {
+          return columns.some((column) => {
+            const cellValue = String(row[column] || '').toLowerCase();
+            return values.some((value) => cellValue === value.toLowerCase());
+          });
+        });
+      });
+    }
 
     // Sort
     if (sortState.column && sortState.direction) {

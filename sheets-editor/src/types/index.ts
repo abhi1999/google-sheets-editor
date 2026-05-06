@@ -80,9 +80,10 @@ export interface FilterState {
 export interface PredefinedFilter {
   id: string;
   label: string;
-  column: string;
-  value: string;
+  column: string | string[];
+  value: string | string[];
   color?: string;
+  category?: string;
 }
 
 // ============================================================

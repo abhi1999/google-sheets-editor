@@ -59,30 +59,15 @@ export function FilterBar({
     }
 
     const nextPredefined = new Set(filters.predefined || []);
-    const existingValues = filters[pf.column];
-    const currentValues = Array.isArray(existingValues)
-      ? [...existingValues]
-      : existingValues
-      ? [existingValues]
-      : [];
-
-    const nextValues = new Set(currentValues);
-
     if (nextPredefined.has(pf.id)) {
       nextPredefined.delete(pf.id);
-      nextValues.delete(pf.value);
     } else {
       nextPredefined.add(pf.id);
-      nextValues.add(pf.value);
     }
-
-    const nextFilterValue = normalizeFilterValue(Array.from(nextValues).join(', '));
 
     onFiltersChange({
       ...filters,
       predefined: Array.from(nextPredefined),
-      column: pf.column,
-      [pf.column]: nextFilterValue,
     });
   };
 
@@ -216,27 +201,43 @@ export function FilterBar({
 
       {/* Predefined filter chips */}
       {predefinedFilters.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <span className="text-xs self-center" style={{ color: 'var(--text-muted)' }}>Quick filters:</span>
-          {predefinedFilters.map((pf) => {
-            const isSelected = filters.predefined.includes(pf.id);
-            return (
-              <button
-                key={pf.id}
-                onClick={() => handlePredefinedFilter(pf.id)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                  isSelected ? 'filter-chip-active' : ''
-                }`}
-                style={{
-                  background: isSelected ? 'var(--accent-dim)' : 'var(--bg-elevated)',
-                  borderColor: isSelected ? 'var(--accent)' : 'var(--border)',
-                  color: isSelected ? 'var(--accent-bright)' : 'var(--text-secondary)',
-                }}
-              >
-                {pf.label}
-              </button>
-            );
-          })}
+        <div className="space-y-3">
+          <div className="text-xs text-muted" style={{ color: 'var(--text-muted)' }}>
+            Quick filters by category:
+          </div>
+          {Object.entries(
+            predefinedFilters.reduce((result, pf) => {
+              const category = pf.category || 'Other';
+              if (!result[category]) result[category] = [];
+              result[category].push(pf);
+              return result;
+            }, {} as Record<string, PredefinedFilter[]>)
+          ).map(([category, categoryFilters]) => (
+            <div key={category} className="flex flex-wrap gap-2 items-center">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--text-muted)' }}>
+                {category}
+              </span>
+              {categoryFilters.map((pf) => {
+                const isSelected = filters.predefined.includes(pf.id);
+                return (
+                  <button
+                    key={pf.id}
+                    onClick={() => handlePredefinedFilter(pf.id)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                      isSelected ? 'filter-chip-active' : ''
+                    }`}
+                    style={{
+                      background: isSelected ? 'var(--accent-dim)' : 'var(--bg-elevated)',
+                      borderColor: isSelected ? 'var(--accent)' : 'var(--border)',
+                      color: isSelected ? 'var(--accent-bright)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {pf.label}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
           {/* Placeholder — add more filters here */}
           <button
             className="px-3 py-1 rounded-full text-xs border border-dashed opacity-40 hover:opacity-60 transition-opacity"
