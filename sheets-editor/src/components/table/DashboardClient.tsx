@@ -122,9 +122,10 @@ const PREDEFINED_FILTERS: PredefinedFilter[] = [
   { id: 'Week5', label: 'Week5', category: 'Week', column: 'Date', value: '05/16/2026,05/17/2026', color: 'green' },
   { id: 'Week6', label: 'Week6', category: 'Week', column: 'Date', value: '05/30/2026,05/31/2026', color: 'green' },
   { id: 'Week7', label: 'Week7', category: 'Week', column: 'Date', value: '06/06/2026,06/07/2026', color: 'green' },
-  { id: 'u11', label: 'U11', category: 'Age category', column: 'Cat', value: 'U11A,U11B', color: 'blue' },
-  { id: 'u13', label: 'U13', category: 'Age category', column: 'Cat', value: 'U13A,U13B', color: 'blue' },
-  { id: 'u15', label: 'U15', category: 'Age category', column: 'Cat', value: 'U15A,U15B', color: 'blue' },
+  { id: 'u11', label: 'U11', category: 'Age category', column: 'Cat', value: 'U11A,U11B', color: 'red' },
+  { id: 'u13', label: 'U13', category: 'Age category', column: 'Cat', value: 'U13A,U13B', color: 'red' },
+  { id: 'u15', label: 'U15', category: 'Age category', column: 'Cat', value: 'U15A,U15B', color: 'red' },
+  { id: 'u17', label: 'U17', category: 'Age category', column: 'Cat', value: 'U17', color: 'red' },
   ...ACADEMY_TEAMS.map((entry) => ({
     id: entry.academy
       .toLowerCase()
