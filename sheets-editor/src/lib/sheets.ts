@@ -63,6 +63,37 @@ export async function readSheetData(): Promise<ReadSheetResult> {
   return { headers, rows };
 }
 
+/**
+ * Read data from a specific sheet by name.
+ */
+export async function readSheetByName(sheetName: string, range?: string): Promise<ReadSheetResult> {
+  const sheets = getSheetsClient();
+  const config = getSheetsConfig();
+
+  const fullRange = range ? `${sheetName}!${range}` : `${sheetName}!A1:Z1000`;
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: config.sheetId,
+    range: fullRange,
+  });
+
+  const values = response.data.values || [];
+  if (values.length === 0) {
+    return { headers: [], rows: [] };
+  }
+
+  const headers = values[0].map(String);
+  const rows: SheetRow[] = values.slice(1).map((row, i) => {
+    const obj: SheetRow = { __rowIndex: i + 2 }; // +2: 1-based + skip header
+    headers.forEach((header, colIdx) => {
+      obj[header] = row[colIdx] ?? '';
+    });
+    return obj;
+  });
+
+  return { headers, rows };
+}
+
 // ============================================================
 // Write Cell Updates
 // ============================================================
@@ -103,6 +134,29 @@ export async function writeCellUpdates(updates: CellUpdateInput[]): Promise<void
       data,
     },
   });
+}
+
+/**
+ * Check if a sheet exists in the spreadsheet.
+ */
+export async function sheetExists(sheetName: string): Promise<boolean> {
+  const sheets = getSheetsClient();
+  const config = getSheetsConfig();
+
+  try {
+    const spreadsheet = await sheets.spreadsheets.get({
+      spreadsheetId: config.sheetId,
+    });
+
+    const existingSheets = spreadsheet.data.sheets?.map(
+      (s) => s.properties?.title
+    ) || [];
+
+    return existingSheets.includes(sheetName);
+  } catch (err) {
+    console.warn(`[Sheets] Could not check if sheet '${sheetName}' exists:`, err);
+    return false;
+  }
 }
 
 // ============================================================

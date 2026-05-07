@@ -144,6 +144,12 @@ Instead of `EDITOR_EMAILS`, create `editors.json`:
 ```
 Then set: `EDITORS_CONFIG_PATH=./editors.json`
 
+**Alternative: Google Sheet-based editor config**
+
+You can also manage editors via a sheet named `EditAccess` in the same Google Spreadsheet. The sheet should have a column named `Email` (or the first column will be used if no `Email` column exists). Each row should contain an email address.
+
+The system combines all three sources (environment variable, JSON file, and sheet) to determine editor permissions.
+
 ### 6. Install & Run
 
 ```bash

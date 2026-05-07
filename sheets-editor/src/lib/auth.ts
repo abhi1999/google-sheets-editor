@@ -20,7 +20,7 @@ console.log('user email id',session.user.email)
     email: session.user.email,
     name: session.user.name || 'Unknown',
     image: session.user.image || undefined,
-    isEditor: isEditor(session.user.email),
+    isEditor: await isEditor(session.user.email),
   };
 }
 

@@ -6,23 +6,26 @@
 
 import fs from 'fs';
 import path from 'path';
+import { readSheetByName, sheetExists } from '@/lib/sheets';
 
 // ============================================================
 // Permission Configuration
 // ============================================================
 
 /**
- * Load the editor allowlist from environment variable or JSON config file.
- * Priority: EDITOR_EMAILS env var > EDITORS_CONFIG_PATH > empty list
+ * Load the editor allowlist from environment variable, JSON config file, or Google Sheet.
+ * Priority: EDITOR_EMAILS env var > EDITORS_CONFIG_PATH > EditAccess sheet > empty list
  */
-function loadEditorEmails(): Set<string> {
+async function loadEditorEmails(): Promise<Set<string>> {
+  const emails = new Set<string>();
+
   // Option A: Comma-separated env var
   if (process.env.EDITOR_EMAILS) {
-    const emails = process.env.EDITOR_EMAILS
+    const envEmails = process.env.EDITOR_EMAILS
       .split(',')
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean);
-    return new Set(emails);
+    envEmails.forEach(email => emails.add(email));
   }
 
   // Option B: JSON config file
@@ -32,31 +35,59 @@ function loadEditorEmails(): Set<string> {
     if (fs.existsSync(absolutePath)) {
       const raw = fs.readFileSync(absolutePath, 'utf-8');
       const parsed = JSON.parse(raw) as { editors: string[] };
-      const emails = (parsed.editors || [])
+      const jsonEmails = (parsed.editors || [])
         .map((e: string) => e.trim().toLowerCase())
         .filter(Boolean);
-      return new Set(emails);
+      jsonEmails.forEach(email => emails.add(email));
     }
   } catch (err) {
     console.warn('[Config] Could not load editors config file:', err);
   }
 
-  console.warn('[Config] No editor allowlist configured — no one will have edit access.');
-  return new Set<string>();
+  // Option C: EditAccess sheet
+  if (await sheetExists('EditAccess')) {
+    try {
+      const sheetData = await readSheetByName('EditAccess');
+      // Assume the sheet has a column named 'Email' or the first column contains emails
+      const emailColumn = sheetData.headers.includes('Email') ? 'Email' : sheetData.headers[0];
+      if (emailColumn) {
+        sheetData.rows.forEach(row => {
+          const email = String(row[emailColumn] || '').trim().toLowerCase();
+          if (email && email.includes('@')) { // Basic email validation
+            emails.add(email);
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('[Config] Could not load editors from EditAccess sheet:', err);
+    }
+  } else {
+    console.info('[Config] EditAccess sheet not found, skipping sheet-based editor configuration');
+  }
+
+  if (emails.size === 0) {
+    console.warn('[Config] No editor allowlist configured — no one will have edit access.');
+  }
+
+  return emails;
 }
 
 // Cache after first load (module-level singleton)
 let _editorEmails: Set<string> | null = null;
+let _editorEmailsPromise: Promise<Set<string>> | null = null;
 
-export function getEditorEmails(): Set<string> {
-  if (!_editorEmails) {
-    _editorEmails = loadEditorEmails();
-  }
+export async function getEditorEmails(): Promise<Set<string>> {
+  if (_editorEmails) return _editorEmails;
+  if (_editorEmailsPromise) return _editorEmailsPromise;
+
+  _editorEmailsPromise = loadEditorEmails();
+  _editorEmails = await _editorEmailsPromise;
   return _editorEmails;
 }
 
-export function isEditor(email: string): boolean {
-  return getEditorEmails().has(email.toLowerCase());
+export async function isEditor(email: string): Promise<boolean> {
+  const emails = await getEditorEmails();
+  return emails.has(email.toLowerCase());
 }
 
 // ============================================================

@@ -21,7 +21,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       // Attach extra fields to the session
       if (session.user && token.email) {
-        (session.user as any).isEditor = isEditor(token.email);
+        (session.user as any).isEditor = await isEditor(token.email);
         (session.user as any).id = token.sub;
       }
       return session;

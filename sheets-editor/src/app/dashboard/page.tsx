@@ -13,7 +13,7 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  const userIsEditor = isEditor(session.user.email);
+  const userIsEditor = await isEditor(session.user.email);
   const config = getSheetsConfig();
 
   return (
