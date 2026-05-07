@@ -95,7 +95,9 @@ export function getAllSheetOptions(): SheetOption[] {
 export function getDefaultSheetId(): string {
   const configFile = loadConfigFile();
   if (configFile && configFile.sheets.length > 0) {
-    return configFile.defaultSheetId || configFile.sheets[0].id;
+    const defaultId = configFile.defaultSheetId;
+    const validDefault = typeof defaultId === 'string' && configFile.sheets.some((sheet) => sheet.id === defaultId);
+    return validDefault ? defaultId : configFile.sheets[0].id;
   }
   return 'default';
 }
