@@ -12,6 +12,10 @@ export interface SheetData {
   rows: SheetRow[];
   editableColumns: string[];
   lastFetched: string;
+  predefinedFilters?: PredefinedFilter[];
+  sheetKey?: string;
+  sheetName?: string;
+  sheetDescription?: string;
 }
 
 export interface CellEdit {

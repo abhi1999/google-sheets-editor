@@ -4,23 +4,30 @@ import { readSheetData } from '@/lib/sheets';
 import { getSheetsConfig } from '@/config';
 import type { SheetData } from '@/types';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/sheets
  * Returns sheet data. Requires authentication (read-only for non-editors).
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const user = await requireAuth();
+    const url = new URL(request.url);
+    const sheetKey = url.searchParams.get('sheetKey') || undefined;
 
-    const config = getSheetsConfig();
-    //console.log('iamhere config', config)
-    const { headers, rows } = await readSheetData();
-    //console.log('iamhere', headers)
+    const user = await requireAuth(sheetKey);
+    const config = getSheetsConfig(sheetKey);
+    const { headers, rows } = await readSheetData(sheetKey);
+
     const response: SheetData = {
       headers,
       rows,
-      editableColumns: user.isEditor ? config.editableColumns : [], // Non-editors get empty editable list
+      editableColumns: user.isEditor ? config.editableColumns : [],
       lastFetched: new Date().toISOString(),
+      predefinedFilters: config.predefinedFilters,
+      sheetKey: config.sheetKey,
+      sheetName: config.sheetName,
+      sheetDescription: config.sheetDescription,
     };
 
     return NextResponse.json(response);

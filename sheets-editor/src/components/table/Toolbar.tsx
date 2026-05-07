@@ -11,6 +11,9 @@ interface ToolbarProps {
   isLoading: boolean;
   filters: FilterState;
   sortState: SortState;
+  sheetOptions: Array<{ id: string; name: string; description?: string }>;
+  selectedSheetKey: string;
+  onSheetChange: (sheetKey: string) => void;
   onSave: () => void;
   onDiscard: () => void;
   onRefresh: () => void;
@@ -27,6 +30,9 @@ export function Toolbar({
   isLoading,
   filters,
   sortState,
+  sheetOptions,
+  selectedSheetKey,
+  onSheetChange,
   onSave,
   onDiscard,
   onRefresh,
@@ -34,6 +40,8 @@ export function Toolbar({
   onBulkEdit,
   onSignOut,
 }: ToolbarProps) {
+  const activeSheetName = sheetOptions.find((option) => option.id === selectedSheetKey)?.name || 'Schedule';
+
   return (
     <div
       role="banner"
@@ -60,10 +68,10 @@ export function Toolbar({
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-0 sm:gap-2">
             <span className="font-bold text-base sm:text-lg tracking-tight transition-colors duration-300" style={{ fontFamily: 'var(--font-display)', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
-              NAYCA 2026
+              NAYCA
             </span>
             <span className="text-xs font-medium opacity-90 hidden sm:block" style={{ color: 'rgba(255,255,255,0.8)' }}>
-              Summer Schedule
+              {activeSheetName}
             </span>
           </div>
         </div>
@@ -253,7 +261,7 @@ export function Toolbar({
             <div className="mb-3 pb-3 border-b border-gray-200">
               <p className="text-sm font-bold text-gray-900 mb-1">{user.name}</p>
               <p className="text-xs text-gray-600">{user.email}</p>
-              <div className="mt-2 flex items-center gap-2">
+              <div className="mt-2 flex flex-col gap-3">
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                   user.isEditor
                     ? 'bg-green-100 text-green-800'
@@ -261,6 +269,23 @@ export function Toolbar({
                 }`}>
                   {user.isEditor ? 'Editor' : 'Viewer'}
                 </span>
+                <div>
+                  <label htmlFor="toolbar-sheet-select" className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 mb-1">
+                    Active sheet
+                  </label>
+                  <select
+                    id="toolbar-sheet-select"
+                    value={selectedSheetKey}
+                    onChange={(event) => onSheetChange(event.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none"
+                  >
+                    {sheetOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name || option.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
             <button

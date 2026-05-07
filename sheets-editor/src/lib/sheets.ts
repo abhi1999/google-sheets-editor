@@ -5,7 +5,8 @@
  */
 
 import { google, sheets_v4 } from 'googleapis';
-import { getServiceAccountKey, getSheetsConfig } from '@/config';
+import { getServiceAccountKey } from '@/lib/service-account';
+import { getSheetsConfig } from '@/config';
 import type { SheetRow, AuditEntry } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -37,9 +38,9 @@ export interface ReadSheetResult {
   rows: SheetRow[];
 }
 
-export async function readSheetData(): Promise<ReadSheetResult> {
+export async function readSheetData(sheetKey?: string): Promise<ReadSheetResult> {
   const sheets = getSheetsClient();
-  const config = getSheetsConfig();
+  const config = getSheetsConfig(sheetKey);
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: config.sheetId,
@@ -104,20 +105,17 @@ export interface CellUpdateInput {
   value: string;
 }
 
-export async function writeCellUpdates(updates: CellUpdateInput[]): Promise<void> {
+export async function writeCellUpdates(updates: CellUpdateInput[], sheetKey?: string): Promise<void> {
   if (updates.length === 0) return;
 
   const sheets = getSheetsClient();
-  const config = getSheetsConfig();
+  const config = getSheetsConfig(sheetKey);
 
-  // Build batch update data
-  // Extract sheet name from range (e.g., "Sheet1!A1:Z1000" -> "Sheet1")
   const sheetName = config.range.includes('!')
     ? config.range.split('!')[0]
     : 'Sheet1';
 
   const data: sheets_v4.Schema$ValueRange[] = updates.map((update) => {
-    // Convert 0-based column index to A1 notation letter
     const colLetter = columnIndexToLetter(update.columnIndex);
     const rangeNotation = `${sheetName}!${colLetter}${update.rowIndex}`;
 
@@ -139,9 +137,9 @@ export async function writeCellUpdates(updates: CellUpdateInput[]): Promise<void
 /**
  * Check if a sheet exists in the spreadsheet.
  */
-export async function sheetExists(sheetName: string): Promise<boolean> {
+export async function sheetExists(sheetName: string, sheetKey?: string): Promise<boolean> {
   const sheets = getSheetsClient();
-  const config = getSheetsConfig();
+  const config = getSheetsConfig(sheetKey);
 
   try {
     const spreadsheet = await sheets.spreadsheets.get({
@@ -166,11 +164,10 @@ export async function sheetExists(sheetName: string): Promise<boolean> {
 /**
  * Ensure the audit log sheet exists, creating it with headers if needed.
  */
-export async function ensureAuditSheet(): Promise<void> {
+export async function ensureAuditSheet(sheetKey?: string): Promise<void> {
   const sheets = getSheetsClient();
-  const config = getSheetsConfig();
+  const config = getSheetsConfig(sheetKey);
 
-  // Get existing sheets
   const spreadsheet = await sheets.spreadsheets.get({
     spreadsheetId: config.sheetId,
   });
@@ -180,7 +177,6 @@ export async function ensureAuditSheet(): Promise<void> {
   ) || [];
 
   if (!existingSheets.includes(config.auditSheetName)) {
-    // Create the audit sheet
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId: config.sheetId,
       requestBody: {
@@ -196,7 +192,6 @@ export async function ensureAuditSheet(): Promise<void> {
       },
     });
 
-    // Add headers
     await sheets.spreadsheets.values.update({
       spreadsheetId: config.sheetId,
       range: `${config.auditSheetName}!A1`,
@@ -214,13 +209,13 @@ export async function ensureAuditSheet(): Promise<void> {
 /**
  * Append audit log entries to the audit sheet.
  */
-export async function appendAuditEntries(entries: AuditEntry[]): Promise<void> {
+export async function appendAuditEntries(entries: AuditEntry[], sheetKey?: string): Promise<void> {
   if (entries.length === 0) return;
 
   const sheets = getSheetsClient();
-  const config = getSheetsConfig();
+  const config = getSheetsConfig(sheetKey);
 
-  await ensureAuditSheet();
+  await ensureAuditSheet(sheetKey);
 
   const rows = entries.map((entry) => [
     entry.id,

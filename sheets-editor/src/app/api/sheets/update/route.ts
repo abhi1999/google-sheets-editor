@@ -4,14 +4,19 @@ import { readSheetData, writeCellUpdates, appendAuditEntries, createAuditEntry }
 import { getSheetsConfig } from '@/config';
 import type { BatchEditPayload, BatchEditResult } from '@/types';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/sheets/update
  * Applies cell edits. Requires editor permission (enforced server-side).
  */
 export async function POST(request: NextRequest) {
   try {
+    const url = new URL(request.url);
+    const sheetKey = url.searchParams.get('sheetKey') || undefined;
+
     // CRITICAL: Server-side permission enforcement
-    const user = await requireEditor();
+    const user = await requireEditor(sheetKey);
 
     const body = (await request.json()) as BatchEditPayload;
 
@@ -19,7 +24,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No edits provided' }, { status: 400 });
     }
 
-    const config = getSheetsConfig();
+    const config = getSheetsConfig(sheetKey);
 
     // Validate that all edited columns are in the allowlist
     const invalidColumns = body.edits.filter(
@@ -52,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Read current data to get column indices and verify old values
-    const { headers } = await readSheetData();
+    const { headers } = await readSheetData(sheetKey);
 
     const updates = body.edits.map((edit) => {
       const colIndex = headers.indexOf(edit.column);
@@ -67,7 +72,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Write to sheet
-    await writeCellUpdates(updates);
+    await writeCellUpdates(updates, sheetKey);
 
     // Append audit log entries
     const auditEntries = body.edits.map((edit) =>
@@ -83,7 +88,7 @@ export async function POST(request: NextRequest) {
     );
 
     // Fire-and-forget audit log (don't fail the request if audit fails)
-    appendAuditEntries(auditEntries).catch((err) => {
+    appendAuditEntries(auditEntries, sheetKey).catch((err) => {
       console.error('[Audit] Failed to write audit log:', err);
     });
 

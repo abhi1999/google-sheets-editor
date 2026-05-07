@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { signOut } from 'next-auth/react';
 import type {
   AppUser, SheetData, SheetRow, CellEdit,
@@ -18,6 +18,8 @@ import { useToast } from '@/components/ui/Toast';
 interface DashboardClientProps {
   user: AppUser;
   editableColumns: string[];
+  defaultSheetId: string;
+  sheetOptions: Array<{ id: string; name: string; description?: string }>;
 }
 
 const ACADEMY_TEAMS = [
@@ -115,13 +117,7 @@ const ACADEMY_TEAMS = [
 // ----------------------------------------------------------------
 const PREDEFINED_FILTERS: PredefinedFilter[] = [
   // Examples — customize to match your actual sheet columns:
-  { id: 'Week1', label: 'Apr 18/19', category: 'Week', column: 'Date', value: '04/18/2026,04/19/2026', color: 'green' },
-  { id: 'Week2', label: 'Apr 25/26', category: 'Week', column: 'Date', value: '04/25/2026,04/26/2026', color: 'green' },
-  { id: 'Week3', label: 'May 2/3', category: 'Week', column: 'Date', value: '05/02/2026,05/03/2026', color: 'green' },
-  { id: 'Week4', label: 'May 9/10', category: 'Week', column: 'Date', value: '05/09/2026,05/10/2026', color: 'green' },
-  { id: 'Week5', label: 'May 16/17', category: 'Week', column: 'Date', value: '05/16/2026,05/17/2026', color: 'green' },
-  { id: 'Week6', label: 'May 30/31', category: 'Week', column: 'Date', value: '05/30/2026,05/31/2026', color: 'green' },
-  { id: 'Week7', label: 'Jun 6/7', category: 'Week', column: 'Date', value: '06/06/2026,06/07/2026', color: 'green' },
+  
   { id: 'u11', label: 'U11', category: 'Age category', column: 'Cat', value: 'U11A,U11B', color: 'red' },
   { id: 'u13', label: 'U13', category: 'Age category', column: 'Cat', value: 'U13A,U13B', color: 'red' },
   { id: 'u15', label: 'U15', category: 'Age category', column: 'Cat', value: 'U15A,U15B', color: 'red' },
@@ -141,13 +137,14 @@ const PREDEFINED_FILTERS: PredefinedFilter[] = [
 
 const DEFAULT_PAGE_SIZE = 25;
 
-export function DashboardClient({ user, editableColumns }: DashboardClientProps) {
+export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOptions }: DashboardClientProps) {
   const { toast } = useToast();
 
   // ── Data state ──────────────────────────────────────────────
   const [sheetData, setSheetData] = useState<SheetData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSheetKey, setSelectedSheetKey] = useState<string>(defaultSheetId);
 
   // ── Edit state ───────────────────────────────────────────────
   const [pendingEdits, setPendingEdits] = useState<Map<string, CellEdit>>(new Map());
@@ -167,7 +164,12 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
   // ── Pagination ───────────────────────────────────────────────
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-
+  const mergedPredefinedFilters = useMemo(() => {
+    const sheetFilters = sheetData?.predefinedFilters || [];
+    const existingIds = new Set(PREDEFINED_FILTERS.map((filter) => filter.id));
+    const extraFilters = sheetFilters.filter((filter) => !existingIds.has(filter.id));
+    return [...extraFilters,...PREDEFINED_FILTERS];
+  }, [sheetData?.predefinedFilters]);
   // ── UI state ─────────────────────────────────────────────────
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
@@ -177,7 +179,8 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
     if (!silent) setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/sheets');
+      const sheetKeyParam = selectedSheetKey ? `?sheetKey=${encodeURIComponent(selectedSheetKey)}` : '';
+      const res = await fetch(`/api/sheets${sheetKeyParam}`);
       if (res.status === 401) { await signOut({ callbackUrl: '/login' }); return; }
       if (!res.ok) throw new Error(`Failed to load data (${res.status})`);
       const data: SheetData = await res.json();
@@ -189,26 +192,30 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [selectedSheetKey, toast]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // ── Load saved predefined filters from localStorage ──────────
+  const hasLoadedSavedFilters = useRef(false);
+
   useEffect(() => {
+    if (hasLoadedSavedFilters.current) return;
     try {
       const saved = localStorage.getItem('selectedPredefinedFilters');
       if (saved) {
         const savedIds: string[] = JSON.parse(saved);
-        // Filter out IDs that no longer exist in PREDEFINED_FILTERS
-        const validIds = savedIds.filter(id => PREDEFINED_FILTERS.some(pf => pf.id === id));
+        const validIds = savedIds.filter((id) => mergedPredefinedFilters.some((pf) => pf.id === id));
         if (validIds.length > 0) {
-          setFilters(prev => ({ ...prev, predefined: validIds }));
+          setFilters((prev) => ({ ...prev, predefined: validIds }));
         }
       }
     } catch (error) {
       console.warn('Failed to load saved filters from localStorage:', error);
+    } finally {
+      hasLoadedSavedFilters.current = true;
     }
-  }, []);
+  }, [mergedPredefinedFilters]);
 
   // ── Save predefined filters to localStorage when they change ──
   useEffect(() => {
@@ -358,7 +365,8 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
 
     try {
       const edits = Array.from(pendingEdits.values());
-      const res = await fetch('/api/sheets/update', {
+      const sheetKeyParam = selectedSheetKey ? `?sheetKey=${encodeURIComponent(selectedSheetKey)}` : '';
+      const res = await fetch(`/api/sheets/update${sheetKeyParam}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ edits }),
@@ -432,6 +440,9 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
       params.set('sortColumn', sortState.column);
       params.set('sortDirection', sortState.direction || 'asc');
     }
+    if (selectedSheetKey) {
+      params.set('sheetKey', selectedSheetKey);
+    }
     window.location.href = `/api/export?${params}`;
     toast('Downloading CSV…', 'info');
   };
@@ -447,6 +458,16 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
         isLoading={isLoading}
         filters={filters}
         sortState={sortState}
+        sheetOptions={sheetOptions}
+        selectedSheetKey={selectedSheetKey}
+        onSheetChange={(nextKey) => {
+          setSelectedSheetKey(nextKey);
+          try {
+            localStorage.setItem('selectedSheetKey', nextKey);
+          } catch (error) {
+            console.warn('Unable to persist selected sheet:', error);
+          }
+        }}
         onSave={handleSave}
         onDiscard={handleDiscard}
         onRefresh={() => fetchData()}
@@ -471,13 +492,12 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
           </div>
         )}
 
-        {/* Filter bar */}
         {sheetData && (
           <FilterBar
             headers={sheetData.headers.filter((header) => header !== 'Season')}
             filters={filters}
             onFiltersChange={setFilters}
-            predefinedFilters={PREDEFINED_FILTERS}
+            predefinedFilters={mergedPredefinedFilters}
             totalRows={sheetData.rows.length}
             filteredRows={processedRows.length}
           />
@@ -582,6 +602,7 @@ export function DashboardClient({ user, editableColumns }: DashboardClientProps)
       <AuditPanel
         isOpen={showAudit}
         onClose={() => setShowAudit(false)}
+        sheetKey={selectedSheetKey}
       />
     </div>
   );

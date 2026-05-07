@@ -17,22 +17,25 @@ interface AuditEntry {
 interface AuditPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  sheetKey?: string;
 }
 
-export function AuditPanel({ isOpen, onClose }: AuditPanelProps) {
+export function AuditPanel({ isOpen, onClose, sheetKey }: AuditPanelProps) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
-      fetch('/api/audit')
+      const params = new URLSearchParams();
+      if (sheetKey) params.set('sheetKey', sheetKey);
+      fetch(`/api/audit?${params}`)
         .then((r) => r.json())
         .then((data) => setEntries(data.entries || []))
         .catch(console.error)
         .finally(() => setLoading(false));
     }
-  }, [isOpen]);
+  }, [isOpen, sheetKey]);
 
   if (!isOpen) return null;
 

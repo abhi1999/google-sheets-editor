@@ -12,23 +12,23 @@ import type { AppUser } from '@/types';
  * Get the current user from the server session.
  * Returns null if not authenticated.
  */
-export async function getCurrentUser(): Promise<AppUser | null> {
+export async function getCurrentUser(sheetKey?: string): Promise<AppUser | null> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return null;
-console.log('user email id',session.user.email)
+
   return {
     email: session.user.email,
     name: session.user.name || 'Unknown',
     image: session.user.image || undefined,
-    isEditor: await isEditor(session.user.email),
+    isEditor: await isEditor(session.user.email, sheetKey),
   };
 }
 
 /**
  * Require authentication. Throws if not authenticated.
  */
-export async function requireAuth(): Promise<AppUser> {
-  const user = await getCurrentUser();
+export async function requireAuth(sheetKey?: string): Promise<AppUser> {
+  const user = await getCurrentUser(sheetKey);
   if (!user) {
     throw new AuthError('Authentication required', 401);
   }
@@ -38,8 +38,8 @@ export async function requireAuth(): Promise<AppUser> {
 /**
  * Require editor permissions. Throws if not an editor.
  */
-export async function requireEditor(): Promise<AppUser> {
-  const user = await requireAuth();
+export async function requireEditor(sheetKey?: string): Promise<AppUser> {
+  const user = await requireAuth(sheetKey);
   if (!user.isEditor) {
     throw new AuthError('Editor permission required', 403);
   }
