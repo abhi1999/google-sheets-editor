@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/auth';
 import { readSheetData } from '@/lib/sheets';
 import type { SheetRow } from '@/types';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/export
  * Export filtered/sorted sheet data as CSV.
@@ -10,16 +12,16 @@ import type { SheetRow } from '@/types';
  */
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth();
+    const url = new URL(request.url);
+    const sheetKey = url.searchParams.get('sheetKey') || undefined;
 
-    const { searchParams } = new URL(request.url);
-    const search = searchParams.get('search') || '';
-    const filterColumn = searchParams.get('filterColumn') || '';
-    const filterValue = searchParams.get('filterValue') || '';
-    const sortColumn = searchParams.get('sortColumn') || '';
-    const sortDirection = searchParams.get('sortDirection') || 'asc';
+    await requireAuth(sheetKey);
 
-    const { headers, rows } = await readSheetData();
+    const search = url.searchParams.get('search') || '';
+    const sortColumn = url.searchParams.get('sortColumn') || '';
+    const sortDirection = url.searchParams.get('sortDirection') || 'asc';
+
+    const { headers, rows } = await readSheetData(sheetKey);
 
     // Apply filters
     let filteredRows = rows;
@@ -33,8 +35,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const filterColumns = searchParams.getAll('filterColumn');
-    const filterValues = searchParams.getAll('filterValue');
+    const filterColumns = url.searchParams.getAll('filterColumn');
+    const filterValues = url.searchParams.getAll('filterValue');
 
     if (filterColumns.length === filterValues.length && filterColumns.length > 0) {
       filterColumns.forEach((column, index) => {

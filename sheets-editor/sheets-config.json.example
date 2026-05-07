@@ -1,0 +1,30 @@
+{
+  "defaultSheetId": "main",
+  "sheets": [
+    {
+      "id": "summer2026",
+      "name": "2026 Summer Schedule",
+      "description": "Primary schedule sheet used by default",
+      "sheetId": "1HD-y5fvYfO5d0PKVhiMwKBuZ-mwf-U_X5T7BpQDRL08",
+      "range": "Match Fixtures!A1:Z2000",
+      "auditSheetName": "AuditLog",
+      "editableColumns": ["Time","Ground\nEDITABLE","Umpire\nEDITABLE","Umpire Phone\nEDITABLE","Result\nEDITABLE","POM\nEDITABLE\n","Notes\nEDITABLE"],
+      "editorEmails": ["admin@example.com", "editor@example.com"],
+      "predefinedFilters": [
+        
+      ],
+      "useEditAccessSheet": true
+    },
+    {
+      "id": "archive",
+      "name": "Archive Sheet",
+      "description": "Read-only archive data for past events",
+      "sheetId": "3zYxWvUtSrQpOnMlKjIhGfEdCbA0987654321",
+      "range": "Archive!A1:Z1000",
+      "auditSheetName": "AuditLog",
+      "editableColumns": ["Notes"],
+      "editorEmails": ["archive-editor@example.com"],
+      "useEditAccessSheet": false
+    }
+  ]
+}

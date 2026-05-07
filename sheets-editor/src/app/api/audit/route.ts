@@ -2,21 +2,26 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getSheetsConfig } from '@/config';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/audit
  * Returns recent audit log entries. Requires authentication.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    await requireAuth();
+    const url = new URL(request.url);
+    const sheetKey = url.searchParams.get('sheetKey') || undefined;
+
+    await requireAuth(sheetKey);
 
     // This is a simplified read of the audit sheet
     // In production you'd add pagination
-    const config = getSheetsConfig();
+    const config = getSheetsConfig(sheetKey);
 
     try {
       const { google } = await import('googleapis');
-      const { getServiceAccountKey } = await import('@/config');
+      const { getServiceAccountKey } = await import('@/lib/service-account');
 
       const credentials = getServiceAccountKey() as any;
       const auth = new google.auth.GoogleAuth({

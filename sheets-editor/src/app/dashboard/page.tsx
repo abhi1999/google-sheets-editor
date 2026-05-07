@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
-import { isEditor, getSheetsConfig } from '@/config';
+import { isEditor, getAllSheetOptions, getDefaultSheetId, getSheetsConfig } from '@/config';
 import { DashboardClient } from '@/components/table/DashboardClient';
 
 export const dynamic = 'force-dynamic';
@@ -13,8 +13,10 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  const userIsEditor = await isEditor(session.user.email);
-  const config = getSheetsConfig();
+  const defaultSheetId = getDefaultSheetId();
+  const userIsEditor = await isEditor(session.user.email, defaultSheetId);
+  const config = getSheetsConfig(defaultSheetId);
+  const sheetOptions = getAllSheetOptions();
 
   return (
     <DashboardClient
@@ -25,6 +27,8 @@ export default async function DashboardPage() {
         isEditor: userIsEditor,
       }}
       editableColumns={userIsEditor ? config.editableColumns : []}
+      defaultSheetId={defaultSheetId}
+      sheetOptions={sheetOptions}
     />
   );
 }
