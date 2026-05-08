@@ -52,15 +52,31 @@ interface SheetsConfigFile {
 let cachedConfigFile: SheetsConfigFile | null | undefined;
 let cachedEditorEmails: Map<string, Promise<Set<string>>> = new Map();
 
+function resolveConfigFilePath(relativePath: string): string | null {
+  const candidates = [
+    path.resolve(process.cwd(), relativePath),
+    path.resolve(process.cwd(), 'public', relativePath),
+    path.resolve(process.cwd(), 'public', path.basename(relativePath)),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 function loadConfigFile(): SheetsConfigFile | null {
   if (cachedConfigFile !== undefined) return cachedConfigFile;
-console.log('loadConfigFile called, checking path:', SHEETS_CONFIG_PATH);
-  const absolutePath = path.resolve(process.cwd(), SHEETS_CONFIG_PATH);
-  if (!fs.existsSync(absolutePath)) {
-    console.warn(`[Config] No config file found at ${absolutePath}. Falling back to environment variables.`);
+  console.log('loadConfigFile called, checking path:', SHEETS_CONFIG_PATH);
+  const absolutePath = resolveConfigFilePath(SHEETS_CONFIG_PATH);
+  if (!absolutePath) {
+    console.warn(`[Config] No config file found for ${SHEETS_CONFIG_PATH}. Falling back to environment variables.`);
     return (cachedConfigFile = null);
   }
-console.log('Config file found at:', absolutePath);
+  console.log('Config file found at:', absolutePath);
   try {
     const raw = fs.readFileSync(absolutePath, 'utf-8');
     const parsed = JSON.parse(raw) as SheetsConfigFile;
@@ -165,8 +181,8 @@ async function loadEditorEmails(sheetKey?: string): Promise<Set<string>> {
   }
 
   try {
-    const absolutePath = path.resolve(process.cwd(), EDITORS_CONFIG_PATH);
-    if (fs.existsSync(absolutePath)) {
+    const absolutePath = resolveConfigFilePath(EDITORS_CONFIG_PATH);
+    if (absolutePath) {
       const raw = fs.readFileSync(absolutePath, 'utf-8');
       const parsed = JSON.parse(raw) as { editors?: string[] };
       (parsed.editors || [])
