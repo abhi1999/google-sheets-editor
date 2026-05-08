@@ -17,7 +17,6 @@ export default async function DashboardPage() {
   const userIsEditor = await isEditor(session.user.email, defaultSheetId);
   const config = getSheetsConfig(defaultSheetId);
   const sheetOptions = getAllSheetOptions();
-console.log('sheetOptions:', sheetOptions);
   return (
     <DashboardClient
       user={{

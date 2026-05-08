@@ -117,7 +117,14 @@ const ACADEMY_TEAMS = [
 // ----------------------------------------------------------------
 const PREDEFINED_FILTERS: PredefinedFilter[] = [
   // Examples — customize to match your actual sheet columns:
-  
+   /*{ "id": "Week1", "label": "Apr 18/19", "category": "Week", "column": "Date", "value": "04/18/2026,04/19/2026", "color": "green" },
+        { "id": "Week2", "label": "Apr 25/26", "category": "Week", "column": "Date", "value": "04/25/2026,04/26/2026", "color": "green" },
+        { "id": "Week3", "label": "May 2/3", "category": "Week", "column": "Date", "value": "05/02/2026,05/03/2026", "color": "green" },
+        { "id": "Week4", "label": "May 9/10", "category": "Week", "column": "Date", "value": "05/09/2026,05/10/2026", "color": "green" },
+        { "id": "Week5", "label": "May 16/17", "category": "Week", "column": "Date", "value": "05/16/2026,05/17/2026", "color": "green" },
+        { "id": "Week6", "label": "May 30/31", "category": "Week", "column": "Date", "value": "05/30/2026,05/31/2026", "color": "green" },
+        { "id": "Week7", "label": "Jun 6/7", "category": "Week", "column": "Date", "value": "06/06/2026,06/07/2026", "color": "green" },
+    */
   { id: 'u11', label: 'U11', category: 'Age category', column: 'Cat', value: 'U11A,U11B', color: 'red' },
   { id: 'u13', label: 'U13', category: 'Age category', column: 'Cat', value: 'U13A,U13B', color: 'red' },
   { id: 'u15', label: 'U15', category: 'Age category', column: 'Cat', value: 'U15A,U15B', color: 'red' },
@@ -266,7 +273,7 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
       });
     });
 
-    const selectedPredefinedFilters = PREDEFINED_FILTERS.filter((pf) =>
+    const selectedPredefinedFilters = mergedPredefinedFilters.filter((pf) =>
       filters.predefined.includes(pf.id)
     );
 
