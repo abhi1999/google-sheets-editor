@@ -1,0 +1,27 @@
+{
+  "name": "NAYCA 2026 Scheduling Sheet",
+  "short_name": "NAYCA Schedule",
+  "description": "Securely view and edit NAYCA 2026 Google Sheets from a mobile installable PWA.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090b10",
+  "theme_color": "#1f2937",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/maskable_icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
