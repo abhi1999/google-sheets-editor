@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import type { PredefinedFilter } from '@/types';
 import { readSheetByName, sheetExists } from '@/lib/sheets-api';
+import bundledSheetsConfig from '../../sheets-config.json';
 
 const SHEETS_CONFIG_PATH = process.env.SHEETS_CONFIG_PATH || './sheets-config.json';
 const EDITORS_CONFIG_PATH = process.env.EDITORS_CONFIG_PATH || './editors.json';
@@ -72,10 +73,21 @@ function loadConfigFile(): SheetsConfigFile | null {
   if (cachedConfigFile !== undefined) return cachedConfigFile;
   console.log('loadConfigFile called, checking path:', SHEETS_CONFIG_PATH);
   const absolutePath = resolveConfigFilePath(SHEETS_CONFIG_PATH);
+
   if (!absolutePath) {
+    const defaultConfigRequested = SHEETS_CONFIG_PATH === './sheets-config.json' || SHEETS_CONFIG_PATH === 'sheets-config.json';
+    if (defaultConfigRequested && bundledSheetsConfig) {
+      console.log('Using bundled sheets config from import.');
+      return (cachedConfigFile = {
+        defaultSheetId: bundledSheetsConfig.defaultSheetId,
+        sheets: Array.isArray(bundledSheetsConfig.sheets) ? bundledSheetsConfig.sheets : [],
+      });
+    }
+
     console.warn(`[Config] No config file found for ${SHEETS_CONFIG_PATH}. Falling back to environment variables.`);
     return (cachedConfigFile = null);
   }
+
   console.log('Config file found at:', absolutePath);
   try {
     const raw = fs.readFileSync(absolutePath, 'utf-8');
