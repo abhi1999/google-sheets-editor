@@ -74,6 +74,7 @@ function loadConfigFile(): SheetsConfigFile | null {
 }
 
 export function getAllSheetOptions(): SheetOption[] {
+  console.log('getAllSheetOptions called')
   const configFile = loadConfigFile();
   if (configFile && configFile.sheets.length > 0) {
     return configFile.sheets.map((sheet) => ({
