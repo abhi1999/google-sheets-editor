@@ -54,12 +54,13 @@ let cachedEditorEmails: Map<string, Promise<Set<string>>> = new Map();
 
 function loadConfigFile(): SheetsConfigFile | null {
   if (cachedConfigFile !== undefined) return cachedConfigFile;
-
+console.log('loadConfigFile called, checking path:', SHEETS_CONFIG_PATH);
   const absolutePath = path.resolve(process.cwd(), SHEETS_CONFIG_PATH);
   if (!fs.existsSync(absolutePath)) {
+    console.warn(`[Config] No config file found at ${absolutePath}. Falling back to environment variables.`);
     return (cachedConfigFile = null);
   }
-
+console.log('Config file found at:', absolutePath);
   try {
     const raw = fs.readFileSync(absolutePath, 'utf-8');
     const parsed = JSON.parse(raw) as SheetsConfigFile;
