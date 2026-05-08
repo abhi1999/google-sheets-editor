@@ -11,6 +11,7 @@ import { Pagination } from './Pagination';
 import { Toolbar } from './Toolbar';
 import { BulkEditModal } from './BulkEditModal';
 import { AuditPanel } from './AuditPanel';
+import { RowDetailsModal } from './RowDetailsModal';
 import { FilterBar } from '@/components/filters/FilterBar';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
@@ -180,6 +181,8 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
   // ── UI state ─────────────────────────────────────────────────
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
+  const [selectedRowForDetails, setSelectedRowForDetails] = useState<SheetRow | null>(null);
+  const [isRowDetailsOpen, setIsRowDetailsOpen] = useState(false);
 
   // ── Fetch data ───────────────────────────────────────────────
   const fetchData = useCallback(async (silent = false) => {
@@ -365,6 +368,11 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
   const handleSelectAll = useCallback((checked: boolean) => {
     setSelectedRows(checked ? new Set(paginatedRows.map((r) => r.__rowIndex)) : new Set());
   }, [paginatedRows]);
+
+  const handleViewRowDetails = useCallback((row: SheetRow) => {
+    setSelectedRowForDetails(row);
+    setIsRowDetailsOpen(true);
+  }, []);
 
   const handleSave = async () => {
     if (pendingEdits.size === 0 || isSaving) return;
@@ -571,6 +579,7 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
                 onSort={handleSort}
                 pendingEdits={pendingEdits}
                 onCellEdit={handleCellEdit}
+                onViewDetails={handleViewRowDetails}
                 page={page}
                 pageSize={pageSize}
               />
@@ -611,6 +620,22 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
         onClose={() => setShowAudit(false)}
         sheetKey={selectedSheetKey}
       />
+
+      {selectedRowForDetails && (
+        <RowDetailsModal
+          isOpen={isRowDetailsOpen}
+          row={selectedRowForDetails}
+          headers={sheetData?.headers.filter((header) => header !== 'Season') || []}
+          editableColumns={editableColumns}
+          isEditor={user.isEditor}
+          pendingEdits={pendingEdits}
+          onCellEdit={handleCellEdit}
+          onClose={() => {
+            setIsRowDetailsOpen(false);
+            setSelectedRowForDetails(null);
+          }}
+        />
+      )}
     </div>
   );
 }
