@@ -1,0 +1,49 @@
+{
+  "defaultSheetId": "main",
+  "sheets": [
+    {
+      "id": "summer2026",
+      "name": "2026 Summer Schedule",
+      "description": "Primary schedule sheet used by default",
+      "sheetId": "1HD-y5fvYfO5d0PKVhiMwKBuZ-mwf-U_X5T7BpQDRL08",
+      "range": "Match Fixtures!A1:Z2000",
+      "auditSheetName": "AuditLog",
+      "editableColumns": ["Time","Ground\nEDITABLE","Umpire\nEDITABLE","Umpire Phone\nEDITABLE","Result\nEDITABLE","POM\nEDITABLE\n","Notes\nEDITABLE"],
+      "editorEmails": ["admin@example.com", "editor@example.com"],
+      "predefinedFilters": [
+        { "id": "Week1", "label": "Apr 18/19", "category": "Week", "column": "Date", "value": "04/18/2026,04/19/2026", "color": "green" },
+        { "id": "Week2", "label": "Apr 25/26", "category": "Week", "column": "Date", "value": "04/25/2026,04/26/2026", "color": "green" },
+        { "id": "Week3", "label": "May 2/3", "category": "Week", "column": "Date", "value": "05/02/2026,05/03/2026", "color": "green" },
+        { "id": "Week4", "label": "May 9/10", "category": "Week", "column": "Date", "value": "05/09/2026,05/10/2026", "color": "green" },
+        { "id": "Week5", "label": "May 16/17", "category": "Week", "column": "Date", "value": "05/16/2026,05/17/2026", "color": "green" },
+        { "id": "Week6", "label": "May 30/31", "category": "Week", "column": "Date", "value": "05/30/2026,05/31/2026", "color": "green" },
+        { "id": "Week7", "label": "Jun 6/7", "category": "Week", "column": "Date", "value": "06/06/2026,06/07/2026", "color": "green" }
+      ],
+      "useEditAccessSheet": true
+    },
+    {
+      "id": "Backup",
+      "name": "2026 Summer Schedule-Backup",
+      "description": "Primary schedule sheet used by default",
+      "sheetId": "1HD-y5fvYfO5d0PKVhiMwKBuZ-mwf-U_X5T7BpQDRL08",
+      "range": "Match Fixtures!A1:Z2000",
+      "auditSheetName": "AuditLog",
+      "editableColumns": ["Time","Ground\nEDITABLE","Umpire\nEDITABLE","Umpire Phone\nEDITABLE","Result\nEDITABLE","POM\nEDITABLE\n","Notes\nEDITABLE"],
+      "editorEmails": ["admin@example.com", "editor@example.com"],
+      "predefinedFilters": [
+      ],
+      "useEditAccessSheet": true
+    },
+    {
+      "id": "archive",
+      "name": "Archive Sheet",
+      "description": "Read-only archive data for past events",
+      "sheetId": "3zYxWvUtSrQpOnMlKjIhGfEdCbA0987654321",
+      "range": "Archive!A1:Z1000",
+      "auditSheetName": "AuditLog",
+      "editableColumns": ["Notes"],
+      "editorEmails": ["archive-editor@example.com"],
+      "useEditAccessSheet": false
+    }
+  ]
+}
