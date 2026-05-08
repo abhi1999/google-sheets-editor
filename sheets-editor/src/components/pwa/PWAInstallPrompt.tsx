@@ -8,16 +8,40 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
 
+const isMobileDevice = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /iphone|ipad|ipod|android/i.test(navigator.userAgent);
+};
+
+const isIosSafari = () => {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  return /iphone|ipad|ipod/i.test(ua) && /safari/i.test(ua) && !/crios|fxios|chrome|android|edgios|opr\//i.test(ua);
+};
+
+const isStandaloneMode = () => {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  return window.matchMedia('(display-mode: standalone)').matches || ('standalone' in navigator && (navigator as any).standalone);
+};
+
 export function PWAInstallPrompt() {
   const { toast } = useToast();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [showIosInstallHint, setShowIosInstallHint] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    const mobile = isMobileDevice();
+    const ios = isIosSafari();
+    const standalone = isStandaloneMode();
+
+    setShowIosInstallHint(mobile && ios && !standalone);
+
     const handleBeforeInstallPrompt = (event: Event) => {
+      if (!mobile) return;
       event.preventDefault();
       setDeferredPrompt(event as BeforeInstallPromptEvent);
       setShowInstallPrompt(true);
@@ -27,6 +51,7 @@ export function PWAInstallPrompt() {
       toast('App installed successfully!', 'success');
       setShowInstallPrompt(false);
       setDeferredPrompt(null);
+      setShowIosInstallHint(false);
     };
 
     const handleOnlineStatus = () => {
@@ -68,6 +93,11 @@ export function PWAInstallPrompt() {
     toast('Install prompt hidden. Use your browser menu to add the app later.', 'info');
   };
 
+  const handleDismissIosHint = () => {
+    setShowIosInstallHint(false);
+    toast('Install hint hidden. Use Safari share menu to add to Home Screen later.', 'info');
+  };
+
   return (
     <>
       {!isOnline && (
@@ -102,6 +132,25 @@ export function PWAInstallPrompt() {
                 Dismiss
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showIosInstallHint && isOnline && (
+        <div className="fixed bottom-6 left-4 right-4 z-50 rounded-2xl border bg-slate-950/95 px-4 py-4 shadow-2xl backdrop-blur" style={{ borderColor: 'rgba(255,255,255,0.12)', color: 'white' }}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-semibold">Install NAYCA Schedule</div>
+              <div className="mt-1 text-sm text-slate-300">
+                On iPhone Safari, tap the Share icon and choose <strong>Add to Home Screen</strong> to install the app.
+              </div>
+            </div>
+            <button
+              onClick={handleDismissIosHint}
+              className="rounded-full border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
+            >
+              Got it
+            </button>
           </div>
         </div>
       )}

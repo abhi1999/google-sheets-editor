@@ -65,7 +65,7 @@ export default function LoginPage() {
             NAYCA 2026 Scheduling Sheet
           </h1>
           <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Sign in to access your data workspace
+            Sign in to access your the schedule.
           </p>
         </div>
 
