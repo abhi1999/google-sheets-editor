@@ -675,25 +675,25 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
           left: '-9999px',
           visibility: 'hidden',
           background: '#ffffff',
-          padding: '28px 32px',
-          width: '1280px',
+          padding: '24px 28px',
+          width: '794px',
           fontFamily: 'system-ui, -apple-system, sans-serif',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', paddingBottom: '12px', borderBottom: '3px solid #041e42' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', paddingBottom: '10px', borderBottom: '3px solid #041e42' }}>
           <div>
-            <div style={{ fontSize: '22px', fontWeight: '800', color: '#041e42', letterSpacing: '-0.5px' }}>NAYCA Schedule</div>
-            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+            <div style={{ fontSize: '18px', fontWeight: '800', color: '#041e42', letterSpacing: '-0.5px' }}>NAYCA Schedule</div>
+            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
               {sheetOptions.find((o) => o.id === selectedSheetKey)?.name || ''} &middot; {processedRows.length} records &middot; {captureDate}
             </div>
           </div>
-          <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'right' }}>nayca.app</div>
+          <div style={{ fontSize: '10px', color: '#94a3b8', textAlign: 'right' }}>nayca.app</div>
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px', tableLayout: 'fixed' }}>
           <thead>
             <tr style={{ background: '#041e42' }}>
-              {sheetData?.headers.filter((h) => h !== 'Season').map((h) => (
-                <th key={h} style={{ padding: '9px 12px', textAlign: 'left', color: '#ffffff', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+              {sheetData?.headers.filter((h) => h !== 'Season').slice(0, 11).map((h) => (
+                <th key={h} style={{ padding: '7px 8px', textAlign: 'left', color: '#ffffff', fontWeight: '700', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.06em', wordBreak: 'break-word' }}>
                   {h}
                 </th>
               ))}
@@ -702,8 +702,8 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
           <tbody>
             {processedRows.map((row, i) => (
               <tr key={row.__rowIndex} style={{ background: i % 2 === 0 ? '#f8fafc' : '#ffffff', borderBottom: '1px solid #e2e8f0' }}>
-                {sheetData?.headers.filter((h) => h !== 'Season').map((h) => (
-                  <td key={h} style={{ padding: '7px 12px', color: '#1e293b', verticalAlign: 'top', lineHeight: '1.4' }}>
+                {sheetData?.headers.filter((h) => h !== 'Season').slice(0, 10).map((h) => (
+                  <td key={h} style={{ padding: '5px 8px', color: '#1e293b', verticalAlign: 'top', lineHeight: '1.4', wordBreak: 'break-word' }}>
                     {String(row[h] ?? '')}
                   </td>
                 ))}
