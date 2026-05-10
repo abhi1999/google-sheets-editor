@@ -191,6 +191,9 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
     setCaptureDate(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
   }, []);
 
+  // ── Restore + save predefined filters via localStorage ───────
+  const hasLoadedSavedFilters = useRef(false);
+
   // ── Fetch data ───────────────────────────────────────────────
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -202,7 +205,23 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
       if (!res.ok) throw new Error(`Failed to load data (${res.status})`);
       const data: SheetData = await res.json();
       setSheetData(data);
-      if (!silent) setPendingEdits(new Map()); // clear edits on full reload
+      if (!silent) setPendingEdits(new Map());
+      // Restore saved filters on first load, batched with setSheetData so
+      // there is no async gap where the effect could fire at the wrong time.
+      if (!hasLoadedSavedFilters.current) {
+        hasLoadedSavedFilters.current = true;
+        try {
+          const saved = localStorage.getItem('selectedPredefinedFilters');
+          if (saved) {
+            const savedIds: string[] = JSON.parse(saved);
+            if (savedIds.length > 0) {
+              setFilters((prev) => ({ ...prev, predefined: savedIds }));
+            }
+          }
+        } catch {
+          // ignore corrupt localStorage
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Unknown error');
       if (!silent) toast(err.message || 'Failed to load sheet data', 'error');
@@ -213,31 +232,7 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Restore + save predefined filters via localStorage ───────
-  const hasLoadedSavedFilters = useRef(false);
-
-  // Restore: wait until sheetData is loaded so all filter IDs (including
-  // week filters from the API) are available before we apply saved state.
-  useEffect(() => {
-    if (hasLoadedSavedFilters.current || !sheetData) return;
-    try {
-      const saved = localStorage.getItem('selectedPredefinedFilters');
-      console.log('iamhere', saved)
-      if (saved) {
-        const savedIds: string[] = JSON.parse(saved);
-        if (savedIds.length > 0) {
-          setFilters((prev) => ({ ...prev, predefined: savedIds }));
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load saved filters from localStorage:', error);
-    } finally {
-      hasLoadedSavedFilters.current = true;
-    }
-  }, [sheetData]);
-
-  // Save: skip the initial render (before restore runs) so we don't
-  // overwrite localStorage with the empty default before reading it back.
+  // Save whenever filters change, but only after the initial restore is done.
   useEffect(() => {
     if (!hasLoadedSavedFilters.current) return;
     try {
