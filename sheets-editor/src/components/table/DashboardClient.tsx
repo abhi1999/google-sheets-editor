@@ -217,7 +217,7 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
   const hasLoadedSavedFilters = useRef(false);
 
   useEffect(() => {
-    if (hasLoadedSavedFilters.current) return;
+    if (hasLoadedSavedFilters.current || !sheetData) return;
     try {
       const saved = localStorage.getItem('selectedPredefinedFilters');
       if (saved) {
@@ -232,7 +232,7 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
     } finally {
       hasLoadedSavedFilters.current = true;
     }
-  }, [mergedPredefinedFilters]);
+  }, [mergedPredefinedFilters, sheetData]);
 
   // ── Save predefined filters to localStorage when they change ──
   useEffect(() => {
