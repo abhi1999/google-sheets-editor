@@ -653,10 +653,7 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
           isOpen={isRowDetailsOpen}
           row={selectedRowForDetails}
           headers={sheetData?.headers.filter((header) => header !== 'Season') || []}
-          editableColumns={editableColumns}
-          isEditor={user.isEditor}
           pendingEdits={pendingEdits}
-          onCellEdit={handleCellEdit}
           onClose={() => {
             setIsRowDetailsOpen(false);
             setSelectedRowForDetails(null);
