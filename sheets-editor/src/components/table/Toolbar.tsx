@@ -9,6 +9,7 @@ interface ToolbarProps {
   selectedCount: number;
   isSaving: boolean;
   isLoading: boolean;
+  isCapturing: boolean;
   filters: FilterState;
   sortState: SortState;
   sheetOptions: Array<{ id: string; name: string; description?: string }>;
@@ -18,6 +19,7 @@ interface ToolbarProps {
   onDiscard: () => void;
   onRefresh: () => void;
   onExport: () => void;
+  onScreenshot: () => void;
   onBulkEdit: () => void;
   onSignOut: () => void;
 }
@@ -28,6 +30,7 @@ export function Toolbar({
   selectedCount,
   isSaving,
   isLoading,
+  isCapturing,
   filters,
   sortState,
   sheetOptions,
@@ -37,6 +40,7 @@ export function Toolbar({
   onDiscard,
   onRefresh,
   onExport,
+  onScreenshot,
   onBulkEdit,
   onSignOut,
 }: ToolbarProps) {
@@ -115,7 +119,7 @@ export function Toolbar({
       )}
 
       {/* Mobile/Desktop: Enhanced Actions */}
-      <div className="flex items-center justify-center sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto mt-2 sm:mt-0">
+      <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 sm:gap-3 w-full sm:w-auto mt-2 sm:mt-0">
         {/* Refresh button - Better mobile touch target */}
         <button
           onClick={onRefresh}
@@ -150,6 +154,31 @@ export function Toolbar({
             <path d="M8 1v9M5 5l3 3 3-3M1 12v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
           </svg>
           <span className="hidden sm:inline">Export</span>
+        </button>
+
+        {/* Screenshot button */}
+        <button
+          onClick={onScreenshot}
+          disabled={isCapturing}
+          title="Screenshot filtered table"
+          className="flex items-center gap-2 px-3 sm:px-4 h-11 sm:h-10 rounded-xl text-sm font-medium transition-all duration-300 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100 shadow-lg touch-manipulation min-w-[44px]"
+          style={{
+            background: 'rgba(255,255,255,0.15)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            color: 'white',
+            backdropFilter: 'blur(10px)'
+          }}
+        >
+          {isCapturing ? (
+            <div className="w-4 h-4 rounded-full border-2 border-white/30 animate-spin" style={{ borderTopColor: 'white' }} />
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2H2a1 1 0 00-1 1v9a1 1 0 001 1h12a1 1 0 001-1V3a1 1 0 00-1-1h-4" />
+              <path d="M6 2a2 2 0 014 0" />
+              <circle cx="8" cy="8" r="2.5" />
+            </svg>
+          )}
+          <span className="hidden sm:inline">{isCapturing ? 'Capturing…' : 'Screenshot'}</span>
         </button>
 
         {/* Bulk edit button - Mobile optimized */}

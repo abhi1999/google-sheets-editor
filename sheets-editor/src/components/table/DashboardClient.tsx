@@ -183,6 +183,8 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
   const [showAudit, setShowAudit] = useState(false);
   const [selectedRowForDetails, setSelectedRowForDetails] = useState<SheetRow | null>(null);
   const [isRowDetailsOpen, setIsRowDetailsOpen] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const screenshotRef = useRef<HTMLDivElement>(null);
 
   // ── Fetch data ───────────────────────────────────────────────
   const fetchData = useCallback(async (silent = false) => {
@@ -430,6 +432,29 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
     toast(`Staged ${count} bulk change${count !== 1 ? 's' : ''} — save to apply`, 'info');
   };
 
+  const handleScreenshot = useCallback(async () => {
+    if (!sheetData || isCapturing || !screenshotRef.current) return;
+    setIsCapturing(true);
+    toast('Generating screenshot…', 'info');
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const el = screenshotRef.current;
+      el.style.visibility = 'visible';
+      const canvas = await html2canvas(el, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false });
+      el.style.visibility = 'hidden';
+      const link = document.createElement('a');
+      const sheetName = sheetOptions.find((o) => o.id === selectedSheetKey)?.name || 'schedule';
+      link.download = `${sheetName.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      toast('Screenshot saved!', 'success');
+    } catch {
+      toast('Failed to generate screenshot', 'error');
+    } finally {
+      setIsCapturing(false);
+    }
+  }, [sheetData, isCapturing, screenshotRef, sheetOptions, selectedSheetKey, toast]);
+
   const handleExport = () => {
     const params = new URLSearchParams();
     if (filters.search) params.set('search', filters.search);
@@ -471,6 +496,7 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
         selectedCount={selectedRows.size}
         isSaving={isSaving}
         isLoading={isLoading}
+        isCapturing={isCapturing}
         filters={filters}
         sortState={sortState}
         sheetOptions={sheetOptions}
@@ -487,6 +513,7 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
         onDiscard={handleDiscard}
         onRefresh={() => fetchData()}
         onExport={handleExport}
+        onScreenshot={handleScreenshot}
         onBulkEdit={() => setShowBulkEdit(true)}
         onSignOut={() => signOut({ callbackUrl: '/login' })}
       />
@@ -636,6 +663,53 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
           }}
         />
       )}
+
+      {/* Off-screen table used only for html2canvas screenshot capture */}
+      <div
+        ref={screenshotRef}
+        style={{
+          position: 'fixed',
+          top: '-9999px',
+          left: '-9999px',
+          visibility: 'hidden',
+          background: '#ffffff',
+          padding: '28px 32px',
+          width: '1280px',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', paddingBottom: '12px', borderBottom: '3px solid #041e42' }}>
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: '800', color: '#041e42', letterSpacing: '-0.5px' }}>NAYCA Schedule</div>
+            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+              {sheetOptions.find((o) => o.id === selectedSheetKey)?.name || ''} &middot; {processedRows.length} records &middot; {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+            </div>
+          </div>
+          <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'right' }}>nayca.app</div>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+          <thead>
+            <tr style={{ background: '#041e42' }}>
+              {sheetData?.headers.filter((h) => h !== 'Season').map((h) => (
+                <th key={h} style={{ padding: '9px 12px', textAlign: 'left', color: '#ffffff', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {processedRows.map((row, i) => (
+              <tr key={row.__rowIndex} style={{ background: i % 2 === 0 ? '#f8fafc' : '#ffffff', borderBottom: '1px solid #e2e8f0' }}>
+                {sheetData?.headers.filter((h) => h !== 'Season').map((h) => (
+                  <td key={h} style={{ padding: '7px 12px', color: '#1e293b', verticalAlign: 'top', lineHeight: '1.4' }}>
+                    {String(row[h] ?? '')}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
