@@ -184,7 +184,12 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
   const [selectedRowForDetails, setSelectedRowForDetails] = useState<SheetRow | null>(null);
   const [isRowDetailsOpen, setIsRowDetailsOpen] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [captureDate, setCaptureDate] = useState('');
   const screenshotRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setCaptureDate(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
+  }, []);
 
   // ── Fetch data ───────────────────────────────────────────────
   const fetchData = useCallback(async (silent = false) => {
@@ -679,7 +684,7 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
           <div>
             <div style={{ fontSize: '22px', fontWeight: '800', color: '#041e42', letterSpacing: '-0.5px' }}>NAYCA Schedule</div>
             <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
-              {sheetOptions.find((o) => o.id === selectedSheetKey)?.name || ''} &middot; {processedRows.length} records &middot; {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+              {sheetOptions.find((o) => o.id === selectedSheetKey)?.name || ''} &middot; {processedRows.length} records &middot; {captureDate}
             </div>
           </div>
           <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'right' }}>nayca.app</div>
