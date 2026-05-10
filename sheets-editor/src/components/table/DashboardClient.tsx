@@ -213,18 +213,20 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Load saved predefined filters from localStorage ──────────
+  // ── Restore + save predefined filters via localStorage ───────
   const hasLoadedSavedFilters = useRef(false);
 
+  // Restore: wait until sheetData is loaded so all filter IDs (including
+  // week filters from the API) are available before we apply saved state.
   useEffect(() => {
     if (hasLoadedSavedFilters.current || !sheetData) return;
     try {
       const saved = localStorage.getItem('selectedPredefinedFilters');
+      console.log('iamhere', saved)
       if (saved) {
         const savedIds: string[] = JSON.parse(saved);
-        const validIds = savedIds.filter((id) => mergedPredefinedFilters.some((pf) => pf.id === id));
-        if (validIds.length > 0) {
-          setFilters((prev) => ({ ...prev, predefined: validIds }));
+        if (savedIds.length > 0) {
+          setFilters((prev) => ({ ...prev, predefined: savedIds }));
         }
       }
     } catch (error) {
@@ -232,10 +234,12 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
     } finally {
       hasLoadedSavedFilters.current = true;
     }
-  }, [mergedPredefinedFilters, sheetData]);
+  }, [sheetData]);
 
-  // ── Save predefined filters to localStorage when they change ──
+  // Save: skip the initial render (before restore runs) so we don't
+  // overwrite localStorage with the empty default before reading it back.
   useEffect(() => {
+    if (!hasLoadedSavedFilters.current) return;
     try {
       localStorage.setItem('selectedPredefinedFilters', JSON.stringify(filters.predefined));
     } catch (error) {
@@ -308,11 +312,15 @@ export function DashboardClient({ user, editableColumns, defaultSheetId, sheetOp
         groupedPredefined.set(key, current);
       });
 
+      // Normalize slash-separated values (e.g. dates) to strip leading zeros:
+      // "04/18/2026" and "4/18/2026" both become "4/18/2026" so they compare equal.
+      const norm = (s: string) => s.split('/').map((p) => p.replace(/^0+(\d)/, '$1')).join('/');
+
       rows = rows.filter((row) => {
         return Array.from(groupedPredefined.values()).every(({ columns, values }) => {
           return columns.some((column) => {
-            const cellValue = String(row[column] || '').trim().toLowerCase();
-            return values.some((value) => cellValue === value.toLowerCase());
+            const cellValue = norm(String(row[column] || '').trim().toLowerCase());
+            return values.some((value) => cellValue === norm(value.toLowerCase()));
           });
         });
       });

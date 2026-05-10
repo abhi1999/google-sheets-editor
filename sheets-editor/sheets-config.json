@@ -17,7 +17,15 @@
         { "id": "Week4", "label": "May 9/10", "category": "Week", "column": "Date", "value": "05/09/2026,05/10/2026", "color": "green" },
         { "id": "Week5", "label": "May 16/17", "category": "Week", "column": "Date", "value": "05/16/2026,05/17/2026", "color": "green" },
         { "id": "Week6", "label": "May 30/31", "category": "Week", "column": "Date", "value": "05/30/2026,05/31/2026", "color": "green" },
-        { "id": "Week7", "label": "Jun 6/7", "category": "Week", "column": "Date", "value": "06/06/2026,06/07/2026", "color": "green" }
+        { "id": "Week7", "label": "Jun 6/7", "category": "Week", "column": "Date", "value": "06/06/2026,06/07/2026", "color": "green" },
+        { "id": "Week8", "label": "Jun 13/14", "category": "Week", "column": "Date", "value": "06/13/2026,06/14/2026", "color": "green" },
+        { "id": "Week9", "label": "Jun 20/21", "category": "Week", "column": "Date", "value": "06/20/2026,06/21/2026", "color": "green" },
+        { "id": "Week10", "label": "Jun 27/28", "category": "Week", "column": "Date", "value": "06/27/2026,06/28/2026", "color": "green" },
+        { "id": "Week11", "label": "Jul 11/12", "category": "Week", "column": "Date", "value": "07/11/2026,07/12/2026", "color": "green" },
+        { "id": "Week12", "label": "Jul 18/19", "category": "Week", "column": "Date", "value": "07/18/2026,07/19/2026", "color": "green" },
+        { "id": "Week13", "label": "Jul 25/26", "category": "Week", "column": "Date", "value": "07/25/2026,07/26/2026", "color": "green" },
+        { "id": "Week14", "label": "Aug 1/2", "category": "Week", "column": "Date", "value": "08/01/2026,08/02/2026", "color": "green" }
+
       ],
       "useEditAccessSheet": true
     },
