@@ -186,11 +186,11 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
       >
         {/* Modal header */}
         <div
-          className="flex items-center gap-4 px-5 py-4 border-b-2 border-[#c8a84b]"
+          className="flex items-center gap-4 px-5 py-4 border-b-2 border-[#c0392b]"
           style={{ background: '#1a2e1a' }}
         >
           <div
-            className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold border-2 border-[#c8a84b] flex-shrink-0"
+            className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold border-2 border-[#c0392b] flex-shrink-0"
             style={{
               background: getCategoryColorModal(player.category),
               color: '#fff',
@@ -298,7 +298,7 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
         })()}
 
         {/* Tab bar */}
-        <div className="flex border-b" style={{ background: '#1a2e1a', borderColor: 'rgba(200,168,75,0.25)' }}>
+        <div className="flex border-b" style={{ background: '#1a2e1a', borderColor: 'rgba(192,57,43,0.3)' }}>
           {(['mine', 'all'] as const).map((tab) => {
             const label = tab === 'mine'
               ? 'My Evaluation'
@@ -311,8 +311,8 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
                 className="px-5 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors flex-shrink-0"
                 style={{
                   fontFamily: 'Barlow Condensed, sans-serif',
-                  color: isActive ? '#c8a84b' : 'rgba(245,240,232,0.45)',
-                  borderColor: isActive ? '#c8a84b' : 'transparent',
+                  color: isActive ? '#f5f0e8' : 'rgba(245,240,232,0.45)',
+                  borderColor: isActive ? '#c0392b' : 'transparent',
                   background: 'none',
                   letterSpacing: '0.08em',
                 }}
@@ -368,7 +368,7 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
                     >
                       <span
                         className="text-[0.68rem] font-bold uppercase tracking-widest text-white px-1.5 py-0.5 rounded-sm flex-shrink-0"
-                        style={{ background: '#1a2e1a', fontFamily: 'Barlow Condensed, sans-serif' }}
+                        style={{ background: '#2c1810', fontFamily: 'Barlow Condensed, sans-serif' }}
                       >
                         {sec.letter}
                       </span>
@@ -467,7 +467,7 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
                 >
                   <span
                     className="text-[0.68rem] font-bold uppercase tracking-widest text-white px-1.5 py-0.5 rounded-sm flex-shrink-0"
-                    style={{ background: '#1a4040', fontFamily: 'Barlow Condensed, sans-serif' }}
+                    style={{ background: '#8b1a1a', fontFamily: 'Barlow Condensed, sans-serif' }}
                   >
                     FIT
                   </span>

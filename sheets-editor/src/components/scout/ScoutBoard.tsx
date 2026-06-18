@@ -69,8 +69,8 @@ function PinIcon({ pinned }: { pinned: boolean }) {
   return (
     <svg
       width="13" height="13" viewBox="0 0 24 24"
-      fill={pinned ? '#c8a84b' : 'none'}
-      stroke={pinned ? '#c8a84b' : 'rgba(80,80,80,0.8)'}
+      fill={pinned ? '#c0392b' : 'none'}
+      stroke={pinned ? '#c0392b' : 'rgba(80,80,80,0.8)'}
       strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
     >
       <line x1="12" y1="17" x2="12" y2="22" />
@@ -103,17 +103,17 @@ function PlayerCard({
       className="relative overflow-hidden rounded-lg text-center cursor-pointer border-2 transition-all duration-150"
       style={{
         background: '#f5f0e8',
-        borderColor: isPinned ? '#c8a84b' : 'transparent',
+        borderColor: isPinned ? '#c0392b' : 'transparent',
         padding: '16px 10px 12px',
         fontFamily: 'Barlow, sans-serif',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = '#c8a84b';
+        e.currentTarget.style.borderColor = '#c0392b';
         e.currentTarget.style.transform = 'translateY(-3px)';
         e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.3)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = isPinned ? '#c8a84b' : 'transparent';
+        e.currentTarget.style.borderColor = isPinned ? '#c0392b' : 'transparent';
         e.currentTarget.style.transform = 'translateY(0)';
         e.currentTarget.style.boxShadow = 'none';
       }}
@@ -194,7 +194,7 @@ function PlayerCard({
         );
       })()}
       {player.myEval !== null && (
-        <div className="text-[9px] mt-0.5 font-semibold" style={{ color: '#00897b', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.04em' }}>
+        <div className="text-[9px] mt-0.5 font-semibold" style={{ color: '#c0392b', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.04em' }}>
           ✓ you rated
         </div>
       )}
@@ -208,7 +208,7 @@ function SectionHeader({ label, count, icon }: {
   return (
     <div className="flex items-center gap-3 mb-4">
       <span className="text-xs font-bold uppercase tracking-widest px-2.5 py-1 border rounded-sm flex-shrink-0"
-        style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#c8a84b', borderColor: '#c8a84b' }}>
+        style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#c0392b', borderColor: '#c0392b' }}>
         {count} Players
       </span>
       {icon}
@@ -216,7 +216,7 @@ function SectionHeader({ label, count, icon }: {
         style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>
         {label}
       </h2>
-      <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, #2e4030, transparent)' }} />
+      <div className="flex-1 h-px" style={{ background: 'linear-gradient(to right, rgba(192,57,43,0.3), transparent)' }} />
     </div>
   );
 }
@@ -256,7 +256,7 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
     <div className="fixed bottom-6 left-1/2 z-50 px-5 py-2.5 rounded-lg border-l-4 text-sm font-semibold tracking-wide pointer-events-none"
       style={{
         transform: 'translateX(-50%)',
-        background: '#1a2e1a', color: '#f5f0e8', borderColor: '#c8a84b',
+        background: '#1a0808', color: '#f5f0e8', borderColor: '#c0392b',
         fontFamily: 'Barlow Condensed, sans-serif',
         animation: 'slideUp 0.3s ease', whiteSpace: 'nowrap',
       }}>
@@ -415,30 +415,35 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
       <style>{`
         @keyframes slideUp { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
         .search-input::placeholder { color: rgba(245,240,232,0.3); }
-        .search-input:focus { outline: none; border-color: rgba(200,168,75,0.6); }
+        .search-input:focus { outline: none; border-color: rgba(192,57,43,0.6); }
         .batch-tabs::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div style={{ background: '#1a2e1a', minHeight: '100vh', fontFamily: 'Barlow, sans-serif' }}>
+      <div style={{ background: '#162614', minHeight: '100vh', fontFamily: 'Barlow, sans-serif' }}>
 
         {/* ── Sticky header + tab bar ── */}
-        <header className="sticky top-0 z-10 border-b-2" style={{ background: '#243324', borderColor: '#c8a84b' }}>
+        <header className="sticky top-0 z-10 border-b-2" style={{ background: '#1d2e1e', borderColor: '#c0392b' }}>
 
           {/* Top row */}
           <div className="flex items-center gap-3 px-5 md:px-7 py-3">
             {/* Cricket ball */}
-            <div className="w-7 h-7 rounded-full flex-shrink-0 relative"
-              style={{ background: '#c0392b', boxShadow: 'inset -3px -3px 0 rgba(0,0,0,0.2)' }}>
+            <div className="w-8 h-8 rounded-full flex-shrink-0 relative"
+              style={{ background: '#c0392b', boxShadow: 'inset -3px -3px 0 rgba(0,0,0,0.25), 0 0 0 2px rgba(192,57,43,0.3)' }}>
               <span className="absolute" style={{
-                top: '50%', left: '10%', width: '80%', height: '2px',
-                background: 'rgba(255,255,255,0.3)',
+                top: '50%', left: '8%', width: '84%', height: '1.5px',
+                background: 'rgba(255,255,255,0.35)',
                 transform: 'translateY(-50%) rotate(-20deg)', borderRadius: '2px',
+              }} />
+              <span className="absolute" style={{
+                top: '50%', left: '8%', width: '84%', height: '1.5px',
+                background: 'rgba(255,255,255,0.2)',
+                transform: 'translateY(-50%) rotate(20deg)', borderRadius: '2px',
               }} />
             </div>
 
             <h1 className="text-lg font-extrabold uppercase tracking-wider flex-shrink-0"
               style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>
-              Scout<span style={{ color: '#c8a84b' }}>Board</span>
+              Scout<span style={{ color: '#c0392b' }}>Board</span>
             </h1>
 
             {/* Search bar */}
@@ -477,7 +482,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
               )}
               {pinnedIds.size > 0 && (
                 <span className="text-xs hidden md:block"
-                  style={{ color: 'rgba(200,168,75,0.7)', fontFamily: 'Barlow Condensed, sans-serif', whiteSpace: 'nowrap' }}>
+                  style={{ color: 'rgba(245,240,232,0.6)', fontFamily: 'Barlow Condensed, sans-serif', whiteSpace: 'nowrap' }}>
                   {pinnedIds.size} pinned
                 </span>
               )}
@@ -507,7 +512,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {!loading && !error && allBatchNames.length > 0 && (
             <div
               className="batch-tabs flex overflow-x-auto border-t"
-              style={{ borderColor: 'rgba(200,168,75,0.18)', scrollbarWidth: 'none' }}
+              style={{ borderColor: 'rgba(192,57,43,0.2)', scrollbarWidth: 'none' }}
             >
               {allBatchNames.map((name) => {
                 const isActive = !isSearching && activeBatch === name;
@@ -518,8 +523,8 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
                     style={{
                       fontFamily: 'Barlow Condensed, sans-serif',
-                      color: isActive ? '#c8a84b' : 'rgba(245,240,232,0.4)',
-                      borderColor: isActive ? '#c8a84b' : 'transparent',
+                      color: isActive ? '#f5f0e8' : 'rgba(245,240,232,0.4)',
+                      borderColor: isActive ? '#c0392b' : 'transparent',
                       background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
                     }}
                     onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.75)'; }}
@@ -540,7 +545,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {loading && (
             <div className="flex items-center justify-center py-24">
               <div className="w-10 h-10 rounded-full border-2 animate-spin"
-                style={{ borderColor: '#c8a84b', borderTopColor: 'transparent' }} />
+                style={{ borderColor: '#c0392b', borderTopColor: 'transparent' }} />
               <span className="ml-4 text-sm"
                 style={{ color: 'rgba(245,240,232,0.5)', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em' }}>
                 LOADING PLAYERS…
@@ -585,11 +590,11 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
               {/* Search result banner */}
               {isSearching && (
                 <div className="flex items-center gap-3 mb-6 pb-4 border-b"
-                  style={{ borderColor: 'rgba(200,168,75,0.2)' }}>
+                  style={{ borderColor: 'rgba(192,57,43,0.25)' }}>
                   <span style={{ color: 'rgba(245,240,232,0.5)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: '0.8rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                     {batchPlayers.length} result{batchPlayers.length !== 1 ? 's' : ''} across all batches for
                   </span>
-                  <span style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: '0.9rem' }}>
+                  <span style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: '0.9rem' }}>
                     "{searchQuery}"
                   </span>
                   <button onClick={() => setSearchQuery('')}
@@ -606,7 +611,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     label="Pinned"
                     count={pinnedPlayers.length}
                     icon={
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="#c8a84b" stroke="#c8a84b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="#c0392b" stroke="#c0392b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="12" y1="17" x2="12" y2="22" />
                         <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z" />
                       </svg>
