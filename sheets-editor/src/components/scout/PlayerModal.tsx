@@ -87,7 +87,7 @@ function SkillStars({
             i <= display ? 'text-[#c8a84b]' : 'text-gray-300'
           } hover:scale-110`}
           onMouseEnter={() => setHovered(i)}
-          onClick={() => onChange(i === value ? 0 : i)}
+          onClick={() => { const v = i === value ? 0 : i; if (v === 0) setHovered(0); onChange(v); }}
           title={`${i} — ${['Poor', 'Below Average', 'Average', 'Good', 'Excellent'][i - 1]}`}
         >
           ★
