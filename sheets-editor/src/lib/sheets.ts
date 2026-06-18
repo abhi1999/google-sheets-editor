@@ -282,3 +282,98 @@ export function createAuditEntry(
     status,
   };
 }
+
+/**
+ * Read any named tab from a sheet (identified by sheetKey).
+ * Returns empty result if the tab doesn't exist.
+ */
+export async function readTab(tabName: string, sheetKey?: string): Promise<ReadSheetResult> {
+  const sheets = getSheetsClient();
+  const config = getSheetsConfig(sheetKey);
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: config.sheetId,
+    range: `${tabName}!A1:Z5000`,
+  });
+
+  const values = response.data.values || [];
+  if (values.length === 0) return { headers: [], rows: [] };
+
+  const headers = values[0].map(String);
+  const rows: SheetRow[] = values.slice(1).map((row, i) => {
+    const obj: SheetRow = { __rowIndex: i + 2 };
+    headers.forEach((h, ci) => { obj[h] = row[ci] ?? ''; });
+    return obj;
+  });
+
+  return { headers, rows };
+}
+
+/**
+ * Ensure a named tab exists. Creates it with the given header row if missing.
+ */
+export async function ensureTabExists(
+  tabName: string,
+  headers: string[],
+  sheetKey?: string
+): Promise<void> {
+  const sheets = getSheetsClient();
+  const config = getSheetsConfig(sheetKey);
+
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: config.sheetId });
+  const existingTabs = spreadsheet.data.sheets?.map((s) => s.properties?.title) || [];
+
+  if (!existingTabs.includes(tabName)) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: config.sheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: tabName } } }] },
+    });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: config.sheetId,
+      range: `${tabName}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [headers] },
+    });
+  }
+}
+
+/**
+ * Append rows to a named tab.
+ */
+export async function appendRowsToTab(
+  rows: string[][],
+  tabName: string,
+  sheetKey?: string
+): Promise<void> {
+  if (rows.length === 0) return;
+  const sheets = getSheetsClient();
+  const config = getSheetsConfig(sheetKey);
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: config.sheetId,
+    range: `${tabName}!A1`,
+    valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: rows },
+  });
+}
+
+/**
+ * Overwrite a single row (all columns A onwards) in a named tab.
+ */
+export async function updateRowInTab(
+  rowIndex: number,
+  values: string[],
+  tabName: string,
+  sheetKey?: string
+): Promise<void> {
+  const sheets = getSheetsClient();
+  const config = getSheetsConfig(sheetKey);
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: config.sheetId,
+    range: `${tabName}!A${rowIndex}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [values] },
+  });
+}

@@ -6,6 +6,17 @@ export interface PlayerEvaluation {
   fitness: Record<string, string>;
 }
 
+export interface CoachEval {
+  coachEmail: string;
+  coachName: string;
+  evaluation: PlayerEvaluation;
+  score: number;
+  pct: number;
+  rating: string;
+  remarks: string;
+  savedAt: string;
+}
+
 export interface ScoutPlayer {
   rowIndex: number;
   batch: string;
@@ -17,13 +28,24 @@ export interface ScoutPlayer {
   pct: number;
   rating: string;
   remarks: string;
-  evaluation: PlayerEvaluation;
-  /** Any additional columns in the sheet beyond the known system columns */
+  evaluation: PlayerEvaluation;       // pre-filled from myEval for the form
   extraInfo: Record<string, string>;
+  coachEvals: CoachEval[];            // all coach evals for this player
+  myEval: CoachEval | null;           // current user's own eval
+  aggregatePct: number;               // average pct across all coaches
 }
 
 export interface ScoutUpdatePayload {
   rowIndex: number;
+  evaluation: PlayerEvaluation;
+  score: number;
+  pct: number;
+  rating: string;
+  remarks: string;
+}
+
+export interface CoachEvalPayload {
+  playerRowIndex: number;
   evaluation: PlayerEvaluation;
   score: number;
   pct: number;

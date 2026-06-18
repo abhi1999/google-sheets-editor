@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import type { ScoutPlayer, PlayerEvaluation, SchemaType } from '@/types/scout';
+import type { ScoutPlayer, PlayerEvaluation, SchemaType, CoachEval } from '@/types/scout';
 import type { AppUser } from '@/types';
 import { SCHEMAS, calcScore, getRating, playerInitials } from '@/lib/scout-schemas';
 import { PlayerModal } from './PlayerModal';
@@ -29,7 +29,7 @@ function groupByCategory(players: ScoutPlayer[]): CategoryGroup[] {
 }
 
 function isEvaluated(player: ScoutPlayer): boolean {
-  return Object.values(player.evaluation.skills).some((v) => v > 0);
+  return player.coachEvals.length > 0;
 }
 
 function getCategoryColor(category: string): { bg: string; text: string } {
@@ -85,16 +85,15 @@ function PlayerCard({
   isPinned,
   onTogglePin,
   showBatch,
+  userEmail,
 }: {
   player: ScoutPlayer;
   onClick: () => void;
   isPinned: boolean;
   onTogglePin: (rowIndex: number) => void;
   showBatch?: boolean;
+  userEmail: string;
 }) {
-  const evaluated = isEvaluated(player);
-  const schema = SCHEMAS[player.schema as SchemaType];
-  const { pct } = evaluated && schema ? calcScore(player.evaluation, schema) : { pct: 0 };
   const catColor = getCategoryColor(player.category);
   const divStyle = getDivStyle(player.div);
 
@@ -179,14 +178,26 @@ function PlayerCard({
       )}
 
       {/* Score badge */}
-      <span className="inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full"
-        style={{
-          fontFamily: 'Barlow Condensed, sans-serif',
-          background: evaluated ? '#1a2e1a' : '#e8e0d0',
-          color: evaluated ? '#f5f0e8' : '#4a4a4a',
-        }}>
-        {evaluated ? `${pct}%` : 'Not scored'}
-      </span>
+      {(() => {
+        const n = player.coachEvals.length;
+        return (
+          <span className="inline-block mt-1.5 text-xs font-bold px-2 py-0.5 rounded-full"
+            style={{
+              fontFamily: 'Barlow Condensed, sans-serif',
+              background: n > 0 ? '#1a2e1a' : '#e8e0d0',
+              color: n > 0 ? '#f5f0e8' : '#4a4a4a',
+            }}>
+            {n > 0
+              ? `${n} coach${n !== 1 ? 'es' : ''} · avg ${player.aggregatePct}%`
+              : 'Not scored'}
+          </span>
+        );
+      })()}
+      {player.myEval !== null && (
+        <div className="text-[9px] mt-0.5 font-semibold" style={{ color: '#00897b', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.04em' }}>
+          ✓ you rated
+        </div>
+      )}
     </button>
   );
 }
@@ -210,12 +221,13 @@ function SectionHeader({ label, count, icon }: {
   );
 }
 
-function PlayerGrid({ players, pinnedIds, onCardClick, onTogglePin, showBatch }: {
+function PlayerGrid({ players, pinnedIds, onCardClick, onTogglePin, showBatch, userEmail }: {
   players: ScoutPlayer[];
   pinnedIds: Set<number>;
   onCardClick: (p: ScoutPlayer) => void;
   onTogglePin: (rowIndex: number) => void;
   showBatch?: boolean;
+  userEmail: string;
 }) {
   return (
     <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(138px, 1fr))' }}>
@@ -227,6 +239,7 @@ function PlayerGrid({ players, pinnedIds, onCardClick, onTogglePin, showBatch }:
           isPinned={pinnedIds.has(p.rowIndex)}
           onTogglePin={onTogglePin}
           showBatch={showBatch}
+          userEmail={userEmail}
         />
       ))}
     </div>
@@ -344,21 +357,45 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
       setSaving(true);
       try {
         const res = await fetch(
-          `/api/scout/update?sheetKey=${encodeURIComponent(sheetKey)}`,
+          `/api/scout/coach-eval?sheetKey=${encodeURIComponent(sheetKey)}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rowIndex: activePlayer.rowIndex, evaluation, score: weighted, pct, rating: ratingLabel, remarks }),
+            body: JSON.stringify({
+              playerRowIndex: activePlayer.rowIndex,
+              evaluation,
+              score: weighted,
+              pct,
+              rating: ratingLabel,
+              remarks,
+            }),
           }
         );
         if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Save failed'); }
 
+        const newEval: CoachEval = {
+          coachEmail: user.email,
+          coachName: user.name,
+          evaluation,
+          score: weighted,
+          pct,
+          rating: ratingLabel,
+          remarks,
+          savedAt: new Date().toISOString(),
+        };
+
         setPlayers((prev) =>
-          prev.map((p) =>
-            p.rowIndex === activePlayer.rowIndex
-              ? { ...p, evaluation, score: weighted, pct, rating: ratingLabel, remarks }
-              : p
-          )
+          prev.map((p) => {
+            if (p.rowIndex !== activePlayer.rowIndex) return p;
+            const updatedEvals = [
+              ...p.coachEvals.filter((e) => e.coachEmail !== user.email),
+              newEval,
+            ];
+            const aggregatePct = Math.round(
+              updatedEvals.reduce((sum, e) => sum + e.pct, 0) / updatedEvals.length
+            );
+            return { ...p, coachEvals: updatedEvals, myEval: newEval, aggregatePct, evaluation, remarks };
+          })
         );
         setActivePlayer(null);
         setToast(`${activePlayer.name} saved ✓`);
@@ -368,7 +405,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
         setSaving(false);
       }
     },
-    [activePlayer, sheetKey]
+    [activePlayer, sheetKey, user.email, user.name]
   );
 
   const totalEvaluated = players.filter(isEvaluated).length;
@@ -581,6 +618,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     onCardClick={setActivePlayer}
                     onTogglePin={togglePin}
                     showBatch
+                    userEmail={user.email}
                   />
                 </section>
               )}
@@ -606,6 +644,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     onCardClick={setActivePlayer}
                     onTogglePin={togglePin}
                     showBatch={isSearching}
+                    userEmail={user.email}
                   />
                 </section>
               ))}
@@ -617,6 +656,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
       {activePlayer && (
         <PlayerModal
           player={activePlayer}
+          userEmail={user.email}
           onClose={() => setActivePlayer(null)}
           onSave={handleSave}
           saving={saving}
