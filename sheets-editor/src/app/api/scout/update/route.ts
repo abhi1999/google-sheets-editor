@@ -1,0 +1,64 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
+import { readSheetData, writeCellUpdates } from '@/lib/sheets';
+import type { ScoutUpdatePayload } from '@/types/scout';
+
+export const dynamic = 'force-dynamic';
+
+const SCOUT_COLUMNS = ['Evaluation', 'Score', 'Pct', 'Rating', 'Remarks'];
+
+export async function POST(request: NextRequest) {
+  try {
+    const url = new URL(request.url);
+    const sheetKey = url.searchParams.get('sheetKey') || 'tryout';
+
+    await requireAuth();
+
+    const body = (await request.json()) as ScoutUpdatePayload;
+
+    if (typeof body.rowIndex !== 'number' || body.rowIndex < 2) {
+      return NextResponse.json({ error: 'Invalid row index' }, { status: 400 });
+    }
+    if (!body.evaluation || typeof body.evaluation !== 'object') {
+      return NextResponse.json({ error: 'Invalid evaluation data' }, { status: 400 });
+    }
+
+    const { headers } = await readSheetData(sheetKey);
+
+    const fieldValues: Record<string, string> = {
+      Evaluation: JSON.stringify(body.evaluation),
+      Score: String(body.score),
+      Pct: String(body.pct),
+      Rating: body.rating,
+      Remarks: body.remarks,
+    };
+
+    const updates = SCOUT_COLUMNS
+      .filter((col) => headers.includes(col))
+      .map((col) => ({
+        rowIndex: body.rowIndex,
+        columnIndex: headers.indexOf(col),
+        value: fieldValues[col],
+      }));
+
+    if (updates.length === 0) {
+      return NextResponse.json(
+        { error: 'None of the expected columns (Evaluation, Score, Pct, Rating, Remarks) found in sheet headers.' },
+        { status: 400 }
+      );
+    }
+
+    await writeCellUpdates(updates, sheetKey);
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    if (error.name === 'AuthError') {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+    console.error('[POST /api/scout/update]', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to save evaluation' },
+      { status: 500 }
+    );
+  }
+}
