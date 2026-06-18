@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import type { ScoutPlayer, PlayerEvaluation } from '@/types/scout';
 import {
   SCHEMAS,
+  FITNESS_FIELDS,
   calcScore,
   getRating,
   playerInitials,
@@ -77,7 +78,7 @@ function SkillStars({
             i <= display ? 'text-[#c8a84b]' : 'text-gray-300'
           } hover:scale-110`}
           onMouseEnter={() => setHovered(i)}
-          onClick={() => onChange(i)}
+          onClick={() => onChange(i === value ? 0 : i)}
           title={`${i} — ${['Poor', 'Below Average', 'Average', 'Good', 'Excellent'][i - 1]}`}
         >
           ★
@@ -114,11 +115,15 @@ export function PlayerModal({ player, onClose, onSave, saving }: PlayerModalProp
     () => ({ ...player.evaluation.notes })
   );
   const [remarks, setRemarks] = useState(player.remarks);
+  const [fitness, setFitness] = useState<Record<string, string>>(
+    () => ({ ...player.evaluation.fitness })
+  );
   const [openSections, setOpenSections] = useState<Set<number>>(new Set([0]));
+  const [fitnessOpen, setFitnessOpen] = useState(true);
 
   const { weighted, pct } = useMemo(
-    () => calcScore({ skills, notes }, schema),
-    [skills, notes, schema]
+    () => calcScore({ skills, notes, fitness }, schema),
+    [skills, notes, fitness, schema]
   );
   const rating = useMemo(() => getRating(pct), [pct]);
 
@@ -128,6 +133,10 @@ export function PlayerModal({ player, onClose, onSave, saving }: PlayerModalProp
 
   const handleNote = useCallback((skillName: string, value: string) => {
     setNotes((prev) => ({ ...prev, [skillName]: value }));
+  }, []);
+
+  const handleFitness = useCallback((field: string, value: string) => {
+    setFitness((prev) => ({ ...prev, [field]: value }));
   }, []);
 
   const toggleSection = useCallback((idx: number) => {
@@ -140,7 +149,7 @@ export function PlayerModal({ player, onClose, onSave, saving }: PlayerModalProp
   }, []);
 
   const handleSave = () => {
-    onSave({ skills, notes }, remarks);
+    onSave({ skills, notes, fitness }, remarks);
   };
 
   const getSectionScore = (sec: SectionDef) => {
@@ -408,6 +417,63 @@ export function PlayerModal({ player, onClose, onSave, saving }: PlayerModalProp
               </div>
             );
           })}
+
+          {/* Fitness */}
+          <div className="border-b" style={{ borderColor: '#eee' }}>
+            <button
+              className="w-full flex items-center gap-2.5 px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+              style={{ background: '#f8f6f2', border: 'none', textAlign: 'left' }}
+              onClick={() => setFitnessOpen((o) => !o)}
+            >
+              <span
+                className="text-[0.68rem] font-bold uppercase tracking-widest text-white px-1.5 py-0.5 rounded-sm flex-shrink-0"
+                style={{ background: '#1a4040', fontFamily: 'Barlow Condensed, sans-serif' }}
+              >
+                FIT
+              </span>
+              <span
+                className="font-bold uppercase tracking-wide text-sm"
+                style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#1a1a1a' }}
+              >
+                Fitness Assessment
+              </span>
+              {FITNESS_FIELDS.some((f) => fitness[f]) && (
+                <span className="text-xs ml-auto mr-2" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#4a4a4a' }}>
+                  {FITNESS_FIELDS.filter((f) => fitness[f]).length}/{FITNESS_FIELDS.length} filled
+                </span>
+              )}
+              <span
+                className="text-xs flex-shrink-0 transition-transform duration-200"
+                style={{ color: '#4a4a4a', transform: fitnessOpen ? 'rotate(180deg)' : 'rotate(0deg)', marginLeft: FITNESS_FIELDS.some((f) => fitness[f]) ? '0' : 'auto' }}
+              >
+                ▼
+              </span>
+            </button>
+            {fitnessOpen && (
+              <div className="py-1">
+                <div className="px-5 py-3 grid gap-x-5 gap-y-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+                  {FITNESS_FIELDS.map((field) => (
+                    <div key={field} className="flex flex-col gap-1">
+                      <label
+                        className="text-[0.68rem] font-bold uppercase tracking-widest"
+                        style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#4a4a4a' }}
+                      >
+                        {field}
+                      </label>
+                      <input
+                        type="text"
+                        className="border rounded px-2.5 py-1.5 text-sm focus:outline-none focus:border-[#1a4040] transition-colors"
+                        style={{ borderColor: '#e5e5e5', background: '#fafafa', color: '#1a1a1a', fontFamily: 'Barlow, sans-serif' }}
+                        placeholder="—"
+                        value={fitness[field] || ''}
+                        onChange={(e) => handleFitness(field, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Remarks */}
           <div className="px-5 py-4">

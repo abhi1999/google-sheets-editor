@@ -25,6 +25,20 @@ export async function POST(request: NextRequest) {
 
     const { headers, rows } = await readSheetData(sheetKey);
 
+    // Auto-append any missing scout columns to the header row
+    const missingCols = SCOUT_COLUMNS.filter((col) => !headers.includes(col));
+    if (missingCols.length > 0) {
+      await writeCellUpdates(
+        missingCols.map((col, i) => ({
+          rowIndex: 1,
+          columnIndex: headers.length + i,
+          value: col,
+        })),
+        sheetKey
+      );
+      missingCols.forEach((col) => headers.push(col));
+    }
+
     const fieldValues: Record<string, string> = {
       Evaluation: JSON.stringify(body.evaluation),
       Score: String(body.score),
@@ -33,20 +47,11 @@ export async function POST(request: NextRequest) {
       Remarks: body.remarks,
     };
 
-    const updates = SCOUT_COLUMNS
-      .filter((col) => headers.includes(col))
-      .map((col) => ({
-        rowIndex: body.rowIndex,
-        columnIndex: headers.indexOf(col),
-        value: fieldValues[col],
-      }));
-
-    if (updates.length === 0) {
-      return NextResponse.json(
-        { error: 'None of the expected columns (Evaluation, Score, Pct, Rating, Remarks) found in sheet headers.' },
-        { status: 400 }
-      );
-    }
+    const updates = SCOUT_COLUMNS.map((col) => ({
+      rowIndex: body.rowIndex,
+      columnIndex: headers.indexOf(col),
+      value: fieldValues[col],
+    }));
 
     await writeCellUpdates(updates, sheetKey);
 

@@ -3,6 +3,7 @@ export type SchemaType = 'Batsman' | 'Fast Bowler' | 'Spin Bowler';
 export interface PlayerEvaluation {
   skills: Record<string, number>;
   notes: Record<string, string>;
+  fitness: Record<string, string>;
 }
 
 export interface ScoutPlayer {

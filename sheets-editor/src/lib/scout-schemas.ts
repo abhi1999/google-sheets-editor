@@ -213,9 +213,19 @@ export function playerInitials(name: string): string {
     .toUpperCase();
 }
 
+export const FITNESS_FIELDS = [
+  'Yo-Yo',
+  'Jump Try 1',
+  'Jump Try 2',
+  'Jump Try 3',
+  'Straight Plank',
+  'Right Side Plank',
+  'Left Side Plank',
+] as const;
+
 export function parseEvaluation(json: string): PlayerEvaluation {
   try {
-    if (!json || json.trim() === '') return { skills: {}, notes: {} };
+    if (!json || json.trim() === '') return { skills: {}, notes: {}, fitness: {} };
     const parsed = JSON.parse(json);
     return {
       skills:
@@ -226,8 +236,12 @@ export function parseEvaluation(json: string): PlayerEvaluation {
         typeof parsed.notes === 'object' && parsed.notes !== null
           ? parsed.notes
           : {},
+      fitness:
+        typeof parsed.fitness === 'object' && parsed.fitness !== null
+          ? parsed.fitness
+          : {},
     };
   } catch {
-    return { skills: {}, notes: {} };
+    return { skills: {}, notes: {}, fitness: {} };
   }
 }
