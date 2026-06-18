@@ -45,12 +45,21 @@ function getCategoryColor(category: string): { bg: string; text: string } {
   return { bg: '#2e4030', text: '#f5f0e8' };
 }
 
+function getDivStyle(div: string): { bg: string; text: string } | null {
+  if (!div) return null;
+  const d = div.trim().toUpperCase();
+  if (d === 'A' || d === 'DIV A' || d === 'DIVISION A') return { bg: '#c8a84b', text: '#1a1a1a' };
+  if (d === 'B' || d === 'DIV B' || d === 'DIVISION B') return { bg: '#546e7a', text: '#fff' };
+  return { bg: '#5d4037', text: '#fff' };
+}
+
 function matchesSearch(p: ScoutPlayer, q: string): boolean {
   return (
     p.name.toLowerCase().includes(q) ||
     p.category.toLowerCase().includes(q) ||
     p.batch.toLowerCase().includes(q) ||
-    p.schema.toLowerCase().includes(q)
+    p.schema.toLowerCase().includes(q) ||
+    p.div.toLowerCase().includes(q)
   );
 }
 
@@ -87,6 +96,7 @@ function PlayerCard({
   const schema = SCHEMAS[player.schema as SchemaType];
   const { pct } = evaluated && schema ? calcScore(player.evaluation, schema) : { pct: 0 };
   const catColor = getCategoryColor(player.category);
+  const divStyle = getDivStyle(player.div);
 
   return (
     <button
@@ -133,10 +143,18 @@ function PlayerCard({
         {playerInitials(player.name)}
       </div>
 
-      {/* Name */}
-      <div className="text-sm font-bold uppercase tracking-tight leading-tight"
-        style={{ color: '#1a1a1a', fontFamily: 'Barlow Condensed, sans-serif' }}>
-        {player.name}
+      {/* Name + Div */}
+      <div className="flex items-center justify-center gap-1.5 flex-wrap">
+        <span className="text-sm font-bold uppercase tracking-tight leading-tight"
+          style={{ color: '#1a1a1a', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {player.name}
+        </span>
+        {divStyle && (
+          <span className="text-[9px] font-bold px-1.5 rounded leading-4 flex-shrink-0"
+            style={{ background: divStyle.bg, color: divStyle.text, fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.05em' }}>
+            {player.div}
+          </span>
+        )}
       </div>
 
       {/* Category */}

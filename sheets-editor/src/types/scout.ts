@@ -9,6 +9,7 @@ export interface ScoutPlayer {
   rowIndex: number;
   batch: string;
   name: string;
+  div: string;
   category: string;
   schema: SchemaType;
   score: number;

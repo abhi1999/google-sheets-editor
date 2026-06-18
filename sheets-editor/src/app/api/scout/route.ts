@@ -10,7 +10,7 @@ const VALID_SCHEMAS: SchemaType[] = ['Batsman', 'Fast Bowler', 'Spin Bowler'];
 
 // Columns consumed by the scout system — everything else becomes extraInfo
 const SYSTEM_COLUMNS = new Set([
-  'Batch', 'Name', 'Category', 'Schema',
+  'Batch', 'Name', 'Div', 'Category', 'Schema',
   'Score', 'Pct', 'Rating', 'Remarks', 'Evaluation',
 ]);
 
@@ -41,6 +41,7 @@ export async function GET(request: Request) {
           rowIndex: row.__rowIndex as number,
           batch: String(row['Batch'] || '').trim(),
           name: String(row['Name'] || '').trim(),
+          div: String(row['Div'] || '').trim(),
           category: String(row['Category'] || '').trim(),
           schema: toSchemaType(String(row['Schema'] || '')),
           score: Number(row['Score'] || 0),

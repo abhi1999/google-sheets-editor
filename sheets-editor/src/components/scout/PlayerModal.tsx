@@ -18,7 +18,7 @@ const INFO_GROUPS: { label: string; keys: string[] }[] = [
   },
   {
     label: 'Batting',
-    keys: ['Batting order', 'Batting Order type', 'Bat Mat', 'Bat Inns', 'Bat Runs', 'Bat SR', 'Bat Avg'],
+    keys: ['Batting Order type', 'Bat Mat', 'Bat Inns', 'Bat Runs', 'Bat SR', 'Bat Avg'],
   },
   {
     label: 'Bowling',
@@ -31,6 +31,14 @@ const INFO_GROUPS: { label: string; keys: string[] }[] = [
 ];
 
 const ALL_KNOWN_KEYS = new Set(INFO_GROUPS.flatMap((g) => g.keys));
+
+function getDivStyleModal(div: string): { bg: string; text: string } | null {
+  if (!div) return null;
+  const d = div.trim().toUpperCase();
+  if (d === 'A' || d === 'DIV A' || d === 'DIVISION A') return { bg: '#c8a84b', text: '#1a1a1a' };
+  if (d === 'B' || d === 'DIV B' || d === 'DIVISION B') return { bg: '#546e7a', text: '#fff' };
+  return { bg: '#5d4037', text: '#fff' };
+}
 
 function getCategoryColorModal(category: string): string {
   const c = category.toLowerCase();
@@ -171,13 +179,26 @@ export function PlayerModal({ player, onClose, onSave, saving }: PlayerModalProp
           >
             {playerInitials(player.name)}
           </div>
-          <div>
-            <h2
-              className="text-xl font-extrabold uppercase tracking-wide"
-              style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}
-            >
-              {player.name}
-            </h2>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2
+                className="text-xl font-extrabold uppercase tracking-wide"
+                style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}
+              >
+                {player.name}
+              </h2>
+              {(() => {
+                const ds = getDivStyleModal(player.div);
+                return ds ? (
+                  <span
+                    className="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0"
+                    style={{ background: ds.bg, color: ds.text, fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}
+                  >
+                    {player.div}
+                  </span>
+                ) : null;
+              })()}
+            </div>
             <p
               className="text-xs font-semibold uppercase tracking-widest mt-0.5"
               style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif' }}
@@ -198,7 +219,10 @@ export function PlayerModal({ player, onClose, onSave, saving }: PlayerModalProp
 
         {/* Player info — structured groups */}
         {Object.keys(player.extraInfo).length > 0 && (() => {
-          const info = player.extraInfo;
+          const EXCLUDED_KEYS = new Set(['Academy', 'Batting order', 'Special Request']);
+          const info = Object.fromEntries(
+            Object.entries(player.extraInfo).filter(([k]) => !EXCLUDED_KEYS.has(k))
+          );
           const unknownEntries = Object.entries(info).filter(([k]) => !ALL_KNOWN_KEYS.has(k));
 
           const renderStat = (key: string, val: string) => (
