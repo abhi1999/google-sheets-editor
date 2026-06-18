@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
-import type { ScoutPlayer, PlayerEvaluation } from '@/types/scout';
+import type { ScoutPlayer, PlayerEvaluation, SchemaType } from '@/types/scout';
 import {
   SCHEMAS,
   FITNESS_FIELDS,
   calcScore,
-  getRating,
   playerInitials,
   type SectionDef,
 } from '@/lib/scout-schemas';
@@ -56,6 +55,12 @@ function getRatingCls(pct: number): string {
   if (pct >= 60) return 'rec';
   if (pct >= 45) return 'cons';
   return 'no';
+}
+
+function getSchemaColor(schema: SchemaType): string {
+  if (schema === 'Batsman') return '#1565c0';
+  if (schema === 'Fast Bowler') return '#bf360c';
+  return '#6a1b9a';
 }
 
 interface PlayerModalProps {
@@ -115,8 +120,6 @@ function RatingChip({ cls, label }: { cls: string; label: string }) {
 }
 
 export function PlayerModal({ player, userEmail, onClose, onSave, saving }: PlayerModalProps) {
-  const schema = SCHEMAS[player.schema];
-
   const [activeTab, setActiveTab] = useState<'mine' | 'all'>('mine');
 
   const [skills, setSkills] = useState<Record<string, number>>(
@@ -129,14 +132,16 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
   const [fitness, setFitness] = useState<Record<string, string>>(
     () => ({ ...player.evaluation.fitness })
   );
-  const [openSections, setOpenSections] = useState<Set<number>>(new Set([0]));
+  const [openSections, setOpenSections] = useState<Set<string>>(() => new Set());
   const [fitnessOpen, setFitnessOpen] = useState(true);
 
-  const { weighted, pct } = useMemo(
-    () => calcScore({ skills, notes, fitness }, schema),
-    [skills, notes, fitness, schema]
+  const schemaScores = useMemo(
+    () => (Object.entries(SCHEMAS) as [SchemaType, typeof SCHEMAS[SchemaType]][]).map(([name, def]) => {
+      const { weighted, pct } = calcScore({ skills, notes, fitness }, def);
+      return { name: name as SchemaType, weighted, maxScore: def.maxScore, pct };
+    }),
+    [skills, notes, fitness]
   );
-  const rating = useMemo(() => getRating(pct), [pct]);
 
   const handleRate = useCallback((skillName: string, value: number) => {
     setSkills((prev) => ({ ...prev, [skillName]: value }));
@@ -150,11 +155,11 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
     setFitness((prev) => ({ ...prev, [field]: value }));
   }, []);
 
-  const toggleSection = useCallback((idx: number) => {
+  const toggleSection = useCallback((key: string) => {
     setOpenSections((prev) => {
       const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }, []);
@@ -264,35 +269,26 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
 
           return (
             <div style={{ background: '#1a2a1a', borderBottom: '1px solid rgba(200,168,75,0.15)' }}>
-              {INFO_GROUPS.map((group) => {
-                const entries = group.keys
-                  .map((k) => [k, info[k]] as [string, string])
-                  .filter(([, v]) => v);
-                if (entries.length === 0) return null;
-                return (
-                  <div key={group.label} className="px-5 py-2.5 border-b"
-                    style={{ borderColor: 'rgba(200,168,75,0.1)' }}>
-                    <div
-                      className="text-[0.65rem] font-bold uppercase tracking-widest mb-2"
-                      style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif', opacity: 0.7 }}
-                    >
-                      {group.label}
-                    </div>
-                    <div className="grid gap-x-5 gap-y-2"
-                      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))' }}>
+              <div className="px-5 py-2 flex flex-wrap gap-x-6 gap-y-3">
+                {INFO_GROUPS.map((group) => {
+                  const entries = group.keys
+                    .map((k) => [k, info[k]] as [string, string])
+                    .filter(([, v]) => v);
+                  if (entries.length === 0) return null;
+                  return (
+                    <div key={group.label} className="flex items-baseline gap-x-4 gap-y-1.5 flex-wrap">
+                      <span
+                        className="text-[0.55rem] font-bold uppercase tracking-widest flex-shrink-0"
+                        style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif', opacity: 0.6 }}
+                      >
+                        {group.label}
+                      </span>
                       {entries.map(([k, v]) => renderStat(k, v))}
                     </div>
-                  </div>
-                );
-              })}
-              {unknownEntries.length > 0 && (
-                <div className="px-5 py-2.5">
-                  <div className="grid gap-x-5 gap-y-2"
-                    style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
-                    {unknownEntries.map(([k, v]) => renderStat(k, v))}
-                  </div>
-                </div>
-              )}
+                  );
+                })}
+                {unknownEntries.map(([k, v]) => renderStat(k, v))}
+              </div>
             </div>
           );
         })()}
@@ -326,21 +322,25 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
         {/* My Evaluation tab */}
         {activeTab === 'mine' && (
           <>
-            {/* Score bar */}
+            {/* Per-schema score bar */}
             <div
-              className="flex flex-wrap items-center gap-4 px-5 py-2.5 border-b"
+              className="flex flex-wrap items-center gap-5 px-5 py-2.5 border-b"
               style={{ background: '#243324', borderColor: 'rgba(200,168,75,0.2)' }}
             >
-              <span style={{ fontFamily: 'Barlow Condensed, sans-serif', color: 'rgba(245,240,232,0.6)', fontSize: '0.8rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                <strong className="text-[#c8a84b] text-base mr-1">{weighted}</strong>
-                / {schema.maxScore} pts
-              </span>
-              <span style={{ fontFamily: 'Barlow Condensed, sans-serif', color: 'rgba(245,240,232,0.6)', fontSize: '0.8rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                <strong className="text-[#c8a84b] text-base mr-1">{pct}%</strong>
-              </span>
-              <div className="ml-auto">
-                <RatingChip cls={rating.cls} label={rating.label} />
-              </div>
+              {schemaScores.map(({ name, weighted, maxScore, pct }) => (
+                <div key={name} className="flex items-center gap-2">
+                  <span
+                    className="text-[0.6rem] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm flex-shrink-0"
+                    style={{ background: getSchemaColor(name), color: '#fff', fontFamily: 'Barlow Condensed, sans-serif' }}
+                  >
+                    {name === 'Batsman' ? 'BAT' : name === 'Fast Bowler' ? 'FB' : 'SB'}
+                  </span>
+                  <span style={{ fontFamily: 'Barlow Condensed, sans-serif', color: 'rgba(245,240,232,0.6)', fontSize: '0.8rem' }}>
+                    <strong className="text-[#c8a84b] text-base mr-1">{pct}%</strong>
+                    <span className="text-xs opacity-60">{weighted}/{maxScore}</span>
+                  </span>
+                </div>
+              ))}
             </div>
 
             {/* Scoring guide */}
@@ -353,110 +353,127 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
               ))}
             </div>
 
-            {/* Evaluation sections */}
+            {/* Evaluation sections — all 3 schemas */}
             <div className="overflow-y-auto" style={{ maxHeight: '55vh' }}>
-              {schema.sections.map((sec, si) => {
-                const { wScore, maxW } = getSectionScore(sec);
-                const isOpen = openSections.has(si);
-                return (
-                  <div key={si} className="border-b" style={{ borderColor: '#eee' }}>
-                    {/* Section header */}
-                    <button
-                      className="w-full flex items-center gap-2.5 px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                      style={{ background: '#f8f6f2', border: 'none', textAlign: 'left' }}
-                      onClick={() => toggleSection(si)}
-                    >
-                      <span
-                        className="text-[0.68rem] font-bold uppercase tracking-widest text-white px-1.5 py-0.5 rounded-sm flex-shrink-0"
-                        style={{ background: '#2c1810', fontFamily: 'Barlow Condensed, sans-serif' }}
-                      >
-                        {sec.letter}
-                      </span>
-                      <span
-                        className="font-bold uppercase tracking-wide text-sm"
-                        style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#1a1a1a' }}
-                      >
-                        {sec.name}
-                      </span>
-                      {wScore > 0 && (
-                        <span
-                          className="text-sm font-bold ml-auto mr-2"
-                          style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#4a4a4a' }}
-                        >
-                          {wScore}/{maxW}
-                        </span>
-                      )}
-                      <span
-                        className="text-xs ml-auto transition-transform duration-200 flex-shrink-0"
-                        style={{
-                          color: '#4a4a4a',
-                          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                          marginLeft: wScore > 0 ? '0' : 'auto',
-                        }}
-                      >
-                        ▼
-                      </span>
-                    </button>
-
-                    {/* Skill rows */}
-                    {isOpen && (
-                      <div className="py-1">
-                        {sec.skills.map((skill) => (
-                          <div
-                            key={skill.name}
-                            className="px-5 py-2.5 border-b last:border-b-0"
-                            style={{ borderColor: '#f0f0f0' }}
-                          >
-                            <div className="flex items-start gap-3 mb-1.5">
-                              <div className="flex-1 min-w-0">
-                                <div
-                                  className="text-sm font-bold uppercase tracking-wide leading-tight"
-                                  style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#1a1a1a' }}
-                                >
-                                  {skill.name}
-                                </div>
-                                <div className="text-xs mt-0.5 leading-snug" style={{ color: '#4a4a4a' }}>
-                                  {skill.desc}
-                                </div>
-                              </div>
-                              <span
-                                className="text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5"
-                                style={{
-                                  fontFamily: 'Barlow Condensed, sans-serif',
-                                  color: '#4a4a4a',
-                                  background: '#efefef',
-                                }}
-                              >
-                                ×{skill.weight}
-                              </span>
-                              <SkillStars
-                                skillName={skill.name}
-                                value={skills[skill.name] || 0}
-                                onChange={(v) => handleRate(skill.name, v)}
-                              />
-                            </div>
-                            <textarea
-                              className="w-full border rounded text-xs px-2.5 py-1.5 resize-none focus:outline-none focus:border-[#1a2e1a] transition-colors"
-                              style={{
-                                borderColor: '#e5e5e5',
-                                background: '#fafafa',
-                                color: '#1a1a1a',
-                                minHeight: '36px',
-                                maxHeight: '72px',
-                                fontFamily: 'Barlow, sans-serif',
-                              }}
-                              placeholder="Add a note…"
-                              rows={1}
-                              value={notes[skill.name] || ''}
-                              onChange={(e) => handleNote(skill.name, e.target.value)}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
+              {(Object.entries(SCHEMAS) as [SchemaType, (typeof SCHEMAS)[SchemaType]][]).map(([schemaName, schemaDef]) => (
+                <div key={schemaName}>
+                  {/* Schema group header */}
+                  <div
+                    className="px-5 py-1.5 text-[0.7rem] font-bold uppercase tracking-widest"
+                    style={{
+                      background: getSchemaColor(schemaName),
+                      color: '#fff',
+                      fontFamily: 'Barlow Condensed, sans-serif',
+                      letterSpacing: '0.12em',
+                    }}
+                  >
+                    {schemaName}
                   </div>
-                );
-              })}
+                  {schemaDef.sections.map((sec, si) => {
+                    const key = `${schemaName}-${si}`;
+                    const { wScore, maxW } = getSectionScore(sec);
+                    const isOpen = openSections.has(key);
+                    return (
+                      <div key={key} className="border-b" style={{ borderColor: '#eee' }}>
+                        {/* Section header */}
+                        <button
+                          className="w-full flex items-center gap-2.5 px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                          style={{ background: '#f8f6f2', border: 'none', textAlign: 'left' }}
+                          onClick={() => toggleSection(key)}
+                        >
+                          <span
+                            className="text-[0.68rem] font-bold uppercase tracking-widest text-white px-1.5 py-0.5 rounded-sm flex-shrink-0"
+                            style={{ background: getSchemaColor(schemaName), fontFamily: 'Barlow Condensed, sans-serif' }}
+                          >
+                            {sec.letter}
+                          </span>
+                          <span
+                            className="font-bold uppercase tracking-wide text-sm"
+                            style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#1a1a1a' }}
+                          >
+                            {sec.name}
+                          </span>
+                          {wScore > 0 && (
+                            <span
+                              className="text-sm font-bold ml-auto mr-2"
+                              style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#4a4a4a' }}
+                            >
+                              {wScore}/{maxW}
+                            </span>
+                          )}
+                          <span
+                            className="text-xs transition-transform duration-200 flex-shrink-0"
+                            style={{
+                              color: '#4a4a4a',
+                              transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                              marginLeft: wScore > 0 ? '0' : 'auto',
+                            }}
+                          >
+                            ▼
+                          </span>
+                        </button>
+
+                        {/* Skill rows */}
+                        {isOpen && (
+                          <div className="py-1">
+                            {sec.skills.map((skill) => (
+                              <div
+                                key={skill.name}
+                                className="px-5 py-2.5 border-b last:border-b-0"
+                                style={{ borderColor: '#f0f0f0' }}
+                              >
+                                <div className="flex items-start gap-3 mb-1.5">
+                                  <div className="flex-1 min-w-0">
+                                    <div
+                                      className="text-sm font-bold uppercase tracking-wide leading-tight"
+                                      style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#1a1a1a' }}
+                                    >
+                                      {skill.name}
+                                    </div>
+                                    <div className="text-xs mt-0.5 leading-snug" style={{ color: '#4a4a4a' }}>
+                                      {skill.desc}
+                                    </div>
+                                  </div>
+                                  <span
+                                    className="text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5"
+                                    style={{
+                                      fontFamily: 'Barlow Condensed, sans-serif',
+                                      color: '#4a4a4a',
+                                      background: '#efefef',
+                                    }}
+                                  >
+                                    ×{skill.weight}
+                                  </span>
+                                  <SkillStars
+                                    skillName={skill.name}
+                                    value={skills[skill.name] || 0}
+                                    onChange={(v) => handleRate(skill.name, v)}
+                                  />
+                                </div>
+                                <textarea
+                                  className="w-full border rounded text-xs px-2.5 py-1.5 resize-none focus:outline-none focus:border-[#1a2e1a] transition-colors"
+                                  style={{
+                                    borderColor: '#e5e5e5',
+                                    background: '#fafafa',
+                                    color: '#1a1a1a',
+                                    minHeight: '36px',
+                                    maxHeight: '72px',
+                                    fontFamily: 'Barlow, sans-serif',
+                                  }}
+                                  placeholder="Add a note…"
+                                  rows={1}
+                                  value={notes[skill.name] || ''}
+                                  onChange={(e) => handleNote(skill.name, e.target.value)}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
 
               {/* Fitness */}
               <div className="border-b" style={{ borderColor: '#eee' }}>
@@ -536,18 +553,6 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
                 />
-                {/* Rating guide chips */}
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {[
-                    { cls: 'must', label: '90–100% Must Select' },
-                    { cls: 'highly', label: '75–89% Highly Recommended' },
-                    { cls: 'rec', label: '60–74% Recommended' },
-                    { cls: 'cons', label: '45–59% Consider' },
-                    { cls: 'no', label: '<45% Not Recommended' },
-                  ].map((r) => (
-                    <RatingChip key={r.cls} cls={r.cls} label={r.label} />
-                  ))}
-                </div>
               </div>
             </div>
           </>
@@ -567,17 +572,32 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: '#f8f6f2', borderBottom: '1px solid #eee' }}>
-                    {['Coach', 'Score', 'Rating', 'Remarks', 'Saved'].map((h) => (
-                      <th key={h} className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest"
-                        style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#4a4a4a' }}>
-                        {h}
+                    <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest"
+                      style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#4a4a4a' }}>
+                      Coach
+                    </th>
+                    {(Object.keys(SCHEMAS) as SchemaType[]).map((s) => (
+                      <th key={s} className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-widest"
+                        style={{ fontFamily: 'Barlow Condensed, sans-serif', color: getSchemaColor(s) }}>
+                        {s === 'Batsman' ? 'BAT' : s === 'Fast Bowler' ? 'FB' : 'SB'}
                       </th>
                     ))}
+                    <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest"
+                      style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#4a4a4a' }}>
+                      Remarks
+                    </th>
+                    <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest"
+                      style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#4a4a4a' }}>
+                      Saved
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {player.coachEvals.map((ev, i) => {
                     const isMe = ev.coachEmail.toLowerCase() === userEmail.toLowerCase();
+                    const evSchemaScores = (Object.entries(SCHEMAS) as [SchemaType, (typeof SCHEMAS)[SchemaType]][]).map(
+                      ([name, def]) => ({ name, pct: calcScore(ev.evaluation, def).pct })
+                    );
                     return (
                       <tr key={i}
                         style={{
@@ -591,15 +611,13 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
                           </div>
                           <div className="text-xs" style={{ color: '#aaa' }}>{ev.coachEmail}</div>
                         </td>
-                        <td className="px-4 py-3">
-                          <span className="font-bold text-base" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#1a2e1a' }}>
-                            {ev.pct}%
-                          </span>
-                          <div className="text-xs" style={{ color: '#aaa' }}>{ev.score} pts</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <RatingChip cls={getRatingCls(ev.pct)} label={ev.rating} />
-                        </td>
+                        {evSchemaScores.map(({ name, pct }) => (
+                          <td key={name} className="px-3 py-3">
+                            <span className="font-bold text-sm" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: pct > 0 ? getSchemaColor(name) : '#ccc' }}>
+                              {pct > 0 ? `${pct}%` : '—'}
+                            </span>
+                          </td>
+                        ))}
                         <td className="px-4 py-3 max-w-[180px]">
                           <span className="text-xs" style={{ color: '#4a4a4a' }}>{ev.remarks || '—'}</span>
                         </td>
