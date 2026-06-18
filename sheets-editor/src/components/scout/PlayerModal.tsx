@@ -10,6 +10,37 @@ import {
   type SectionDef,
 } from '@/lib/scout-schemas';
 
+// Column groupings for the player info panel
+const INFO_GROUPS: { label: string; keys: string[] }[] = [
+  {
+    label: 'Profile',
+    keys: ['Primary Skill', 'Batting hand', 'Batting order', 'Batting Order type', 'Bowler arm', 'Bowling type'],
+  },
+  {
+    label: 'Batting',
+    keys: ['Bat Mat', 'Bat Inns', 'Bat Runs', 'Bat SR', 'Bat Avg'],
+  },
+  {
+    label: 'Bowling',
+    keys: ['Bowling Mat', 'Bowling Inns', 'Bowling-Overs', 'Runs given', 'Wkts', 'Econ', 'Bowling Avg', 'Bowling SR'],
+  },
+  {
+    label: 'Fielding & Keeping',
+    keys: ['Wk-Mat', 'Catches', 'WK Catches', 'Direct RO', 'InDirect RO', 'Stumpings'],
+  },
+];
+
+const ALL_KNOWN_KEYS = new Set(INFO_GROUPS.flatMap((g) => g.keys));
+
+function getCategoryColorModal(category: string): string {
+  const c = category.toLowerCase();
+  if (c.includes('wicket') || c.includes('keeper') || c.includes('wk')) return '#00695c';
+  if (c.includes('allrounder') || c.includes('all-rounder') || c.includes('all rounder')) return '#6a1b9a';
+  if (c.includes('batter') || c.includes('batsman')) return '#1565c0';
+  if (c.includes('bowler')) return '#bf360c';
+  return '#2e4030';
+}
+
 interface PlayerModalProps {
   player: ScoutPlayer;
   onClose: () => void;
@@ -133,8 +164,8 @@ export function PlayerModal({ player, onClose, onSave, saving }: PlayerModalProp
           <div
             className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold border-2 border-[#c8a84b] flex-shrink-0"
             style={{
-              background: '#2e4030',
-              color: '#f5f0e8',
+              background: getCategoryColorModal(player.category),
+              color: '#fff',
               fontFamily: 'Barlow Condensed, sans-serif',
             }}
           >
@@ -165,34 +196,62 @@ export function PlayerModal({ player, onClose, onSave, saving }: PlayerModalProp
           </button>
         </div>
 
-        {/* Extra player info */}
-        {Object.keys(player.extraInfo).length > 0 && (
-          <div
-            className="px-5 py-2.5 border-b grid gap-x-6 gap-y-1"
-            style={{
-              background: '#1e2e1e',
-              borderColor: 'rgba(200,168,75,0.15)',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-            }}
-          >
-            {Object.entries(player.extraInfo).map(([key, val]) => (
-              <div key={key} className="flex items-baseline gap-1.5 min-w-0">
-                <span
-                  className="text-[0.65rem] font-bold uppercase tracking-widest flex-shrink-0"
-                  style={{ color: 'rgba(200,168,75,0.6)', fontFamily: 'Barlow Condensed, sans-serif' }}
-                >
-                  {key}
-                </span>
-                <span
-                  className="text-xs font-semibold truncate"
-                  style={{ color: '#f5f0e8', fontFamily: 'Barlow, sans-serif' }}
-                >
-                  {val}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Player info — structured groups */}
+        {Object.keys(player.extraInfo).length > 0 && (() => {
+          const info = player.extraInfo;
+          const unknownEntries = Object.entries(info).filter(([k]) => !ALL_KNOWN_KEYS.has(k));
+
+          const renderStat = (key: string, val: string) => (
+            <div key={key} className="flex flex-col min-w-0">
+              <span
+                className="text-[0.6rem] font-bold uppercase tracking-widest leading-none mb-0.5"
+                style={{ color: 'rgba(200,168,75,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}
+              >
+                {key}
+              </span>
+              <span
+                className="text-xs font-semibold truncate"
+                style={{ color: '#f5f0e8', fontFamily: 'Barlow, sans-serif' }}
+              >
+                {val}
+              </span>
+            </div>
+          );
+
+          return (
+            <div style={{ background: '#1a2a1a', borderBottom: '1px solid rgba(200,168,75,0.15)' }}>
+              {INFO_GROUPS.map((group) => {
+                const entries = group.keys
+                  .map((k) => [k, info[k]] as [string, string])
+                  .filter(([, v]) => v);
+                if (entries.length === 0) return null;
+                return (
+                  <div key={group.label} className="px-5 py-2.5 border-b"
+                    style={{ borderColor: 'rgba(200,168,75,0.1)' }}>
+                    <div
+                      className="text-[0.65rem] font-bold uppercase tracking-widest mb-2"
+                      style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif', opacity: 0.7 }}
+                    >
+                      {group.label}
+                    </div>
+                    <div className="grid gap-x-5 gap-y-2"
+                      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))' }}>
+                      {entries.map(([k, v]) => renderStat(k, v))}
+                    </div>
+                  </div>
+                );
+              })}
+              {unknownEntries.length > 0 && (
+                <div className="px-5 py-2.5">
+                  <div className="grid gap-x-5 gap-y-2"
+                    style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
+                    {unknownEntries.map(([k, v]) => renderStat(k, v))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Score bar */}
         <div
