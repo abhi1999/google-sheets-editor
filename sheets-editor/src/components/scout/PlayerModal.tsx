@@ -14,11 +14,11 @@ import {
 const INFO_GROUPS: { label: string; keys: string[] }[] = [
   {
     label: 'Profile',
-    keys: ['Primary Skill', 'Batting hand', 'Batting order', 'Batting Order type', 'Bowler arm', 'Bowling type'],
+    keys: ['Primary Skill', 'Batting hand', 'Bowler arm', 'Bowling type'],
   },
   {
     label: 'Batting',
-    keys: ['Bat Mat', 'Bat Inns', 'Bat Runs', 'Bat SR', 'Bat Avg'],
+    keys: ['Batting order', 'Batting Order type', 'Bat Mat', 'Bat Inns', 'Bat Runs', 'Bat SR', 'Bat Avg'],
   },
   {
     label: 'Bowling',
