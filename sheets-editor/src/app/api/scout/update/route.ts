@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { readSheetData, writeCellUpdates } from '@/lib/sheets';
+import { readSheetData, writeCellUpdates, appendAuditEntries, createAuditEntry } from '@/lib/sheets';
 import type { ScoutUpdatePayload } from '@/types/scout';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     const url = new URL(request.url);
     const sheetKey = url.searchParams.get('sheetKey') || 'tryout';
 
-    await requireAuth();
+    const user = await requireAuth();
 
     const body = (await request.json()) as ScoutUpdatePayload;
 
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid evaluation data' }, { status: 400 });
     }
 
-    const { headers } = await readSheetData(sheetKey);
+    const { headers, rows } = await readSheetData(sheetKey);
 
     const fieldValues: Record<string, string> = {
       Evaluation: JSON.stringify(body.evaluation),
@@ -49,6 +49,27 @@ export async function POST(request: NextRequest) {
     }
 
     await writeCellUpdates(updates, sheetKey);
+
+    // Capture old values for audit log (from the row we read above)
+    const existingRow = rows.find((r) => r.__rowIndex === body.rowIndex);
+
+    const auditEntries = SCOUT_COLUMNS
+      .filter((col) => headers.includes(col))
+      .map((col) =>
+        createAuditEntry(
+          user.email,
+          user.name,
+          body.rowIndex,
+          col,
+          String(existingRow?.[col] ?? ''),
+          fieldValues[col],
+          'success'
+        )
+      );
+
+    appendAuditEntries(auditEntries, sheetKey).catch((err) => {
+      console.error('[Scout Audit] Failed to write audit log:', err);
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

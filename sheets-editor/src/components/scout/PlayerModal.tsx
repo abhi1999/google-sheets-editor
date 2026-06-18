@@ -165,6 +165,35 @@ export function PlayerModal({ player, onClose, onSave, saving }: PlayerModalProp
           </button>
         </div>
 
+        {/* Extra player info */}
+        {Object.keys(player.extraInfo).length > 0 && (
+          <div
+            className="px-5 py-2.5 border-b grid gap-x-6 gap-y-1"
+            style={{
+              background: '#1e2e1e',
+              borderColor: 'rgba(200,168,75,0.15)',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+            }}
+          >
+            {Object.entries(player.extraInfo).map(([key, val]) => (
+              <div key={key} className="flex items-baseline gap-1.5 min-w-0">
+                <span
+                  className="text-[0.65rem] font-bold uppercase tracking-widest flex-shrink-0"
+                  style={{ color: 'rgba(200,168,75,0.6)', fontFamily: 'Barlow Condensed, sans-serif' }}
+                >
+                  {key}
+                </span>
+                <span
+                  className="text-xs font-semibold truncate"
+                  style={{ color: '#f5f0e8', fontFamily: 'Barlow, sans-serif' }}
+                >
+                  {val}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Score bar */}
         <div
           className="flex flex-wrap items-center gap-4 px-5 py-2.5 border-b"

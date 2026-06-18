@@ -8,6 +8,12 @@ export const dynamic = 'force-dynamic';
 
 const VALID_SCHEMAS: SchemaType[] = ['Batsman', 'Fast Bowler', 'Spin Bowler'];
 
+// Columns consumed by the scout system — everything else becomes extraInfo
+const SYSTEM_COLUMNS = new Set([
+  'Batch', 'Name', 'Category', 'Schema',
+  'Score', 'Pct', 'Rating', 'Remarks', 'Evaluation',
+]);
+
 function toSchemaType(raw: string): SchemaType {
   if (VALID_SCHEMAS.includes(raw as SchemaType)) return raw as SchemaType;
   return 'Batsman';
@@ -19,20 +25,32 @@ export async function GET(request: Request) {
     const sheetKey = url.searchParams.get('sheetKey') || 'tryout';
 
     const user = await requireAuth();
-    const { rows } = await readSheetData(sheetKey);
+    const { headers, rows } = await readSheetData(sheetKey);
+
+    const extraColumns = headers.filter((h) => !SYSTEM_COLUMNS.has(h));
 
     const players: ScoutPlayer[] = rows
-      .map((row) => ({
-        rowIndex: row.__rowIndex as number,
-        name: String(row['Name'] || '').trim(),
-        category: String(row['Category'] || '').trim(),
-        schema: toSchemaType(String(row['Schema'] || '')),
-        score: Number(row['Score'] || 0),
-        pct: Number(row['Pct'] || 0),
-        rating: String(row['Rating'] || ''),
-        remarks: String(row['Remarks'] || ''),
-        evaluation: parseEvaluation(String(row['Evaluation'] || '')),
-      }))
+      .map((row) => {
+        const extraInfo: Record<string, string> = {};
+        for (const col of extraColumns) {
+          const val = String(row[col] ?? '').trim();
+          if (val) extraInfo[col] = val;
+        }
+
+        return {
+          rowIndex: row.__rowIndex as number,
+          batch: String(row['Batch'] || '').trim(),
+          name: String(row['Name'] || '').trim(),
+          category: String(row['Category'] || '').trim(),
+          schema: toSchemaType(String(row['Schema'] || '')),
+          score: Number(row['Score'] || 0),
+          pct: Number(row['Pct'] || 0),
+          rating: String(row['Rating'] || ''),
+          remarks: String(row['Remarks'] || ''),
+          evaluation: parseEvaluation(String(row['Evaluation'] || '')),
+          extraInfo,
+        };
+      })
       .filter((p) => p.name.length > 0);
 
     const response: ScoutApiResponse = {

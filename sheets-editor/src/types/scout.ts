@@ -7,6 +7,7 @@ export interface PlayerEvaluation {
 
 export interface ScoutPlayer {
   rowIndex: number;
+  batch: string;
   name: string;
   category: string;
   schema: SchemaType;
@@ -15,6 +16,8 @@ export interface ScoutPlayer {
   rating: string;
   remarks: string;
   evaluation: PlayerEvaluation;
+  /** Any additional columns in the sheet beyond the known system columns */
+  extraInfo: Record<string, string>;
 }
 
 export interface ScoutUpdatePayload {
