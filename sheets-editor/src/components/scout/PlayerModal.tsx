@@ -223,7 +223,7 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
               className="text-xs font-semibold uppercase tracking-widest mt-0.5"
               style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif' }}
             >
-              {player.schema} · {player.category}
+              {player.category}
             </p>
           </div>
           <button
