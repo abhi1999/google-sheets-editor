@@ -52,6 +52,17 @@
       "editableColumns": ["Notes"],
       "editorEmails": ["archive-editor@example.com"],
       "useEditAccessSheet": false
+    },
+    {
+      "id": "tryout",
+      "name": "Cricket Tryouts",
+      "description": "Player evaluation sheet for tryouts. Tab must have columns: Name, Category, Schema, Score, Pct, Rating, Remarks, Evaluation",
+      "sheetId": "13HAtzkA2yxftiJbyEWdEMOfM5ITvHH6yqxnlvcFxKOc",
+      "range": "Players!A1:AZ1000",
+      "auditSheetName": "AuditLog",
+      "editableColumns": ["Evaluation", "Score", "Pct", "Rating", "Remarks"],
+      "editorEmails": [],
+      "useEditAccessSheet": true
     }
   ]
 }
