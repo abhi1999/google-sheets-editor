@@ -274,6 +274,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [players, setPlayers] = useState<ScoutPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [unauthorized, setUnauthorized] = useState(false);
   const [activePlayer, setActivePlayer] = useState<ScoutPlayer | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -291,8 +292,9 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   useEffect(() => {
     setLoading(true);
     fetch(`/api/scout?sheetKey=${encodeURIComponent(sheetKey)}`)
-      .then((r) => r.json())
-      .then((data) => {
+      .then(async (r) => {
+        if (r.status === 403) { setUnauthorized(true); return; }
+        const data = await r.json();
         if (data.error) setError(data.error);
         else setPlayers(data.players || []);
       })
@@ -540,6 +542,46 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
 
         {/* ── Main content ── */}
         <main className="px-5 md:px-7 py-7 pb-16 mx-auto" style={{ maxWidth: '1200px' }}>
+
+          {/* Unauthorized */}
+          {unauthorized && !loading && (
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center mb-6"
+                style={{ background: 'rgba(192,57,43,0.12)', border: '2px solid rgba(192,57,43,0.35)' }}
+              >
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#c0392b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                </svg>
+              </div>
+              <h2
+                className="text-2xl font-extrabold uppercase tracking-wide mb-2"
+                style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}
+              >
+                Access Restricted
+              </h2>
+              <p className="text-sm mb-1" style={{ color: 'rgba(245,240,232,0.55)', maxWidth: '320px' }}>
+                You are not authorized to view this app.
+              </p>
+              <p className="text-xs mb-8" style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                Signed in as <span style={{ color: 'rgba(245,240,232,0.55)' }}>{user.email}</span>
+              </p>
+              <button
+                onClick={() => signOut({ callbackUrl: '/login' })}
+                className="text-xs px-4 py-2 rounded border font-bold uppercase tracking-wider transition-opacity hover:opacity-80"
+                style={{
+                  fontFamily: 'Barlow Condensed, sans-serif',
+                  color: '#f5f0e8',
+                  borderColor: 'rgba(192,57,43,0.5)',
+                  background: 'transparent',
+                  letterSpacing: '0.08em',
+                }}
+              >
+                Sign out
+              </button>
+            </div>
+          )}
 
           {/* Loading */}
           {loading && (

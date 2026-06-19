@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'ScoutBoard · Cricket Tryouts',
+  title: 'NAYCA · Cricket Tryouts',
   description: 'Cricket player evaluation and selection tool',
 };
 

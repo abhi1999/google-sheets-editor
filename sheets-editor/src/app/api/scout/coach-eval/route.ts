@@ -3,6 +3,19 @@ import { requireAuth } from '@/lib/auth';
 import { ensureTabExists, readTab, appendRowsToTab, updateRowInTab } from '@/lib/sheets';
 import type { CoachEvalPayload } from '@/types/scout';
 
+async function checkAuthorized(userEmail: string, sheetKey: string): Promise<boolean> {
+  try {
+    const { rows } = await readTab('AuthorizedUsers', sheetKey);
+    return rows.some((row) =>
+      Object.entries(row)
+        .filter(([k]) => k !== '__rowIndex')
+        .some(([, v]) => typeof v === 'string' && v.trim().toLowerCase() === userEmail.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+}
+
 export const dynamic = 'force-dynamic';
 
 const COACH_EVALS_TAB = 'CoachEvals';
@@ -14,6 +27,11 @@ export async function POST(request: NextRequest) {
     const sheetKey = url.searchParams.get('sheetKey') || 'tryout';
 
     const user = await requireAuth();
+
+    if (!(await checkAuthorized(user.email, sheetKey))) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 403 });
+    }
+
     const body = (await request.json()) as CoachEvalPayload;
 
     if (typeof body.playerRowIndex !== 'number' || body.playerRowIndex < 2) {
