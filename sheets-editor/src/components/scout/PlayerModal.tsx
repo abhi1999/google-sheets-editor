@@ -49,6 +49,17 @@ function getCategoryColorModal(category: string): string {
   return '#2e4030';
 }
 
+function getYoYoBadge(coachEvals: ScoutPlayer['coachEvals']): { best: number; bg: string; text: string } | null {
+  const vals = coachEvals
+    .map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || ''))
+    .filter((v) => !isNaN(v) && v > 0);
+  if (vals.length === 0) return null;
+  const best = Math.max(...vals);
+  if (best >= 15.5) return { best, bg: '#1b5e20', text: '#a5d6a7' };
+  if (best >= 15.2) return { best, bg: '#7f3f00', text: '#ffcc80' };
+  return { best, bg: '#7f1f1f', text: '#ef9a9a' };
+}
+
 function getRatingCls(pct: number): string {
   if (pct >= 90) return 'must';
   if (pct >= 75) return 'highly';
@@ -224,12 +235,32 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
                 ) : null;
               })()}
             </div>
-            <p
-              className="text-xs font-semibold uppercase tracking-widest mt-0.5"
-              style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif' }}
-            >
-              {player.category}
-            </p>
+            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+              <p
+                className="text-xs font-semibold uppercase tracking-widest"
+                style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif' }}
+              >
+                {player.category}
+              </p>
+              {(() => {
+                const yoyo = getYoYoBadge(player.coachEvals);
+                return yoyo ? (
+                  <span
+                    className="text-[10px] font-bold px-2 py-0.5 rounded"
+                    style={{ background: yoyo.bg, color: yoyo.text, fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}
+                  >
+                    YO-YO {yoyo.best}
+                  </span>
+                ) : (
+                  <span
+                    className="text-[10px] font-bold px-2 py-0.5 rounded"
+                    style={{ background: 'rgba(245,240,232,0.08)', color: 'rgba(245,240,232,0.25)', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}
+                  >
+                    YO-YO —
+                  </span>
+                );
+              })()}
+            </div>
           </div>
           <button
             className="ml-auto text-2xl leading-none cursor-pointer transition-colors"

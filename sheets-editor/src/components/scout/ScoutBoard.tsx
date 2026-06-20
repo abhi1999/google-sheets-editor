@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import type { ScoutPlayer, PlayerEvaluation, SchemaType, CoachEval } from '@/types/scout';
 import type { AppUser } from '@/types';
-import { SCHEMAS, calcScore, getRating, playerInitials } from '@/lib/scout-schemas';
+import { SCHEMAS, FITNESS_FIELDS, calcScore, getRating, playerInitials, type SectionDef } from '@/lib/scout-schemas';
+import Papa from 'papaparse';
 import { PlayerModal } from './PlayerModal';
 
 interface ScoutBoardProps {
@@ -51,6 +52,17 @@ function getDivStyle(div: string): { bg: string; text: string } | null {
   if (d === 'A' || d === 'DIV A' || d === 'DIVISION A') return { bg: '#c8a84b', text: '#1a1a1a' };
   if (d === 'B' || d === 'DIV B' || d === 'DIVISION B') return { bg: '#546e7a', text: '#fff' };
   return { bg: '#5d4037', text: '#fff' };
+}
+
+function getYoYoBadge(coachEvals: ScoutPlayer['coachEvals']): { best: number; bg: string; text: string } | null {
+  const vals = coachEvals
+    .map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || ''))
+    .filter((v) => !isNaN(v) && v > 0);
+  if (vals.length === 0) return null;
+  const best = Math.max(...vals);
+  if (best >= 15.5) return { best, bg: '#1b5e20', text: '#a5d6a7' };
+  if (best >= 15.2) return { best, bg: '#7f3f00', text: '#ffcc80' };
+  return { best, bg: '#7f1f1f', text: '#ef9a9a' };
 }
 
 function matchesSearch(p: ScoutPlayer, q: string): boolean {
@@ -198,6 +210,24 @@ function PlayerCard({
           ✓ you rated
         </div>
       )}
+      {(() => {
+        const yoyo = getYoYoBadge(player.coachEvals);
+        return yoyo ? (
+          <div
+            className="inline-block mt-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded"
+            style={{ background: yoyo.bg, color: yoyo.text, fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}
+          >
+            YO-YO {yoyo.best}
+          </div>
+        ) : (
+          <div
+            className="inline-block mt-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded"
+            style={{ background: 'rgba(0,0,0,0.07)', color: 'rgba(74,74,74,0.5)', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}
+          >
+            YO-YO —
+          </div>
+        );
+      })()}
     </button>
   );
 }
@@ -246,6 +276,727 @@ function PlayerGrid({ players, pinnedIds, onCardClick, onTogglePin, showBatch, u
   );
 }
 
+// ── Shared sort + search utilities ───────────────────────────────────
+
+function useSortSearch() {
+  const [search, setSearch] = useState('');
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const toggleSort = useCallback((col: string) => {
+    setSortCol((prev) => {
+      if (prev === col) { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); return col; }
+      setSortDir('asc');
+      return col;
+    });
+  }, []);
+  return { search, setSearch, sortCol, sortDir, toggleSort };
+}
+
+function applySort<T>(rows: T[], col: string | null, dir: 'asc' | 'desc', val: (r: T, c: string) => string | number): T[] {
+  if (!col) return rows;
+  const d = dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const av = val(a, col), bv = val(b, col);
+    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * d;
+    return String(av).localeCompare(String(bv)) * d;
+  });
+}
+
+function TableSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative flex-shrink-0" style={{ minWidth: '160px', maxWidth: '240px', width: '100%' }}>
+      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'rgba(245,240,232,0.3)' }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+      </span>
+      <input
+        type="text" value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder="Search players…"
+        style={{ width: '100%', paddingLeft: '1.6rem', paddingRight: '1.5rem', paddingTop: '0.375rem', paddingBottom: '0.375rem',
+          borderRadius: '0.375rem', fontSize: '0.75rem', background: 'rgba(0,0,0,0.2)', color: '#f5f0e8',
+          border: '1px solid rgba(245,240,232,0.12)', fontFamily: 'Barlow, sans-serif', outline: 'none' }}
+      />
+      {value && (
+        <button onClick={() => onChange('')} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)',
+          color: 'rgba(245,240,232,0.4)', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+      )}
+    </div>
+  );
+}
+
+function SortTh({ label, col, sortCol, sortDir, onSort, className, style, title }: {
+  label: string; col: string; sortCol: string | null; sortDir: 'asc' | 'desc';
+  onSort: (col: string) => void; className?: string; style?: React.CSSProperties; title?: string;
+}) {
+  const active = sortCol === col;
+  return (
+    <th title={title} onClick={() => onSort(col)} className={`cursor-pointer select-none ${className || ''}`}
+      style={{ ...style, userSelect: 'none' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+        {label}
+        <span style={{ opacity: active ? 1 : 0.22, fontSize: '0.55rem', color: active ? '#c8a84b' : 'inherit', lineHeight: 1 }}>
+          {active ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+        </span>
+      </span>
+    </th>
+  );
+}
+
+const EXPORT_ICON = (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 1v9M5 5l3 3 3-3M1 12v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
+  </svg>
+);
+
+const EXPORT_BTN_STYLE: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: '0.5rem',
+  padding: '0.375rem 0.75rem', borderRadius: '0.25rem',
+  fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em',
+  fontFamily: 'Barlow Condensed, sans-serif',
+  background: 'rgba(200,168,75,0.15)', color: '#c8a84b',
+  border: '1px solid rgba(200,168,75,0.3)', cursor: 'pointer', flexShrink: 0,
+};
+
+const TH_BASE = 'px-4 py-3 text-left text-xs font-bold uppercase tracking-widest whitespace-nowrap';
+const TH_STYLE: React.CSSProperties = { fontFamily: 'Barlow Condensed, sans-serif', color: 'rgba(245,240,232,0.55)' };
+const TR_HEAD: React.CSSProperties = { background: '#1d2e1e', borderBottom: '2px solid rgba(192,57,43,0.4)' };
+const TD_ALT = (i: number): React.CSSProperties => ({ background: i % 2 === 0 ? '#1a2a1a' : '#1d2e1e', borderBottom: '1px solid rgba(200,168,75,0.07)' });
+
+// ─────────────────────────────────────────────────────────────────────
+
+function MyEvalsTable({
+  players,
+  onRowClick,
+}: {
+  players: ScoutPlayer[];
+  onRowClick: (p: ScoutPlayer) => void;
+}) {
+  const myEvalPlayers = useMemo(
+    () => players.filter((p) => p.myEval !== null),
+    [players]
+  );
+
+  const schemaKeys = Object.keys(SCHEMAS) as SchemaType[];
+  const schemaLabels: Record<SchemaType, string> = {
+    Batsman: 'BAT',
+    'Fast Bowler': 'FB',
+    'Spin Bowler': 'SB',
+  };
+  const schemaColors: Record<SchemaType, string> = {
+    Batsman: '#1565c0',
+    'Fast Bowler': '#bf360c',
+    'Spin Bowler': '#6a1b9a',
+  };
+
+  if (myEvalPlayers.length === 0) {
+    return (
+      <div className="rounded-lg border p-10 text-center mt-4"
+        style={{ background: '#243324', borderColor: 'rgba(200,168,75,0.15)' }}>
+        <p className="text-lg font-bold mb-1"
+          style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          No evaluations yet
+        </p>
+        <p className="text-sm" style={{ color: 'rgba(245,240,232,0.45)' }}>
+          Open a player card and submit a rating to see your evaluations here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {myEvalPlayers.length} player{myEvalPlayers.length !== 1 ? 's' : ''} evaluated · click any row to edit
+        </span>
+        <button
+          onClick={() => exportMyEvalsToCSV(players)}
+          className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-80"
+          style={{
+            fontFamily: 'Barlow Condensed, sans-serif',
+            background: 'rgba(200,168,75,0.15)',
+            color: '#c8a84b',
+            border: '1px solid rgba(200,168,75,0.3)',
+            letterSpacing: '0.08em',
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 1v9M5 5l3 3 3-3M1 12v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
+          </svg>
+          Export CSV
+        </button>
+      </div>
+    <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(200,168,75,0.15)' }}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#1d2e1e', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
+              {['Player', 'Batch', 'Category', ...schemaKeys.map(s => schemaLabels[s]), 'Remarks', 'Date'].map((h) => (
+                <th
+                  key={h}
+                  className="px-4 py-3 text-left text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+                  style={{ fontFamily: 'Barlow Condensed, sans-serif', color: 'rgba(245,240,232,0.55)' }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {myEvalPlayers.map((p, i) => {
+              const ev = p.myEval!;
+              const scores = schemaKeys.map((s) => ({
+                key: s,
+                pct: calcScore(ev.evaluation, SCHEMAS[s]).pct,
+              }));
+              return (
+                <tr
+                  key={p.rowIndex}
+                  onClick={() => onRowClick(p)}
+                  className="cursor-pointer transition-colors"
+                  style={{
+                    background: i % 2 === 0 ? '#1a2a1a' : '#1d2e1e',
+                    borderBottom: '1px solid rgba(200,168,75,0.08)',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(192,57,43,0.1)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? '#1a2a1a' : '#1d2e1e')}
+                >
+                  <td className="px-4 py-3">
+                    <span className="font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>
+                      {p.name}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs" style={{ color: 'rgba(245,240,232,0.5)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {p.batch || '—'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs font-semibold" style={{ color: 'rgba(245,240,232,0.7)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {p.category || '—'}
+                    </span>
+                  </td>
+                  {scores.map(({ key, pct }) => (
+                    <td key={key} className="px-4 py-3">
+                      <span
+                        className="font-bold text-sm"
+                        style={{
+                          fontFamily: 'Barlow Condensed, sans-serif',
+                          color: pct > 0 ? schemaColors[key] : 'rgba(245,240,232,0.2)',
+                        }}
+                      >
+                        {pct > 0 ? `${pct}%` : '—'}
+                      </span>
+                    </td>
+                  ))}
+                  <td className="px-4 py-3 max-w-[220px]">
+                    <span className="text-xs line-clamp-2" style={{ color: 'rgba(245,240,232,0.55)' }}>
+                      {ev.remarks || '—'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="text-xs" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {ev.savedAt ? new Date(ev.savedAt).toLocaleDateString() : '—'}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    </div>
+  );
+}
+
+// ── helpers ──────────────────────────────────────────────────────────
+
+function sectionScore(sec: SectionDef, skills: Record<string, number>) {
+  let wScore = 0, maxW = 0;
+  sec.skills.forEach((sk) => { wScore += (skills[sk.name] || 0) * sk.weight; maxW += 5 * sk.weight; });
+  return { wScore, maxW };
+}
+
+type SchemaSection = { schemaName: SchemaType; schemaLabel: string; section: SectionDef };
+
+const ALL_SCHEMA_SECTIONS: SchemaSection[] = (Object.entries(SCHEMAS) as [SchemaType, (typeof SCHEMAS)[SchemaType]][]).flatMap(
+  ([schemaName, def]) => def.sections.map((section) => ({
+    schemaName,
+    schemaLabel: schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB',
+    section,
+  }))
+);
+
+const SCHEMA_COLORS: Record<SchemaType, string> = {
+  Batsman: '#1565c0',
+  'Fast Bowler': '#bf360c',
+  'Spin Bowler': '#6a1b9a',
+};
+
+function exportMyEvalsToCSV(players: ScoutPlayer[]) {
+  const schemaKeys = Object.keys(SCHEMAS) as SchemaType[];
+  const schemaLabels: Record<SchemaType, string> = { Batsman: 'BAT', 'Fast Bowler': 'FB', 'Spin Bowler': 'SB' };
+  const myEvalPlayers = players.filter((p) => p.myEval !== null);
+  const rows = myEvalPlayers.map((p) => {
+    const row: Record<string, string | number> = {
+      Player: p.name,
+      Batch: p.batch || '',
+      Category: p.category || '',
+    };
+    schemaKeys.forEach((s) => {
+      row[`${schemaLabels[s]} %`] = calcScore(p.myEval!.evaluation, SCHEMAS[s]).pct;
+    });
+    row['Remarks'] = p.myEval!.remarks || '';
+    row['Date'] = p.myEval!.savedAt ? new Date(p.myEval!.savedAt).toLocaleDateString() : '';
+    return row;
+  });
+  const csv = Papa.unparse(rows);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `my-evals-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportToCSV(players: ScoutPlayer[]) {
+  const myEvalPlayers = players.filter((p) => p.myEval !== null);
+  const rows = myEvalPlayers.map((p) => {
+    const skills = p.myEval!.evaluation.skills;
+    const row: Record<string, string | number> = {
+      Player: p.name,
+      Batch: p.batch || '',
+      Category: p.category || '',
+    };
+    ALL_SCHEMA_SECTIONS.forEach(({ schemaLabel, section }) => {
+      const { wScore, maxW } = sectionScore(section, skills);
+      row[`${schemaLabel} ${section.letter}: ${section.name}`] = wScore;
+      row[`${schemaLabel} ${section.letter} Max`] = maxW;
+    });
+    row['Remarks'] = p.myEval!.remarks || '';
+    row['Date'] = p.myEval!.savedAt ? new Date(p.myEval!.savedAt).toLocaleDateString() : '';
+    return row;
+  });
+  const csv = Papa.unparse(rows);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `my-evaluations-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function MyEvalDetailsTable({
+  players,
+  onRowClick,
+}: {
+  players: ScoutPlayer[];
+  onRowClick: (p: ScoutPlayer) => void;
+}) {
+  const myEvalPlayers = useMemo(() => players.filter((p) => p.myEval !== null), [players]);
+
+  if (myEvalPlayers.length === 0) {
+    return (
+      <div className="rounded-lg border p-10 text-center mt-4"
+        style={{ background: '#243324', borderColor: 'rgba(200,168,75,0.15)' }}>
+        <p className="text-lg font-bold mb-1"
+          style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          No evaluations yet
+        </p>
+        <p className="text-sm" style={{ color: 'rgba(245,240,232,0.45)' }}>
+          Rate a player first to see detailed breakdowns here.
+        </p>
+      </div>
+    );
+  }
+
+  // Group sections by schema for spanning header
+  const schemaGroups = (Object.entries(SCHEMAS) as [SchemaType, (typeof SCHEMAS)[SchemaType]][]).map(
+    ([schemaName, def]) => ({
+      schemaName,
+      schemaLabel: schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB',
+      sections: def.sections,
+    })
+  );
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {myEvalPlayers.length} player{myEvalPlayers.length !== 1 ? 's' : ''} evaluated · click any row to edit
+        </span>
+        <button
+          onClick={() => exportToCSV(players)}
+          className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-80"
+          style={{
+            fontFamily: 'Barlow Condensed, sans-serif',
+            background: 'rgba(200,168,75,0.15)',
+            color: '#c8a84b',
+            border: '1px solid rgba(200,168,75,0.3)',
+            letterSpacing: '0.08em',
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 1v9M5 5l3 3 3-3M1 12v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
+          </svg>
+          Export CSV
+        </button>
+      </div>
+
+      <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(200,168,75,0.15)' }}>
+        <div className="overflow-x-auto">
+          <table className="text-xs" style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+            <thead>
+              {/* Schema group row */}
+              <tr style={{ background: '#162614', borderBottom: '1px solid rgba(192,57,43,0.2)' }}>
+                <th colSpan={3} style={{ padding: 0 }} />
+                {schemaGroups.map(({ schemaName, schemaLabel, sections }) => (
+                  <th
+                    key={schemaName}
+                    colSpan={sections.length}
+                    className="px-3 py-1.5 text-center text-[0.6rem] font-bold uppercase tracking-widest"
+                    style={{
+                      fontFamily: 'Barlow Condensed, sans-serif',
+                      color: '#fff',
+                      background: SCHEMA_COLORS[schemaName],
+                      letterSpacing: '0.12em',
+                      borderLeft: '2px solid rgba(0,0,0,0.2)',
+                    }}
+                  >
+                    {schemaLabel} — {schemaName}
+                  </th>
+                ))}
+                <th colSpan={2} style={{ padding: 0 }} />
+              </tr>
+
+              {/* Column headers */}
+              <tr style={{ background: '#1d2e1e', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
+                {['Player', 'Batch', 'Category'].map((h) => (
+                  <th key={h} className="px-3 py-2.5 text-left font-bold uppercase tracking-widest whitespace-nowrap sticky"
+                    style={{ fontFamily: 'Barlow Condensed, sans-serif', color: 'rgba(245,240,232,0.55)', minWidth: h === 'Player' ? '130px' : '70px' }}>
+                    {h}
+                  </th>
+                ))}
+                {schemaGroups.map(({ schemaName, schemaLabel, sections }) =>
+                  sections.map((sec) => (
+                    <th
+                      key={`${schemaName}-${sec.letter}`}
+                      className="px-3 py-2.5 text-center font-bold uppercase tracking-widest whitespace-nowrap"
+                      style={{
+                        fontFamily: 'Barlow Condensed, sans-serif',
+                        color: SCHEMA_COLORS[schemaName],
+                        minWidth: '60px',
+                        borderLeft: sec.letter === 'A' ? '2px solid rgba(0,0,0,0.15)' : undefined,
+                      }}
+                      title={sec.name}
+                    >
+                      {schemaLabel}{sec.letter}
+                    </th>
+                  ))
+                )}
+                {['Remarks', 'Date'].map((h) => (
+                  <th key={h} className="px-3 py-2.5 text-left font-bold uppercase tracking-widest whitespace-nowrap"
+                    style={{ fontFamily: 'Barlow Condensed, sans-serif', color: 'rgba(245,240,232,0.55)', minWidth: h === 'Remarks' ? '180px' : '80px' }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {myEvalPlayers.map((p, i) => {
+                const skills = p.myEval!.evaluation.skills;
+                return (
+                  <tr
+                    key={p.rowIndex}
+                    onClick={() => onRowClick(p)}
+                    className="cursor-pointer transition-colors"
+                    style={{ background: i % 2 === 0 ? '#1a2a1a' : '#1d2e1e', borderBottom: '1px solid rgba(200,168,75,0.06)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(192,57,43,0.1)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? '#1a2a1a' : '#1d2e1e')}
+                  >
+                    <td className="px-3 py-2.5">
+                      <span className="font-bold whitespace-nowrap" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>
+                        {p.name}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{p.batch || '—'}</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.65)', fontFamily: 'Barlow Condensed, sans-serif' }}>{p.category || '—'}</span>
+                    </td>
+                    {schemaGroups.map(({ schemaName, sections }) =>
+                      sections.map((sec) => {
+                        const { wScore, maxW } = sectionScore(sec, skills);
+                        const filled = wScore > 0;
+                        return (
+                          <td
+                            key={`${schemaName}-${sec.letter}`}
+                            className="px-3 py-2.5 text-center"
+                            style={{ borderLeft: sec.letter === 'A' ? '2px solid rgba(0,0,0,0.1)' : undefined }}
+                          >
+                            {filled ? (
+                              <span
+                                className="font-bold"
+                                style={{ fontFamily: 'Barlow Condensed, sans-serif', color: SCHEMA_COLORS[schemaName] }}
+                                title={`${sec.name}: ${wScore}/${maxW}`}
+                              >
+                                {wScore}/{maxW}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
+                            )}
+                          </td>
+                        );
+                      })
+                    )}
+                    <td className="px-3 py-2.5 max-w-[200px]">
+                      <span className="line-clamp-2" style={{ color: 'rgba(245,240,232,0.5)' }}>
+                        {p.myEval!.remarks || '—'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {p.myEval!.savedAt ? new Date(p.myEval!.savedAt).toLocaleDateString() : '—'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type YoyoFilterKey = 'all' | 'green' | 'amber' | 'red' | 'grey';
+
+const YOYO_FILTERS: { key: YoyoFilterKey; label: string; bg: string; text: string; activeBg: string }[] = [
+  { key: 'all',   label: 'All',   bg: 'rgba(245,240,232,0.08)', text: 'rgba(245,240,232,0.5)',  activeBg: 'rgba(245,240,232,0.18)' },
+  { key: 'green', label: 'Green', bg: 'rgba(27,94,32,0.25)',    text: '#a5d6a7',                activeBg: '#1b5e20' },
+  { key: 'amber', label: 'Amber', bg: 'rgba(127,63,0,0.25)',    text: '#ffcc80',                activeBg: '#7f3f00' },
+  { key: 'red',   label: 'Red',   bg: 'rgba(127,31,31,0.25)',   text: '#ef9a9a',                activeBg: '#7f1f1f' },
+  { key: 'grey',  label: 'No Score', bg: 'rgba(0,0,0,0.12)',   text: 'rgba(245,240,232,0.35)', activeBg: 'rgba(0,0,0,0.3)' },
+];
+
+function yoyoCategory(coachEvals: ScoutPlayer['coachEvals']): YoyoFilterKey {
+  const badge = getYoYoBadge(coachEvals);
+  if (!badge) return 'grey';
+  if (badge.best >= 15.5) return 'green';
+  if (badge.best >= 15.2) return 'amber';
+  return 'red';
+}
+
+function exportAllFitnessToCSV(rows: { playerName: string; batch: string; category: string; fitness: Record<string, string>; coachName: string }[]) {
+  const data = rows.map((r) => {
+    const row: Record<string, string> = { Player: r.playerName, Batch: r.batch, Category: r.category };
+    FITNESS_FIELDS.forEach((f) => { row[f] = r.fitness[f] || ''; });
+    row['Coach'] = r.coachName;
+    return row;
+  });
+  const csv = Papa.unparse(data);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `all-fitness-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function AllFitnessTable({
+  players,
+  allBatchNames,
+  onRowClick,
+}: {
+  players: ScoutPlayer[];
+  allBatchNames: string[];
+  onRowClick: (p: ScoutPlayer) => void;
+}) {
+  const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
+
+  // Flatten: one row per coach eval that has any fitness data, sorted by batch → player name
+  const allRows = useMemo(() => {
+    const batchOrder = new Map(allBatchNames.map((b, i) => [b, i]));
+    const sorted = [...players].sort((a, b) => {
+      const ai = batchOrder.get(a.batch || 'Unassigned') ?? 999;
+      const bi = batchOrder.get(b.batch || 'Unassigned') ?? 999;
+      return ai !== bi ? ai - bi : a.name.localeCompare(b.name);
+    });
+    const result: { player: ScoutPlayer; coachName: string; fitness: Record<string, string>; cat: YoyoFilterKey }[] = [];
+    for (const player of sorted) {
+      const cat = yoyoCategory(player.coachEvals);
+      for (const ev of player.coachEvals) {
+        if (!FITNESS_FIELDS.some((f) => ev.evaluation.fitness?.[f])) continue;
+        result.push({ player, coachName: ev.coachName || ev.coachEmail, fitness: ev.evaluation.fitness || {}, cat });
+      }
+    }
+    return result;
+  }, [players, allBatchNames]);
+
+  const filtered = useMemo(
+    () => yoyoFilter === 'all' ? allRows : allRows.filter((r) => r.cat === yoyoFilter),
+    [allRows, yoyoFilter]
+  );
+
+  const exportRows = allRows.map((r) => ({
+    playerName: r.player.name,
+    batch: r.player.batch || '',
+    category: r.player.category || '',
+    fitness: r.fitness,
+    coachName: r.coachName,
+  }));
+
+  // Count per category for filter badges
+  const counts = useMemo(() => {
+    const c: Record<YoyoFilterKey, number> = { all: allRows.length, green: 0, amber: 0, red: 0, grey: 0 };
+    allRows.forEach((r) => { c[r.cat]++; });
+    return c;
+  }, [allRows]);
+
+  if (allRows.length === 0) {
+    return (
+      <div className="rounded-lg border p-10 text-center mt-4" style={{ background: '#243324', borderColor: 'rgba(200,168,75,0.15)' }}>
+        <p className="text-lg font-bold mb-1" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }}>No fitness data yet</p>
+        <p className="text-sm" style={{ color: 'rgba(245,240,232,0.45)' }}>Open a player and fill in the Fitness Assessment section.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        {/* Yo-Yo filter chips */}
+        <div className="flex items-center gap-1.5 flex-wrap flex-1">
+          {YOYO_FILTERS.map((f) => {
+            const isActive = yoyoFilter === f.key;
+            return (
+              <button
+                key={f.key}
+                onClick={() => setYoyoFilter(f.key)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                style={{
+                  fontFamily: 'Barlow Condensed, sans-serif',
+                  background: isActive ? f.activeBg : f.bg,
+                  color: isActive ? '#fff' : f.text,
+                  border: `1px solid ${isActive ? 'transparent' : 'rgba(245,240,232,0.08)'}`,
+                  letterSpacing: '0.07em',
+                }}
+              >
+                {f.label}
+                <span className="text-[10px] px-1 py-px rounded-full font-bold"
+                  style={{ background: 'rgba(0,0,0,0.2)', color: 'inherit' }}>
+                  {counts[f.key]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Export */}
+        <button
+          onClick={() => exportAllFitnessToCSV(exportRows)}
+          className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-80 flex-shrink-0"
+          style={{
+            fontFamily: 'Barlow Condensed, sans-serif',
+            background: 'rgba(200,168,75,0.15)',
+            color: '#c8a84b',
+            border: '1px solid rgba(200,168,75,0.3)',
+            letterSpacing: '0.08em',
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 1v9M5 5l3 3 3-3M1 12v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
+          </svg>
+          Export CSV
+        </button>
+      </div>
+
+      <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(200,168,75,0.15)' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#1d2e1e', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
+                {['Player', 'Batch', 'Category', 'Yo-Yo', ...FITNESS_FIELDS.slice(1), 'Coach'].map((h) => (
+                  <th key={h}
+                    className="px-4 py-3 text-left text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+                    style={{ fontFamily: 'Barlow Condensed, sans-serif', color: h === 'Yo-Yo' ? '#c8a84b' : 'rgba(245,240,232,0.55)' }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((row, i) => {
+                const badge = getYoYoBadge(row.player.coachEvals);
+                const yoyoVal = row.fitness['Yo-Yo'];
+                return (
+                  <tr
+                    key={`${row.player.rowIndex}-${row.coachName}-${i}`}
+                    onClick={() => onRowClick(row.player)}
+                    className="cursor-pointer transition-colors"
+                    style={{ background: i % 2 === 0 ? '#1a2a1a' : '#1d2e1e', borderBottom: '1px solid rgba(200,168,75,0.06)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(192,57,43,0.1)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? '#1a2a1a' : '#1d2e1e')}
+                  >
+                    <td className="px-4 py-2.5">
+                      <span className="font-bold whitespace-nowrap" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>
+                        {row.player.name}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="text-xs" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {row.player.batch || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="text-xs whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.65)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {row.player.category || '—'}
+                      </span>
+                    </td>
+                    {/* Yo-Yo — colored */}
+                    <td className="px-4 py-2.5">
+                      {yoyoVal ? (
+                        <span className="font-bold text-xs px-1.5 py-0.5 rounded"
+                          style={{ fontFamily: 'Barlow Condensed, sans-serif', background: badge?.bg || 'rgba(0,0,0,0.08)', color: badge?.text || 'rgba(245,240,232,0.3)' }}>
+                          {yoyoVal}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>
+                      )}
+                    </td>
+                    {/* Remaining fitness fields */}
+                    {FITNESS_FIELDS.slice(1).map((f) => (
+                      <td key={f} className="px-4 py-2.5">
+                        <span style={{ color: row.fitness[f] ? 'rgba(245,240,232,0.7)' : 'rgba(245,240,232,0.2)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: '0.8rem' }}>
+                          {row.fitness[f] || '—'}
+                        </span>
+                      </td>
+                    ))}
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      <span className="text-xs" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {row.coachName}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2600);
@@ -280,6 +1031,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'all-fitness'>('board');
 
   const [pinnedIds, setPinnedIds] = useState<Set<number>>(() => {
     if (typeof window === 'undefined') return new Set();
@@ -465,7 +1217,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                 }}
                 placeholder="Search players…"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setViewMode('board'); setSearchQuery(e.target.value); }}
               />
               {searchQuery && (
                 <button className="absolute right-2.5 top-1/2 -translate-y-1/2 leading-none"
@@ -510,18 +1262,19 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
             </div>
           </div>
 
-          {/* Batch tab bar */}
-          {!loading && !error && allBatchNames.length > 0 && (
+          {/* Batch tab bar + My Evals toggle */}
+          {!loading && !error && players.length > 0 && (
             <div
               className="batch-tabs flex overflow-x-auto border-t"
               style={{ borderColor: 'rgba(192,57,43,0.2)', scrollbarWidth: 'none' }}
             >
+              {/* Batch tabs */}
               {allBatchNames.map((name) => {
-                const isActive = !isSearching && activeBatch === name;
+                const isActive = viewMode === 'board' && !isSearching && activeBatch === name;
                 return (
                   <button
                     key={name}
-                    onClick={() => { setActiveBatch(name); setSearchQuery(''); }}
+                    onClick={() => { setViewMode('board'); setActiveBatch(name); setSearchQuery(''); }}
                     className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
                     style={{
                       fontFamily: 'Barlow Condensed, sans-serif',
@@ -536,6 +1289,79 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                   </button>
                 );
               })}
+
+              {/* Divider */}
+              <div className="w-px my-2 flex-shrink-0" style={{ background: 'rgba(245,240,232,0.1)' }} />
+
+              {/* My Evals tab */}
+              {(() => {
+                const myEvalsCount = players.filter((p) => p.myEval !== null).length;
+                const isActive = viewMode === 'my-evals';
+                return (
+                  <button
+                    onClick={() => { setViewMode('my-evals'); setSearchQuery(''); }}
+                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5"
+                    style={{
+                      fontFamily: 'Barlow Condensed, sans-serif',
+                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
+                      borderColor: isActive ? '#c8a84b' : 'transparent',
+                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
+                    }}
+                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
+                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
+                  >
+                    My Evals
+                    {myEvalsCount > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold"
+                        style={{ background: isActive ? 'rgba(200,168,75,0.2)' : 'rgba(200,168,75,0.1)', color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.6)' }}>
+                        {myEvalsCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })()}
+
+              {/* My Eval Details tab */}
+              {(() => {
+                const isActive = viewMode === 'my-eval-details';
+                return (
+                  <button
+                    onClick={() => { setViewMode('my-eval-details'); setSearchQuery(''); }}
+                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
+                    style={{
+                      fontFamily: 'Barlow Condensed, sans-serif',
+                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
+                      borderColor: isActive ? '#c8a84b' : 'transparent',
+                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
+                    }}
+                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
+                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
+                  >
+                    My Eval Details
+                  </button>
+                );
+              })()}
+
+              {/* All Fitness tab */}
+              {(() => {
+                const isActive = viewMode === 'all-fitness';
+                return (
+                  <button
+                    onClick={() => { setViewMode('all-fitness'); setSearchQuery(''); }}
+                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
+                    style={{
+                      fontFamily: 'Barlow Condensed, sans-serif',
+                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
+                      borderColor: isActive ? '#c8a84b' : 'transparent',
+                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
+                    }}
+                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
+                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
+                  >
+                    All Fitness
+                  </button>
+                );
+              })()}
             </div>
           )}
         </header>
@@ -615,7 +1441,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           )}
 
           {/* Empty sheet */}
-          {!loading && !error && players.length === 0 && (
+          {!loading && !error && players.length === 0 && viewMode === 'board' && (
             <div className="rounded-lg border p-8 text-center mt-4"
               style={{ background: '#243324', borderColor: 'rgba(200,168,75,0.2)' }}>
               <p className="text-lg font-bold mb-1" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -627,7 +1453,22 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
             </div>
           )}
 
-          {!loading && !error && players.length > 0 && (
+          {/* My Evals table */}
+          {!loading && !error && viewMode === 'my-evals' && (
+            <MyEvalsTable players={players} onRowClick={setActivePlayer} />
+          )}
+
+          {/* My Eval Details table */}
+          {!loading && !error && viewMode === 'my-eval-details' && (
+            <MyEvalDetailsTable players={players} onRowClick={setActivePlayer} />
+          )}
+
+          {/* All Fitness table */}
+          {!loading && !error && viewMode === 'all-fitness' && (
+            <AllFitnessTable players={players} allBatchNames={allBatchNames} onRowClick={setActivePlayer} />
+          )}
+
+          {!loading && !error && players.length > 0 && viewMode === 'board' && (
             <>
               {/* Search result banner */}
               {isSearching && (
