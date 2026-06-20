@@ -1370,6 +1370,8 @@ function exportAdminEvalsToCSV(rows: { player: ScoutPlayer; ev: CoachEval }[]) {
 
 // ── Selection Summary ─────────────────────────────────────────────────
 
+const SELECTION_EXTRA_COLS = ['Primary Skill', 'Batting hand', 'Batting order', 'Bowler arm', 'Bowling type'] as const;
+
 type RagKey = 'all' | 'green' | 'amber' | 'red' | 'grey';
 
 const RAG_FILTERS: { key: RagKey; label: string; dot: string; bg: string; text: string; activeBg: string }[] = [
@@ -1411,16 +1413,14 @@ function exportSelectionToCSV(players: ScoutPlayer[]) {
       Batch: p.batch || '',
       Div: p.div || '',
       Category: p.category || '',
-      Schema: p.schema || '',
-      Evals: p.coachEvals.length,
-      'Avg %': p.aggregatePct || 0,
-      'Yo-Yo': yoyo ?? '',
-      RAG: rag === 'grey' ? 'Not Rated' : rag.charAt(0).toUpperCase() + rag.slice(1),
     };
-    // extra sheet columns
-    for (const [k, v] of Object.entries(p.extraInfo || {})) {
-      row[k] = v;
+    for (const col of SELECTION_EXTRA_COLS) {
+      row[col] = p.extraInfo?.[col] || '';
     }
+    row['Evals'] = p.coachEvals.length;
+    row['Avg %'] = p.aggregatePct || 0;
+    row['Yo-Yo'] = yoyo ?? '';
+    row['RAG'] = rag === 'grey' ? 'Not Rated' : rag.charAt(0).toUpperCase() + rag.slice(1);
     return row;
   });
   const csv = Papa.unparse(data);
@@ -1442,8 +1442,24 @@ function SelectionSummaryTable({
   allBatchNames: string[];
   onRowClick: (p: ScoutPlayer) => void;
 }) {
-  const [ragFilter, setRagFilter] = useState<RagKey>('all');
-  const [catFilter, setCatFilter] = useState<string>('all');
+  const [ragFilters, setRagFilters] = useState<Set<RagKey>>(new Set());
+  const [catFilters, setCatFilters] = useState<Set<string>>(new Set());
+
+  function toggleRag(key: RagKey) {
+    setRagFilters((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
+  function toggleCat(cat: string) {
+    setCatFilters((prev) => {
+      const next = new Set(prev);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
+      return next;
+    });
+  }
 
   const allCategories = useMemo(() => {
     const seen = new Set<string>();
@@ -1474,11 +1490,11 @@ function SelectionSummaryTable({
 
   const filtered = useMemo(() => {
     return baseRows.filter((p) => {
-      if (ragFilter !== 'all' && ragCategory(p) !== ragFilter) return false;
-      if (catFilter !== 'all' && p.category !== catFilter) return false;
+      if (ragFilters.size > 0 && !ragFilters.has(ragCategory(p))) return false;
+      if (catFilters.size > 0 && !catFilters.has(p.category)) return false;
       return true;
     });
-  }, [baseRows, ragFilter, catFilter]);
+  }, [baseRows, ragFilters, catFilters]);
 
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
 
@@ -1498,11 +1514,11 @@ function SelectionSummaryTable({
       if (col === 'Batch')     return p.batch || '';
       if (col === 'Div')       return p.div || '';
       if (col === 'Category')  return p.category || '';
-      if (col === 'Schema')    return p.schema || '';
       if (col === 'Evals')     return p.coachEvals.length;
       if (col === 'Avg %')     return p.aggregatePct;
       if (col === 'Yo-Yo')     return maxYoyo(p) ?? -1;
       if (col === 'RAG')       return ragCategory(p);
+      if ((SELECTION_EXTRA_COLS as readonly string[]).includes(col)) return p.extraInfo?.[col] || '';
       return '';
     });
   }, [filtered, search, sortCol, sortDir]);
@@ -1511,18 +1527,25 @@ function SelectionSummaryTable({
 
   return (
     <div>
-      {/* Toolbar row */}
-      <div className="flex flex-wrap items-start gap-3 mb-4">
+      {/* Filters */}
+      <div className="flex flex-col gap-3 mb-3">
         {/* RAG filter chips */}
         <div className="flex flex-col gap-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Status</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Status</span>
+            {ragFilters.size > 0 && (
+              <button onClick={() => setRagFilters(new Set())} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                Clear ✕
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-1.5 flex-wrap">
-            {RAG_FILTERS.map((f) => {
-              const isActive = ragFilter === f.key;
+            {RAG_FILTERS.filter((f) => f.key !== 'all').map((f) => {
+              const isActive = ragFilters.has(f.key);
               return (
                 <button
                   key={f.key}
-                  onClick={() => setRagFilter(f.key)}
+                  onClick={() => toggleRag(f.key)}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
                   style={{
                     fontFamily: 'Barlow Condensed, sans-serif',
@@ -1544,27 +1567,22 @@ function SelectionSummaryTable({
         {/* Category filter chips */}
         {allCategories.length > 0 && (
           <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Category</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Category</span>
+              {catFilters.size > 0 && (
+                <button onClick={() => setCatFilters(new Set())} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  Clear ✕
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              <button
-                onClick={() => setCatFilter('all')}
-                className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
-                style={{
-                  fontFamily: 'Barlow Condensed, sans-serif',
-                  background: catFilter === 'all' ? 'rgba(245,240,232,0.18)' : 'rgba(245,240,232,0.08)',
-                  color: catFilter === 'all' ? '#f5f0e8' : 'rgba(245,240,232,0.5)',
-                  border: `1px solid ${catFilter === 'all' ? 'transparent' : 'rgba(245,240,232,0.08)'}`,
-                }}
-              >
-                All
-              </button>
               {allCategories.map((cat) => {
                 const col = getCategoryColor(cat);
-                const isActive = catFilter === cat;
+                const isActive = catFilters.has(cat);
                 return (
                   <button
                     key={cat}
-                    onClick={() => setCatFilter(cat)}
+                    onClick={() => toggleCat(cat)}
                     className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
                     style={{
                       fontFamily: 'Barlow Condensed, sans-serif',
@@ -1581,9 +1599,11 @@ function SelectionSummaryTable({
           </div>
         )}
 
-        {/* Search + Export (push right) */}
-        <div className="flex items-end gap-2 ml-auto">
-          <TableSearch value={search} onChange={setSearch} />
+        {/* Search + Export — full-width row so export is always on-screen */}
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <TableSearch value={search} onChange={setSearch} />
+          </div>
           <button
             onClick={() => exportSelectionToCSV(displayRows)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-bold uppercase tracking-wider transition-opacity hover:opacity-75 flex-shrink-0"
@@ -1615,13 +1635,13 @@ function SelectionSummaryTable({
         <table className="w-full border-collapse text-sm" style={{ background: '#1a2c1b' }}>
           <thead>
             <tr style={{ background: '#243324', borderBottom: '1px solid rgba(245,240,232,0.1)' }}>
-              {['Player', 'Batch', 'Div', 'Category', 'Schema', 'Evals', 'Avg %', 'Yo-Yo', 'RAG'].map((h) => (
+              {(['Player', 'Batch', 'Div', 'Category', ...SELECTION_EXTRA_COLS, 'Evals', 'Avg %', 'Yo-Yo', 'RAG'] as string[]).map((h) => (
                 <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
                   className={TH_BASE}
                   style={{
                     ...TH_STYLE,
                     color: h === 'RAG' ? 'rgba(245,240,232,0.4)' : h === 'Yo-Yo' ? '#c8a84b' : 'rgba(245,240,232,0.55)',
-                    minWidth: h === 'Player' ? '140px' : h === 'Category' ? '110px' : '60px',
+                    minWidth: h === 'Player' ? '140px' : h === 'Category' ? '110px' : (SELECTION_EXTRA_COLS as readonly string[]).includes(h) ? '110px' : '60px',
                   }}
                 />
               ))}
@@ -1630,7 +1650,7 @@ function SelectionSummaryTable({
           <tbody>
             {displayRows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                <td colSpan={13} className="px-4 py-8 text-center text-sm" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>
                   No players match the selected filters
                 </td>
               </tr>
@@ -1680,10 +1700,12 @@ function SelectionSummaryTable({
                       </span>
                     ) : <span style={{ color: 'rgba(245,240,232,0.4)', fontSize: '0.8rem' }}>—</span>}
                   </td>
-                  {/* Schema */}
-                  <td className="px-3 py-2 text-xs" style={{ color: 'rgba(245,240,232,0.5)', fontFamily: 'Barlow Condensed, sans-serif', whiteSpace: 'nowrap' }}>
-                    {p.schema}
-                  </td>
+                  {/* Extra info columns */}
+                  {SELECTION_EXTRA_COLS.map((col) => (
+                    <td key={col} className="px-3 py-2 text-xs" style={{ color: 'rgba(245,240,232,0.7)', fontFamily: 'Barlow Condensed, sans-serif', whiteSpace: 'nowrap' }}>
+                      {p.extraInfo?.[col] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                    </td>
+                  ))}
                   {/* Evals */}
                   <td className="px-3 py-2 text-center">
                     <span className="text-xs font-bold" style={{ color: p.coachEvals.length > 0 ? '#c8a84b' : 'rgba(245,240,232,0.2)', fontFamily: 'Barlow Condensed, sans-serif' }}>
