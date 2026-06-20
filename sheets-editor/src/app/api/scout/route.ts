@@ -50,8 +50,9 @@ export async function GET(request: Request) {
     const sheetKey = url.searchParams.get('sheetKey') || 'tryout';
 
     const user = await requireAuth();
+    const isDemo = sheetKey === 'demo';
 
-    if (!(await checkAuthorized(user.email, sheetKey))) {
+    if (!isDemo && !(await checkAuthorized(user.email, sheetKey))) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 403 });
     }
 

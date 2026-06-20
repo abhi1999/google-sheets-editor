@@ -1847,6 +1847,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'admin-evals' | 'admin-skill-details'>('board');
   const [isAdmin, setIsAdmin] = useState(false);
+  const isDemo = sheetKey === 'demo';
 
   const [pinnedIds, setPinnedIds] = useState<Set<number>>(() => {
     if (typeof window === 'undefined') return new Set();
@@ -2065,6 +2066,17 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                 }}>
                 Schedule
               </button>
+              {!isDemo && (
+                <a href="/scout/demo"
+                  className="text-xs px-2.5 py-1.5 rounded border transition-opacity hover:opacity-80 hidden sm:block no-underline"
+                  style={{
+                    fontFamily: 'Barlow Condensed, sans-serif', color: '#c8a84b',
+                    borderColor: 'rgba(200,168,75,0.4)', background: 'transparent',
+                    letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700,
+                  }}>
+                  Demo
+                </a>
+              )}
               <button onClick={() => signOut({ callbackUrl: '/login' })}
                 className="text-xs px-2.5 py-1.5 rounded transition-opacity hover:opacity-80"
                 style={{
@@ -2076,6 +2088,21 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
               </button>
             </div>
           </div>
+
+          {/* Demo mode banner */}
+          {isDemo && (
+            <div className="flex items-center justify-between px-5 md:px-7 py-1.5"
+              style={{ background: 'rgba(200,168,75,0.12)', borderTop: '1px solid rgba(200,168,75,0.3)' }}>
+              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                ★ Demo Mode — data is illustrative only
+              </span>
+              <a href="/scout"
+                className="text-xs font-bold no-underline transition-opacity hover:opacity-70"
+                style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}>
+                Exit Demo →
+              </a>
+            </div>
+          )}
 
           {/* Batch tab bar + My Evals toggle */}
           {!loading && !error && players.length > 0 && (
