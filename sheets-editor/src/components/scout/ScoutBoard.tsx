@@ -389,6 +389,29 @@ function MyEvalsTable({
     'Spin Bowler': '#6a1b9a',
   };
 
+  const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
+  const displayRows = useMemo(() => {
+    const q = search.toLowerCase();
+    const base = q
+      ? myEvalPlayers.filter((p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.batch || '').toLowerCase().includes(q) ||
+          (p.category || '').toLowerCase().includes(q)
+        )
+      : myEvalPlayers;
+    return applySort(base, sortCol, sortDir, (p, col) => {
+      if (col === 'Player') return p.name;
+      if (col === 'Batch') return p.batch || '';
+      if (col === 'Category') return p.category || '';
+      if (col === 'BAT') return calcScore(p.myEval!.evaluation, SCHEMAS['Batsman']).pct;
+      if (col === 'FB') return calcScore(p.myEval!.evaluation, SCHEMAS['Fast Bowler']).pct;
+      if (col === 'SB') return calcScore(p.myEval!.evaluation, SCHEMAS['Spin Bowler']).pct;
+      if (col === 'Remarks') return p.myEval!.remarks || '';
+      if (col === 'Date') return p.myEval!.savedAt || '';
+      return '';
+    });
+  }, [myEvalPlayers, search, sortCol, sortDir]);
+
   if (myEvalPlayers.length === 0) {
     return (
       <div className="rounded-lg border p-10 text-center mt-4"
@@ -406,45 +429,28 @@ function MyEvalsTable({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
-          {myEvalPlayers.length} player{myEvalPlayers.length !== 1 ? 's' : ''} evaluated · click any row to edit
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <TableSearch value={search} onChange={setSearch} />
+        <span className="text-xs flex-1" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {displayRows.length} of {myEvalPlayers.length} evaluated · click row to edit
         </span>
-        <button
-          onClick={() => exportMyEvalsToCSV(players)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-80"
-          style={{
-            fontFamily: 'Barlow Condensed, sans-serif',
-            background: 'rgba(200,168,75,0.15)',
-            color: '#c8a84b',
-            border: '1px solid rgba(200,168,75,0.3)',
-            letterSpacing: '0.08em',
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 1v9M5 5l3 3 3-3M1 12v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
-          </svg>
-          Export CSV
+        <button onClick={() => exportMyEvalsToCSV(players)} style={EXPORT_BTN_STYLE} className="transition-opacity hover:opacity-80">
+          {EXPORT_ICON} Export CSV
         </button>
       </div>
     <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(200,168,75,0.15)' }}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ background: '#1d2e1e', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
-              {['Player', 'Batch', 'Category', ...schemaKeys.map(s => schemaLabels[s]), 'Remarks', 'Date'].map((h) => (
-                <th
-                  key={h}
-                  className="px-4 py-3 text-left text-xs font-bold uppercase tracking-widest whitespace-nowrap"
-                  style={{ fontFamily: 'Barlow Condensed, sans-serif', color: 'rgba(245,240,232,0.55)' }}
-                >
-                  {h}
-                </th>
+            <tr style={TR_HEAD}>
+              {(['Player', 'Batch', 'Category'] as string[]).concat(schemaKeys.map((s) => schemaLabels[s])).concat(['Remarks', 'Date']).map((h) => (
+                <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                  className={TH_BASE} style={TH_STYLE} />
               ))}
             </tr>
           </thead>
           <tbody>
-            {myEvalPlayers.map((p, i) => {
+            {displayRows.map((p, i) => {
               const ev = p.myEval!;
               const scores = schemaKeys.map((s) => ({
                 key: s,
@@ -599,6 +605,30 @@ function MyEvalDetailsTable({
 }) {
   const myEvalPlayers = useMemo(() => players.filter((p) => p.myEval !== null), [players]);
 
+  const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
+  const displayRows = useMemo(() => {
+    const q = search.toLowerCase();
+    const base = q
+      ? myEvalPlayers.filter((p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.batch || '').toLowerCase().includes(q) ||
+          (p.category || '').toLowerCase().includes(q)
+        )
+      : myEvalPlayers;
+    return applySort(base, sortCol, sortDir, (p, col) => {
+      if (col === 'Player') return p.name;
+      if (col === 'Batch') return p.batch || '';
+      if (col === 'Category') return p.category || '';
+      if (col === 'Remarks') return p.myEval!.remarks || '';
+      if (col === 'Date') return p.myEval!.savedAt || '';
+      const skills = p.myEval!.evaluation.skills;
+      for (const { schemaLabel, section } of ALL_SCHEMA_SECTIONS) {
+        if (col === `${schemaLabel}${section.letter}`) return sectionScore(section, skills).wScore;
+      }
+      return '';
+    });
+  }, [myEvalPlayers, search, sortCol, sortDir]);
+
   if (myEvalPlayers.length === 0) {
     return (
       <div className="rounded-lg border p-10 text-center mt-4"
@@ -626,25 +656,13 @@ function MyEvalDetailsTable({
   return (
     <div>
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
-          {myEvalPlayers.length} player{myEvalPlayers.length !== 1 ? 's' : ''} evaluated · click any row to edit
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <TableSearch value={search} onChange={setSearch} />
+        <span className="text-xs flex-1" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {displayRows.length} of {myEvalPlayers.length} evaluated · click row to edit
         </span>
-        <button
-          onClick={() => exportToCSV(players)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-80"
-          style={{
-            fontFamily: 'Barlow Condensed, sans-serif',
-            background: 'rgba(200,168,75,0.15)',
-            color: '#c8a84b',
-            border: '1px solid rgba(200,168,75,0.3)',
-            letterSpacing: '0.08em',
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 1v9M5 5l3 3 3-3M1 12v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
-          </svg>
-          Export CSV
+        <button onClick={() => exportToCSV(players)} style={EXPORT_BTN_STYLE} className="transition-opacity hover:opacity-80">
+          {EXPORT_ICON} Export CSV
         </button>
       </div>
 
@@ -675,40 +693,39 @@ function MyEvalDetailsTable({
               </tr>
 
               {/* Column headers */}
-              <tr style={{ background: '#1d2e1e', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
-                {['Player', 'Batch', 'Category'].map((h) => (
-                  <th key={h} className="px-3 py-2.5 text-left font-bold uppercase tracking-widest whitespace-nowrap sticky"
-                    style={{ fontFamily: 'Barlow Condensed, sans-serif', color: 'rgba(245,240,232,0.55)', minWidth: h === 'Player' ? '130px' : '70px' }}>
-                    {h}
-                  </th>
+              <tr style={TR_HEAD}>
+                {(['Player', 'Batch', 'Category'] as string[]).map((h) => (
+                  <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                    className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+                    style={{ ...TH_STYLE, minWidth: h === 'Player' ? '130px' : '70px' }} />
                 ))}
                 {schemaGroups.map(({ schemaName, schemaLabel, sections }) =>
                   sections.map((sec) => (
-                    <th
+                    <SortTh
                       key={`${schemaName}-${sec.letter}`}
-                      className="px-3 py-2.5 text-center font-bold uppercase tracking-widest whitespace-nowrap"
+                      label={`${schemaLabel}${sec.letter}`}
+                      col={`${schemaLabel}${sec.letter}`}
+                      sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                      title={sec.name}
+                      className="px-3 py-2.5 text-center text-xs font-bold uppercase tracking-widest whitespace-nowrap"
                       style={{
                         fontFamily: 'Barlow Condensed, sans-serif',
                         color: SCHEMA_COLORS[schemaName],
                         minWidth: '60px',
                         borderLeft: sec.letter === 'A' ? '2px solid rgba(0,0,0,0.15)' : undefined,
                       }}
-                      title={sec.name}
-                    >
-                      {schemaLabel}{sec.letter}
-                    </th>
+                    />
                   ))
                 )}
-                {['Remarks', 'Date'].map((h) => (
-                  <th key={h} className="px-3 py-2.5 text-left font-bold uppercase tracking-widest whitespace-nowrap"
-                    style={{ fontFamily: 'Barlow Condensed, sans-serif', color: 'rgba(245,240,232,0.55)', minWidth: h === 'Remarks' ? '180px' : '80px' }}>
-                    {h}
-                  </th>
+                {(['Remarks', 'Date'] as string[]).map((h) => (
+                  <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                    className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+                    style={{ ...TH_STYLE, minWidth: h === 'Remarks' ? '180px' : '80px' }} />
                 ))}
               </tr>
             </thead>
             <tbody>
-              {myEvalPlayers.map((p, i) => {
+              {displayRows.map((p, i) => {
                 const skills = p.myEval!.evaluation.skills;
                 return (
                   <tr
@@ -846,6 +863,28 @@ function AllFitnessTable({
     [allRows, yoyoFilter]
   );
 
+  const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
+  const displayRows = useMemo(() => {
+    const q = search.toLowerCase();
+    const base = q
+      ? filtered.filter((r) =>
+          r.player.name.toLowerCase().includes(q) ||
+          (r.player.batch || '').toLowerCase().includes(q) ||
+          (r.player.category || '').toLowerCase().includes(q) ||
+          r.coachName.toLowerCase().includes(q)
+        )
+      : filtered;
+    return applySort(base, sortCol, sortDir, (r, col) => {
+      if (col === 'Player') return r.player.name;
+      if (col === 'Batch') return r.player.batch || '';
+      if (col === 'Category') return r.player.category || '';
+      if (col === 'Coach') return r.coachName || '';
+      const fVal = r.fitness[col] || '';
+      const n = parseFloat(fVal);
+      return isNaN(n) ? fVal : n;
+    });
+  }, [filtered, search, sortCol, sortDir]);
+
   const exportRows = allRows.map((r) => ({
     playerName: r.player.name,
     batch: r.player.batch || '',
@@ -901,22 +940,11 @@ function AllFitnessTable({
           })}
         </div>
 
+        <TableSearch value={search} onChange={setSearch} />
+
         {/* Export */}
-        <button
-          onClick={() => exportAllFitnessToCSV(exportRows)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-opacity hover:opacity-80 flex-shrink-0"
-          style={{
-            fontFamily: 'Barlow Condensed, sans-serif',
-            background: 'rgba(200,168,75,0.15)',
-            color: '#c8a84b',
-            border: '1px solid rgba(200,168,75,0.3)',
-            letterSpacing: '0.08em',
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 1v9M5 5l3 3 3-3M1 12v1a1 1 0 001 1h12a1 1 0 001-1v-1" />
-          </svg>
-          Export CSV
+        <button onClick={() => exportAllFitnessToCSV(exportRows)} style={EXPORT_BTN_STYLE} className="transition-opacity hover:opacity-80">
+          {EXPORT_ICON} Export CSV
         </button>
       </div>
 
@@ -924,18 +952,16 @@ function AllFitnessTable({
         <div className="overflow-x-auto">
           <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: '#1d2e1e', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
+              <tr style={TR_HEAD}>
                 {['Player', 'Batch', 'Category', 'Yo-Yo', ...FITNESS_FIELDS.slice(1), 'Coach'].map((h) => (
-                  <th key={h}
-                    className="px-4 py-3 text-left text-xs font-bold uppercase tracking-widest whitespace-nowrap"
-                    style={{ fontFamily: 'Barlow Condensed, sans-serif', color: h === 'Yo-Yo' ? '#c8a84b' : 'rgba(245,240,232,0.55)' }}>
-                    {h}
-                  </th>
+                  <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                    className={TH_BASE}
+                    style={{ ...TH_STYLE, color: h === 'Yo-Yo' ? '#c8a84b' : 'rgba(245,240,232,0.55)' }} />
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row, i) => {
+              {displayRows.map((row, i) => {
                 const badge = getYoYoBadge(row.player.coachEvals);
                 const yoyoVal = row.fitness['Yo-Yo'];
                 return (
@@ -997,6 +1023,247 @@ function AllFitnessTable({
   );
 }
 
+function exportAdminEvalsToCSV(rows: { player: ScoutPlayer; ev: CoachEval }[]) {
+  const data = rows.map(({ player, ev }) => {
+    const row: Record<string, string | number> = {
+      Player: player.name,
+      Batch: player.batch || '',
+      Category: player.category || '',
+      Coach: ev.coachName || ev.coachEmail,
+    };
+    const skills = ev.evaluation.skills;
+    ALL_SCHEMA_SECTIONS.forEach(({ schemaLabel, section }) => {
+      const { wScore, maxW } = sectionScore(section, skills);
+      row[`${schemaLabel} ${section.letter}: ${section.name}`] = wScore;
+      row[`${schemaLabel} ${section.letter} Max`] = maxW;
+    });
+    row['Remarks'] = ev.remarks || '';
+    row['Date'] = ev.savedAt ? new Date(ev.savedAt).toLocaleDateString() : '';
+    return row;
+  });
+  const csv = Papa.unparse(data);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `all-coach-evals-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function AllEvalDetailsTable({
+  players,
+  onRowClick,
+}: {
+  players: ScoutPlayer[];
+  onRowClick: (p: ScoutPlayer) => void;
+}) {
+  const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
+
+  const allRows = useMemo(() => {
+    const result: { player: ScoutPlayer; ev: CoachEval }[] = [];
+    for (const player of players) {
+      for (const ev of player.coachEvals) {
+        result.push({ player, ev });
+      }
+    }
+    return result;
+  }, [players]);
+
+  const displayRows = useMemo(() => {
+    const q = search.toLowerCase();
+    const base = q
+      ? allRows.filter((r) =>
+          r.player.name.toLowerCase().includes(q) ||
+          (r.player.batch || '').toLowerCase().includes(q) ||
+          (r.player.category || '').toLowerCase().includes(q) ||
+          r.ev.coachName.toLowerCase().includes(q)
+        )
+      : allRows;
+    return applySort(base, sortCol, sortDir, (r, col) => {
+      if (col === 'Player') return r.player.name;
+      if (col === 'Batch') return r.player.batch || '';
+      if (col === 'Category') return r.player.category || '';
+      if (col === 'Coach') return r.ev.coachName || '';
+      if (col === 'Remarks') return r.ev.remarks || '';
+      if (col === 'Date') return r.ev.savedAt || '';
+      const skills = r.ev.evaluation.skills;
+      for (const { schemaLabel, section } of ALL_SCHEMA_SECTIONS) {
+        if (col === `${schemaLabel}${section.letter}`) return sectionScore(section, skills).wScore;
+      }
+      return '';
+    });
+  }, [allRows, search, sortCol, sortDir]);
+
+  const schemaGroups = (Object.entries(SCHEMAS) as [SchemaType, (typeof SCHEMAS)[SchemaType]][]).map(
+    ([schemaName, def]) => ({
+      schemaName,
+      schemaLabel: schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB',
+      sections: def.sections,
+    })
+  );
+
+  if (allRows.length === 0) {
+    return (
+      <div className="rounded-lg border p-10 text-center mt-4"
+        style={{ background: '#2a1a1a', borderColor: 'rgba(192,57,43,0.2)' }}>
+        <p className="text-lg font-bold mb-1" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          No evaluations recorded yet
+        </p>
+        <p className="text-sm" style={{ color: 'rgba(245,240,232,0.45)' }}>
+          Coach evaluations will appear here once players have been rated.
+        </p>
+      </div>
+    );
+  }
+
+  const uniqueCoaches = new Set(allRows.map((r) => r.ev.coachEmail)).size;
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <TableSearch value={search} onChange={setSearch} />
+        <span className="text-xs flex-1" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {displayRows.length} of {allRows.length} entries · {uniqueCoaches} coach{uniqueCoaches !== 1 ? 'es' : ''}
+        </span>
+        <button onClick={() => exportAdminEvalsToCSV(allRows)} style={EXPORT_BTN_STYLE} className="transition-opacity hover:opacity-80">
+          {EXPORT_ICON} Export CSV
+        </button>
+      </div>
+
+      <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+        <div className="overflow-x-auto">
+          <table className="text-xs" style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
+            <thead>
+              {/* Schema group row */}
+              <tr style={{ background: '#1a1010', borderBottom: '1px solid rgba(192,57,43,0.2)' }}>
+                <th colSpan={4} style={{ padding: 0 }} />
+                {schemaGroups.map(({ schemaName, schemaLabel, sections }) => (
+                  <th
+                    key={schemaName}
+                    colSpan={sections.length}
+                    className="px-3 py-1.5 text-center text-[0.6rem] font-bold uppercase tracking-widest"
+                    style={{
+                      fontFamily: 'Barlow Condensed, sans-serif',
+                      color: '#fff',
+                      background: SCHEMA_COLORS[schemaName],
+                      letterSpacing: '0.12em',
+                      borderLeft: '2px solid rgba(0,0,0,0.2)',
+                    }}
+                  >
+                    {schemaLabel} — {schemaName}
+                  </th>
+                ))}
+                <th colSpan={2} style={{ padding: 0 }} />
+              </tr>
+
+              {/* Column headers */}
+              <tr style={{ background: '#2a1818', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
+                {(['Player', 'Batch', 'Category', 'Coach'] as string[]).map((h) => (
+                  <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                    className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+                    style={{ ...TH_STYLE, minWidth: h === 'Player' ? '130px' : h === 'Coach' ? '120px' : '70px' }} />
+                ))}
+                {schemaGroups.map(({ schemaName, schemaLabel, sections }) =>
+                  sections.map((sec) => (
+                    <SortTh
+                      key={`${schemaName}-${sec.letter}`}
+                      label={`${schemaLabel}${sec.letter}`}
+                      col={`${schemaLabel}${sec.letter}`}
+                      sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                      title={sec.name}
+                      className="px-3 py-2.5 text-center text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+                      style={{
+                        fontFamily: 'Barlow Condensed, sans-serif',
+                        color: SCHEMA_COLORS[schemaName],
+                        minWidth: '60px',
+                        borderLeft: sec.letter === 'A' ? '2px solid rgba(0,0,0,0.15)' : undefined,
+                      }}
+                    />
+                  ))
+                )}
+                {(['Remarks', 'Date'] as string[]).map((h) => (
+                  <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                    className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+                    style={{ ...TH_STYLE, minWidth: h === 'Remarks' ? '180px' : '80px' }} />
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {displayRows.map(({ player, ev }, i) => {
+                const skills = ev.evaluation.skills;
+                return (
+                  <tr
+                    key={`${player.rowIndex}-${ev.coachEmail}-${i}`}
+                    onClick={() => onRowClick(player)}
+                    className="cursor-pointer transition-colors"
+                    style={{ background: i % 2 === 0 ? '#1e1212' : '#221515', borderBottom: '1px solid rgba(192,57,43,0.06)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(192,57,43,0.12)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? '#1e1212' : '#221515')}
+                  >
+                    <td className="px-3 py-2.5">
+                      <span className="font-bold whitespace-nowrap" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>
+                        {player.name}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{player.batch || '—'}</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.65)', fontFamily: 'Barlow Condensed, sans-serif' }}>{player.category || '—'}</span>
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className="font-semibold" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {ev.coachName || ev.coachEmail}
+                      </span>
+                    </td>
+                    {schemaGroups.map(({ schemaName, sections }) =>
+                      sections.map((sec) => {
+                        const { wScore, maxW } = sectionScore(sec, skills);
+                        const filled = wScore > 0;
+                        return (
+                          <td
+                            key={`${schemaName}-${sec.letter}`}
+                            className="px-3 py-2.5 text-center"
+                            style={{ borderLeft: sec.letter === 'A' ? '2px solid rgba(0,0,0,0.1)' : undefined }}
+                          >
+                            {filled ? (
+                              <span
+                                className="font-bold"
+                                style={{ fontFamily: 'Barlow Condensed, sans-serif', color: SCHEMA_COLORS[schemaName] }}
+                                title={`${sec.name}: ${wScore}/${maxW}`}
+                              >
+                                {wScore}/{maxW}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
+                            )}
+                          </td>
+                        );
+                      })
+                    )}
+                    <td className="px-3 py-2.5 max-w-[200px]">
+                      <span className="line-clamp-2" style={{ color: 'rgba(245,240,232,0.5)' }}>
+                        {ev.remarks || '—'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {ev.savedAt ? new Date(ev.savedAt).toLocaleDateString() : '—'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2600);
@@ -1031,7 +1298,8 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'all-fitness'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'all-fitness' | 'admin-evals'>('board');
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [pinnedIds, setPinnedIds] = useState<Set<number>>(() => {
     if (typeof window === 'undefined') return new Set();
@@ -1048,7 +1316,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
         if (r.status === 403) { setUnauthorized(true); return; }
         const data = await r.json();
         if (data.error) setError(data.error);
-        else setPlayers(data.players || []);
+        else { setPlayers(data.players || []); setIsAdmin(!!data.isAdmin); }
       })
       .catch(() => setError('Failed to load player data.'))
       .finally(() => setLoading(false));
@@ -1362,6 +1630,34 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                   </button>
                 );
               })()}
+
+              {/* Admin: All Coach Evals tab — only for admins */}
+              {isAdmin && (() => {
+                const isActive = viewMode === 'admin-evals';
+                return (
+                  <>
+                    <div className="w-px my-2 flex-shrink-0" style={{ background: 'rgba(192,57,43,0.3)' }} />
+                    <button
+                      onClick={() => { setViewMode('admin-evals'); setSearchQuery(''); }}
+                      className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5"
+                      style={{
+                        fontFamily: 'Barlow Condensed, sans-serif',
+                        color: isActive ? '#ef9a9a' : 'rgba(239,154,154,0.45)',
+                        borderColor: isActive ? '#c0392b' : 'transparent',
+                        background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
+                      }}
+                      onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.75)'; }}
+                      onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.45)'; }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      All Coach Evals
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           )}
         </header>
@@ -1466,6 +1762,22 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {/* All Fitness table */}
           {!loading && !error && viewMode === 'all-fitness' && (
             <AllFitnessTable players={players} allBatchNames={allBatchNames} onRowClick={setActivePlayer} />
+          )}
+
+          {/* Admin: All Coach Evals table */}
+          {!loading && !error && viewMode === 'admin-evals' && isAdmin && (
+            <>
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef9a9a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.1em' }}>
+                  Admin Report — All Coach Evaluations
+                </span>
+              </div>
+              <AllEvalDetailsTable players={players} onRowClick={setActivePlayer} />
+            </>
           )}
 
           {!loading && !error && players.length > 0 && viewMode === 'board' && (

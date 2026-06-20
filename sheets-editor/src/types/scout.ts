@@ -56,4 +56,5 @@ export interface CoachEvalPayload {
 export interface ScoutApiResponse {
   players: ScoutPlayer[];
   isEditor: boolean;
+  isAdmin: boolean;
 }
