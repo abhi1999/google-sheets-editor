@@ -1368,6 +1368,367 @@ function exportAdminEvalsToCSV(rows: { player: ScoutPlayer; ev: CoachEval }[]) {
   URL.revokeObjectURL(url);
 }
 
+// ── Selection Summary ─────────────────────────────────────────────────
+
+type RagKey = 'all' | 'green' | 'amber' | 'red' | 'grey';
+
+const RAG_FILTERS: { key: RagKey; label: string; dot: string; bg: string; text: string; activeBg: string }[] = [
+  { key: 'all',   label: 'All',      dot: 'rgba(245,240,232,0.3)',  bg: 'rgba(245,240,232,0.08)', text: 'rgba(245,240,232,0.5)',  activeBg: 'rgba(245,240,232,0.18)' },
+  { key: 'green', label: 'Green',    dot: '#4caf50',                bg: 'rgba(27,94,32,0.25)',    text: '#a5d6a7',                activeBg: '#1b5e20' },
+  { key: 'amber', label: 'Amber',    dot: '#ff9800',                bg: 'rgba(127,63,0,0.25)',    text: '#ffcc80',                activeBg: '#7f3f00' },
+  { key: 'red',   label: 'Red',      dot: '#ef5350',                bg: 'rgba(127,31,31,0.25)',   text: '#ef9a9a',                activeBg: '#7f1f1f' },
+  { key: 'grey',  label: 'Not Rated', dot: 'rgba(245,240,232,0.2)', bg: 'rgba(0,0,0,0.12)',      text: 'rgba(245,240,232,0.35)', activeBg: 'rgba(0,0,0,0.3)' },
+];
+
+function ragCategory(player: ScoutPlayer): RagKey {
+  const yoyo = maxYoyo(player);
+  if (yoyo === null) return 'grey';
+  if (yoyo >= 15.5) return 'green';
+  if (yoyo >= 15.2) return 'amber';
+  return 'red';
+}
+
+function ragStyle(key: RagKey): { color: string; bg: string } {
+  if (key === 'green') return { color: '#a5d6a7', bg: 'rgba(27,94,32,0.35)' };
+  if (key === 'amber') return { color: '#ffcc80', bg: 'rgba(127,63,0,0.35)' };
+  if (key === 'red')   return { color: '#ef9a9a', bg: 'rgba(127,31,31,0.35)' };
+  return { color: 'rgba(245,240,232,0.3)', bg: 'rgba(0,0,0,0.2)' };
+}
+
+function maxYoyo(player: ScoutPlayer): number | null {
+  const vals = player.coachEvals
+    .map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || ''))
+    .filter((v) => !isNaN(v) && v > 0);
+  return vals.length > 0 ? Math.max(...vals) : null;
+}
+
+function exportSelectionToCSV(players: ScoutPlayer[]) {
+  const data = players.map((p) => {
+    const yoyo = maxYoyo(p);
+    const rag = ragCategory(p);
+    const row: Record<string, string | number> = {
+      Player: p.name,
+      Batch: p.batch || '',
+      Div: p.div || '',
+      Category: p.category || '',
+      Schema: p.schema || '',
+      Evals: p.coachEvals.length,
+      'Avg %': p.aggregatePct || 0,
+      'Yo-Yo': yoyo ?? '',
+      RAG: rag === 'grey' ? 'Not Rated' : rag.charAt(0).toUpperCase() + rag.slice(1),
+    };
+    // extra sheet columns
+    for (const [k, v] of Object.entries(p.extraInfo || {})) {
+      row[k] = v;
+    }
+    return row;
+  });
+  const csv = Papa.unparse(data);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `selection-summary-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function SelectionSummaryTable({
+  players,
+  allBatchNames,
+  onRowClick,
+}: {
+  players: ScoutPlayer[];
+  allBatchNames: string[];
+  onRowClick: (p: ScoutPlayer) => void;
+}) {
+  const [ragFilter, setRagFilter] = useState<RagKey>('all');
+  const [catFilter, setCatFilter] = useState<string>('all');
+
+  const allCategories = useMemo(() => {
+    const seen = new Set<string>();
+    const cats: string[] = [];
+    const batchOrder = new Map(allBatchNames.map((b, i) => [b, i]));
+    [...players]
+      .sort((a, b) => (batchOrder.get(a.batch) ?? 999) - (batchOrder.get(b.batch) ?? 999))
+      .forEach((p) => { if (p.category && !seen.has(p.category)) { seen.add(p.category); cats.push(p.category); } });
+    return cats;
+  }, [players, allBatchNames]);
+
+  const baseRows = useMemo(() => {
+    const batchOrder = new Map(allBatchNames.map((b, i) => [b, i]));
+    return [...players]
+      .filter((p) => p.name)
+      .sort((a, b) => {
+        const ai = batchOrder.get(a.batch || '') ?? 999;
+        const bi = batchOrder.get(b.batch || '') ?? 999;
+        return ai !== bi ? ai - bi : a.name.localeCompare(b.name);
+      });
+  }, [players, allBatchNames]);
+
+  const ragCounts = useMemo(() => {
+    const c: Record<RagKey, number> = { all: baseRows.length, green: 0, amber: 0, red: 0, grey: 0 };
+    baseRows.forEach((p) => { c[ragCategory(p)]++; });
+    return c;
+  }, [baseRows]);
+
+  const filtered = useMemo(() => {
+    return baseRows.filter((p) => {
+      if (ragFilter !== 'all' && ragCategory(p) !== ragFilter) return false;
+      if (catFilter !== 'all' && p.category !== catFilter) return false;
+      return true;
+    });
+  }, [baseRows, ragFilter, catFilter]);
+
+  const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
+
+  const displayRows = useMemo(() => {
+    const q = search.toLowerCase();
+    const base = q
+      ? filtered.filter((p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.batch || '').toLowerCase().includes(q) ||
+          (p.category || '').toLowerCase().includes(q) ||
+          (p.div || '').toLowerCase().includes(q) ||
+          (p.schema || '').toLowerCase().includes(q)
+        )
+      : filtered;
+    return applySort(base, sortCol, sortDir, (p, col) => {
+      if (col === 'Player')    return p.name;
+      if (col === 'Batch')     return p.batch || '';
+      if (col === 'Div')       return p.div || '';
+      if (col === 'Category')  return p.category || '';
+      if (col === 'Schema')    return p.schema || '';
+      if (col === 'Evals')     return p.coachEvals.length;
+      if (col === 'Avg %')     return p.aggregatePct;
+      if (col === 'Yo-Yo')     return maxYoyo(p) ?? -1;
+      if (col === 'RAG')       return ragCategory(p);
+      return '';
+    });
+  }, [filtered, search, sortCol, sortDir]);
+
+  const TH_BASE = 'px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer select-none';
+
+  return (
+    <div>
+      {/* Toolbar row */}
+      <div className="flex flex-wrap items-start gap-3 mb-4">
+        {/* RAG filter chips */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Status</span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {RAG_FILTERS.map((f) => {
+              const isActive = ragFilter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setRagFilter(f.key)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                  style={{
+                    fontFamily: 'Barlow Condensed, sans-serif',
+                    background: isActive ? f.activeBg : f.bg,
+                    color: isActive ? '#fff' : f.text,
+                    border: `1px solid ${isActive ? 'transparent' : 'rgba(245,240,232,0.08)'}`,
+                    letterSpacing: '0.07em',
+                  }}
+                >
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: f.dot }} />
+                  {f.label}
+                  <span className="opacity-70 text-[10px]">({ragCounts[f.key]})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Category filter chips */}
+        {allCategories.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Category</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => setCatFilter('all')}
+                className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                style={{
+                  fontFamily: 'Barlow Condensed, sans-serif',
+                  background: catFilter === 'all' ? 'rgba(245,240,232,0.18)' : 'rgba(245,240,232,0.08)',
+                  color: catFilter === 'all' ? '#f5f0e8' : 'rgba(245,240,232,0.5)',
+                  border: `1px solid ${catFilter === 'all' ? 'transparent' : 'rgba(245,240,232,0.08)'}`,
+                }}
+              >
+                All
+              </button>
+              {allCategories.map((cat) => {
+                const col = getCategoryColor(cat);
+                const isActive = catFilter === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setCatFilter(cat)}
+                    className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                    style={{
+                      fontFamily: 'Barlow Condensed, sans-serif',
+                      background: isActive ? col.bg : `${col.bg}55`,
+                      color: isActive ? col.text : `${col.text}aa`,
+                      border: `1px solid ${isActive ? 'transparent' : 'rgba(245,240,232,0.08)'}`,
+                    }}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Search + Export (push right) */}
+        <div className="flex items-end gap-2 ml-auto">
+          <TableSearch value={search} onChange={setSearch} />
+          <button
+            onClick={() => exportSelectionToCSV(displayRows)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-bold uppercase tracking-wider transition-opacity hover:opacity-75 flex-shrink-0"
+            style={{
+              fontFamily: 'Barlow Condensed, sans-serif',
+              background: 'rgba(200,168,75,0.12)',
+              color: '#c8a84b',
+              border: '1px solid rgba(200,168,75,0.25)',
+              letterSpacing: '0.07em',
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Summary line */}
+      <p className="text-xs mb-3" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.05em' }}>
+        {displayRows.length} player{displayRows.length !== 1 ? 's' : ''} · click a row to open eval
+      </p>
+
+      {/* Table */}
+      <div className="overflow-x-auto rounded-lg border" style={{ borderColor: 'rgba(245,240,232,0.08)' }}>
+        <table className="w-full border-collapse text-sm" style={{ background: '#1a2c1b' }}>
+          <thead>
+            <tr style={{ background: '#243324', borderBottom: '1px solid rgba(245,240,232,0.1)' }}>
+              {['Player', 'Batch', 'Div', 'Category', 'Schema', 'Evals', 'Avg %', 'Yo-Yo', 'RAG'].map((h) => (
+                <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                  className={TH_BASE}
+                  style={{
+                    ...TH_STYLE,
+                    color: h === 'RAG' ? 'rgba(245,240,232,0.4)' : h === 'Yo-Yo' ? '#c8a84b' : 'rgba(245,240,232,0.55)',
+                    minWidth: h === 'Player' ? '140px' : h === 'Category' ? '110px' : '60px',
+                  }}
+                />
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {displayRows.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-4 py-8 text-center text-sm" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  No players match the selected filters
+                </td>
+              </tr>
+            ) : displayRows.map((p, i) => {
+              const rag = ragCategory(p);
+              const rs = ragStyle(rag);
+              const yoyo = maxYoyo(p);
+              const yoyoBadge = yoyo !== null
+                ? (yoyo >= 15.5 ? { color: '#a5d6a7', bg: 'rgba(27,94,32,0.35)' }
+                  : yoyo >= 15.2 ? { color: '#ffcc80', bg: 'rgba(127,63,0,0.35)' }
+                  : { color: '#ef9a9a', bg: 'rgba(127,31,31,0.35)' })
+                : null;
+              const catCol = p.category ? getCategoryColor(p.category) : null;
+              return (
+                <tr
+                  key={p.rowIndex}
+                  onClick={() => onRowClick(p)}
+                  className="transition-colors cursor-pointer"
+                  style={{
+                    background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)',
+                    borderBottom: '1px solid rgba(245,240,232,0.05)',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(200,168,75,0.07)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)')}
+                >
+                  {/* Player */}
+                  <td className="px-3 py-2 font-bold" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif', fontSize: '0.9rem', whiteSpace: 'nowrap' }}>
+                    {p.name}
+                  </td>
+                  {/* Batch */}
+                  <td className="px-3 py-2 text-xs" style={{ color: 'rgba(245,240,232,0.5)', fontFamily: 'Barlow Condensed, sans-serif', whiteSpace: 'nowrap' }}>
+                    {p.batch || '—'}
+                  </td>
+                  {/* Div */}
+                  <td className="px-3 py-2">
+                    {p.div ? (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase" style={(() => { const s = getDivStyle(p.div); return s ? { background: s.bg, color: s.text } : { color: 'rgba(245,240,232,0.4)' }; })()}>
+                        {p.div}
+                      </span>
+                    ) : <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                  </td>
+                  {/* Category */}
+                  <td className="px-3 py-2">
+                    {catCol ? (
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase" style={{ background: `${catCol.bg}55`, color: catCol.text }}>
+                        {p.category}
+                      </span>
+                    ) : <span style={{ color: 'rgba(245,240,232,0.4)', fontSize: '0.8rem' }}>—</span>}
+                  </td>
+                  {/* Schema */}
+                  <td className="px-3 py-2 text-xs" style={{ color: 'rgba(245,240,232,0.5)', fontFamily: 'Barlow Condensed, sans-serif', whiteSpace: 'nowrap' }}>
+                    {p.schema}
+                  </td>
+                  {/* Evals */}
+                  <td className="px-3 py-2 text-center">
+                    <span className="text-xs font-bold" style={{ color: p.coachEvals.length > 0 ? '#c8a84b' : 'rgba(245,240,232,0.2)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {p.coachEvals.length}
+                    </span>
+                  </td>
+                  {/* Avg % */}
+                  <td className="px-3 py-2 text-center">
+                    {p.coachEvals.length > 0 ? (
+                      <span className="px-2 py-0.5 rounded text-xs font-bold" style={{ background: rs.bg, color: rs.color, fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {p.aggregatePct}%
+                      </span>
+                    ) : (
+                      <span style={{ color: 'rgba(245,240,232,0.2)', fontSize: '0.8rem' }}>—</span>
+                    )}
+                  </td>
+                  {/* Yo-Yo */}
+                  <td className="px-3 py-2 text-center">
+                    {yoyoBadge ? (
+                      <span className="px-2 py-0.5 rounded text-xs font-bold" style={{ background: yoyoBadge.bg, color: yoyoBadge.color, fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {yoyo}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'rgba(245,240,232,0.2)', fontSize: '0.8rem' }}>—</span>
+                    )}
+                  </td>
+                  {/* RAG dot */}
+                  <td className="px-3 py-2 text-center">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: RAG_FILTERS.find((f) => f.key === rag)?.dot }} />
+                      <span className="text-[10px] font-bold uppercase hidden md:inline" style={{ color: rs.color, fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.07em' }}>
+                        {rag === 'grey' ? 'N/R' : rag}
+                      </span>
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function AllEvalDetailsTable({
   players,
   onRowClick,
@@ -1845,7 +2206,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'admin-evals' | 'admin-skill-details'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'admin-evals' | 'admin-skill-details'>('board');
   const [isAdmin, setIsAdmin] = useState(false);
   const isDemo = sheetKey === 'demo';
 
@@ -2221,7 +2582,28 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
                     onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
                   >
-                    All Fitness
+                    All Fitness Scores
+                  </button>
+                );
+              })()}
+
+              {/* Selection Summary tab */}
+              {(() => {
+                const isActive = viewMode === 'selection';
+                return (
+                  <button
+                    onClick={() => { setViewMode('selection'); setSearchQuery(''); }}
+                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
+                    style={{
+                      fontFamily: 'Barlow Condensed, sans-serif',
+                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
+                      borderColor: isActive ? '#c8a84b' : 'transparent',
+                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
+                    }}
+                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
+                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
+                  >
+                    Selection
                   </button>
                 );
               })()}
@@ -2380,6 +2762,11 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {/* All Fitness table */}
           {!loading && !error && viewMode === 'all-fitness' && (
             <AllFitnessTable players={players} allBatchNames={allBatchNames} onRowClick={setActivePlayer} />
+          )}
+
+          {/* Selection Summary table */}
+          {!loading && !error && viewMode === 'selection' && (
+            <SelectionSummaryTable players={players} allBatchNames={allBatchNames} onRowClick={setActivePlayer} />
           )}
 
           {/* Admin: All Skill Notes table */}
