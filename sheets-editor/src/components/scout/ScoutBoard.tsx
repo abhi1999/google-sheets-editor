@@ -596,6 +596,85 @@ function exportToCSV(players: ScoutPlayer[]) {
   URL.revokeObjectURL(url);
 }
 
+function SchemaHelpModal({ schemaName, onClose }: { schemaName: SchemaType; onClose: () => void }) {
+  const def = SCHEMAS[schemaName];
+  const color = SCHEMA_COLORS[schemaName];
+  const label = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.78)' }}
+      onClick={onClose}
+    >
+      <div
+        className="rounded-xl flex flex-col"
+        style={{ background: '#18261a', border: `2px solid ${color}`, width: '100%', maxWidth: '540px', maxHeight: '82vh' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal header */}
+        <div className="flex items-center justify-between px-5 py-3 flex-shrink-0 rounded-t-xl" style={{ background: color }}>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-widest opacity-70" style={{ color: '#fff', fontFamily: 'Barlow Condensed, sans-serif' }}>
+              Schema Guide · Skills scored 1–5
+            </div>
+            <div className="text-base font-extrabold uppercase tracking-wider" style={{ color: '#fff', fontFamily: 'Barlow Condensed, sans-serif' }}>
+              {label} — {schemaName}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', fontSize: '1.1rem', lineHeight: 1, padding: '4px 6px' }}>✕</button>
+        </div>
+
+        {/* Sections */}
+        <div className="overflow-y-auto px-5 py-4 space-y-5">
+          {def.sections.map((sec) => {
+            const maxPts = sec.skills.reduce((s, sk) => s + 5 * sk.weight, 0);
+            return (
+              <div key={sec.letter}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span
+                    className="text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                    style={{ background: color, color: '#fff', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}
+                  >
+                    {label}{sec.letter}
+                  </span>
+                  <span className="text-sm font-bold uppercase tracking-wide" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>
+                    {sec.name}
+                  </span>
+                  <span className="text-[10px] ml-auto flex-shrink-0" style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    max {maxPts} pts
+                  </span>
+                </div>
+                <div className="space-y-0.5 pl-1 border-l-2" style={{ borderColor: `${color}55` }}>
+                  {sec.skills.map((sk) => (
+                    <div key={sk.name} className="flex items-start gap-2 py-0.5">
+                      <span
+                        className="text-[9px] font-bold px-1 py-px rounded flex-shrink-0 mt-px"
+                        style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}
+                      >
+                        ×{sk.weight}
+                      </span>
+                      <div className="min-w-0">
+                        <span className="text-xs font-semibold" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                          {sk.name}
+                        </span>
+                        {sk.desc && (
+                          <span className="text-xs ml-1.5" style={{ color: 'rgba(245,240,232,0.4)' }}>
+                            — {sk.desc}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MyEvalDetailsTable({
   players,
   onRowClick,
@@ -628,6 +707,8 @@ function MyEvalDetailsTable({
       return '';
     });
   }, [myEvalPlayers, search, sortCol, sortDir]);
+
+  const [helpSchema, setHelpSchema] = useState<SchemaType | null>(null);
 
   if (myEvalPlayers.length === 0) {
     return (
@@ -686,7 +767,18 @@ function MyEvalDetailsTable({
                       borderLeft: '2px solid rgba(0,0,0,0.2)',
                     }}
                   >
-                    {schemaLabel} — {schemaName}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      {schemaLabel} — {schemaName}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setHelpSchema(schemaName); }}
+                        title={`View ${schemaName} scoring guide`}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center' }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+                        </svg>
+                      </button>
+                    </span>
                   </th>
                 ))}
                 <th colSpan={2} style={{ padding: 0 }} />
@@ -789,6 +881,7 @@ function MyEvalDetailsTable({
           </table>
         </div>
       </div>
+      {helpSchema && <SchemaHelpModal schemaName={helpSchema} onClose={() => setHelpSchema(null)} />}
     </div>
   );
 }
@@ -1103,6 +1196,8 @@ function AllEvalDetailsTable({
     })
   );
 
+  const [helpSchema, setHelpSchema] = useState<SchemaType | null>(null);
+
   if (allRows.length === 0) {
     return (
       <div className="rounded-lg border p-10 text-center mt-4"
@@ -1152,7 +1247,18 @@ function AllEvalDetailsTable({
                       borderLeft: '2px solid rgba(0,0,0,0.2)',
                     }}
                   >
-                    {schemaLabel} — {schemaName}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      {schemaLabel} — {schemaName}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setHelpSchema(schemaName); }}
+                        title={`View ${schemaName} scoring guide`}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center' }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+                        </svg>
+                      </button>
+                    </span>
                   </th>
                 ))}
                 <th colSpan={2} style={{ padding: 0 }} />
@@ -1260,6 +1366,7 @@ function AllEvalDetailsTable({
           </table>
         </div>
       </div>
+      {helpSchema && <SchemaHelpModal schemaName={helpSchema} onClose={() => setHelpSchema(null)} />}
     </div>
   );
 }
