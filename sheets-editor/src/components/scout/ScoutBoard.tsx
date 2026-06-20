@@ -886,6 +886,230 @@ function MyEvalDetailsTable({
   );
 }
 
+type SkillDetailRow = {
+  player: ScoutPlayer;
+  schemaName: SchemaType;
+  schemaLabel: string;
+  sectionLetter: string;
+  sectionName: string;
+  skillName: string;
+  skillDesc: string;
+  weight: number;
+  score: number;
+  note: string;
+};
+
+function exportMySkillDetailsToCSV(rows: SkillDetailRow[]) {
+  const data = rows.map((r) => ({
+    Player: r.player.name,
+    Batch: r.player.batch || '',
+    Category: r.player.category || '',
+    Schema: r.schemaName,
+    Section: `${r.schemaLabel}${r.sectionLetter}: ${r.sectionName}`,
+    Skill: r.skillName,
+    Weight: r.weight,
+    Score: r.score > 0 ? r.score : '',
+    Notes: r.note,
+  }));
+  const csv = Papa.unparse(data);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `my-skill-details-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function MySkillDetailsTable({
+  players,
+  onRowClick,
+}: {
+  players: ScoutPlayer[];
+  onRowClick: (p: ScoutPlayer) => void;
+}) {
+  const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
+
+  const allRows = useMemo((): SkillDetailRow[] => {
+    const result: SkillDetailRow[] = [];
+    for (const player of players) {
+      if (!player.myEval) continue;
+      const { skills, notes } = player.myEval.evaluation;
+      for (const [schemaName, def] of Object.entries(SCHEMAS) as [SchemaType, typeof SCHEMAS[SchemaType]][]) {
+        const schemaLabel = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
+        for (const sec of def.sections) {
+          for (const sk of sec.skills) {
+            const score = skills[sk.name] || 0;
+            const note = notes[sk.name] || '';
+            if (score === 0 && !note) continue;
+            result.push({
+              player, schemaName, schemaLabel,
+              sectionLetter: sec.letter, sectionName: sec.name,
+              skillName: sk.name, skillDesc: sk.desc, weight: sk.weight,
+              score, note,
+            });
+          }
+        }
+      }
+    }
+    return result;
+  }, [players]);
+
+  const displayRows = useMemo(() => {
+    const q = search.toLowerCase();
+    const base = q
+      ? allRows.filter((r) =>
+          r.player.name.toLowerCase().includes(q) ||
+          (r.player.batch || '').toLowerCase().includes(q) ||
+          (r.player.category || '').toLowerCase().includes(q) ||
+          r.skillName.toLowerCase().includes(q) ||
+          r.sectionName.toLowerCase().includes(q) ||
+          r.note.toLowerCase().includes(q)
+        )
+      : allRows;
+    return applySort(base, sortCol, sortDir, (r, col) => {
+      if (col === 'Player') return r.player.name;
+      if (col === 'Batch') return r.player.batch || '';
+      if (col === 'Category') return r.player.category || '';
+      if (col === 'Schema') return r.schemaName;
+      if (col === 'Section') return `${r.schemaLabel}${r.sectionLetter}`;
+      if (col === 'Skill') return r.skillName;
+      if (col === 'Wt') return r.weight;
+      if (col === 'Score') return r.score;
+      if (col === 'Notes') return r.note;
+      return '';
+    });
+  }, [allRows, search, sortCol, sortDir]);
+
+  if (allRows.length === 0) {
+    return (
+      <div className="rounded-lg border p-10 text-center mt-4"
+        style={{ background: '#243324', borderColor: 'rgba(200,168,75,0.15)' }}>
+        <p className="text-lg font-bold mb-1" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          No skill entries yet
+        </p>
+        <p className="text-sm" style={{ color: 'rgba(245,240,232,0.45)' }}>
+          Rate a player and fill in individual skills to see them here.
+        </p>
+      </div>
+    );
+  }
+
+  const cols = ['Player', 'Batch', 'Category', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes'];
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <TableSearch value={search} onChange={setSearch} />
+        <span className="text-xs flex-1" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {displayRows.length} of {allRows.length} skill entries · click row to open player
+        </span>
+        <button onClick={() => exportMySkillDetailsToCSV(allRows)} style={EXPORT_BTN_STYLE} className="transition-opacity hover:opacity-80">
+          {EXPORT_ICON} Export CSV
+        </button>
+      </div>
+
+      <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(200,168,75,0.15)' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={TR_HEAD}>
+                {cols.map((h) => (
+                  <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                    className={TH_BASE}
+                    style={{ ...TH_STYLE, ...(h === 'Wt' ? { textAlign: 'center' } : {}), ...(h === 'Score' ? { textAlign: 'center' } : {}) }} />
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {displayRows.map((r, i) => {
+                const color = SCHEMA_COLORS[r.schemaName];
+                return (
+                  <tr
+                    key={`${r.player.rowIndex}-${r.schemaName}-${r.sectionLetter}-${r.skillName}-${i}`}
+                    onClick={() => onRowClick(r.player)}
+                    className="cursor-pointer"
+                    style={{ background: i % 2 === 0 ? '#1a2a1a' : '#1d2e1e', borderBottom: '1px solid rgba(200,168,75,0.06)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(192,57,43,0.1)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? '#1a2a1a' : '#1d2e1e')}
+                  >
+                    {/* Player */}
+                    <td className="px-4 py-2">
+                      <span className="font-bold whitespace-nowrap" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>
+                        {r.player.name}
+                      </span>
+                    </td>
+                    {/* Batch */}
+                    <td className="px-4 py-2">
+                      <span style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.batch || '—'}</span>
+                    </td>
+                    {/* Category */}
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.6)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.category || '—'}</span>
+                    </td>
+                    {/* Schema badge */}
+                    <td className="px-4 py-2">
+                      <span className="font-bold text-[10px] px-1.5 py-0.5 rounded" style={{ background: color, color: '#fff', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.schemaLabel}
+                      </span>
+                    </td>
+                    {/* Section */}
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span className="font-bold" style={{ color, fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.schemaLabel}{r.sectionLetter}
+                      </span>
+                      <span className="ml-1.5" style={{ color: 'rgba(245,240,232,0.38)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.sectionName}
+                      </span>
+                    </td>
+                    {/* Skill */}
+                    <td className="px-4 py-2">
+                      <span style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }} title={r.skillDesc}>
+                        {r.skillName}
+                      </span>
+                    </td>
+                    {/* Weight */}
+                    <td className="px-4 py-2 text-center">
+                      <span className="text-[10px] font-bold px-1.5 py-px rounded" style={{ background: 'rgba(200,168,75,0.1)', color: 'rgba(200,168,75,0.6)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        ×{r.weight}
+                      </span>
+                    </td>
+                    {/* Score — stars */}
+                    <td className="px-4 py-2 text-center whitespace-nowrap">
+                      {r.score > 0 ? (
+                        <span>
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <span key={n} style={{ color: n <= r.score ? '#c8a84b' : 'rgba(245,240,232,0.12)', fontSize: '0.9rem', lineHeight: 1 }}>★</span>
+                          ))}
+                          <span className="ml-1.5" style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: '0.7rem' }}>
+                            {r.score}/5
+                          </span>
+                        </span>
+                      ) : (
+                        <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
+                      )}
+                    </td>
+                    {/* Notes */}
+                    <td className="px-4 py-2" style={{ maxWidth: '300px' }}>
+                      {r.note ? (
+                        <span style={{ color: 'rgba(245,240,232,0.7)', fontFamily: 'Barlow, sans-serif', fontStyle: 'italic' }}>
+                          "{r.note}"
+                        </span>
+                      ) : (
+                        <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type YoyoFilterKey = 'all' | 'green' | 'amber' | 'red' | 'grey';
 
 const YOYO_FILTERS: { key: YoyoFilterKey; label: string; bg: string; text: string; activeBg: string }[] = [
@@ -1371,6 +1595,222 @@ function AllEvalDetailsTable({
   );
 }
 
+type AdminSkillDetailRow = SkillDetailRow & { coachName: string; coachEmail: string };
+
+function exportAdminSkillDetailsToCSV(rows: AdminSkillDetailRow[]) {
+  const data = rows.map((r) => ({
+    Player: r.player.name,
+    Batch: r.player.batch || '',
+    Category: r.player.category || '',
+    Coach: r.coachName,
+    Schema: r.schemaName,
+    Section: `${r.schemaLabel}${r.sectionLetter}: ${r.sectionName}`,
+    Skill: r.skillName,
+    Weight: r.weight,
+    Score: r.score > 0 ? r.score : '',
+    Notes: r.note,
+  }));
+  const csv = Papa.unparse(data);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `all-skill-notes-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function AdminSkillDetailsTable({
+  players,
+  onRowClick,
+}: {
+  players: ScoutPlayer[];
+  onRowClick: (p: ScoutPlayer) => void;
+}) {
+  const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
+
+  const allRows = useMemo((): AdminSkillDetailRow[] => {
+    const result: AdminSkillDetailRow[] = [];
+    for (const player of players) {
+      for (const ev of player.coachEvals) {
+        const { skills, notes } = ev.evaluation;
+        for (const [schemaName, def] of Object.entries(SCHEMAS) as [SchemaType, typeof SCHEMAS[SchemaType]][]) {
+          const schemaLabel = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
+          for (const sec of def.sections) {
+            for (const sk of sec.skills) {
+              const score = skills[sk.name] || 0;
+              const note = notes[sk.name] || '';
+              if (score === 0 && !note) continue;
+              result.push({
+                player, schemaName, schemaLabel,
+                sectionLetter: sec.letter, sectionName: sec.name,
+                skillName: sk.name, skillDesc: sk.desc, weight: sk.weight,
+                score, note,
+                coachName: ev.coachName || ev.coachEmail,
+                coachEmail: ev.coachEmail,
+              });
+            }
+          }
+        }
+      }
+    }
+    return result;
+  }, [players]);
+
+  const displayRows = useMemo(() => {
+    const q = search.toLowerCase();
+    const base = q
+      ? allRows.filter((r) =>
+          r.player.name.toLowerCase().includes(q) ||
+          (r.player.batch || '').toLowerCase().includes(q) ||
+          (r.player.category || '').toLowerCase().includes(q) ||
+          r.coachName.toLowerCase().includes(q) ||
+          r.skillName.toLowerCase().includes(q) ||
+          r.sectionName.toLowerCase().includes(q) ||
+          r.note.toLowerCase().includes(q)
+        )
+      : allRows;
+    return applySort(base, sortCol, sortDir, (r, col) => {
+      if (col === 'Player') return r.player.name;
+      if (col === 'Batch') return r.player.batch || '';
+      if (col === 'Category') return r.player.category || '';
+      if (col === 'Coach') return r.coachName;
+      if (col === 'Schema') return r.schemaName;
+      if (col === 'Section') return `${r.schemaLabel}${r.sectionLetter}`;
+      if (col === 'Skill') return r.skillName;
+      if (col === 'Wt') return r.weight;
+      if (col === 'Score') return r.score;
+      if (col === 'Notes') return r.note;
+      return '';
+    });
+  }, [allRows, search, sortCol, sortDir]);
+
+  if (allRows.length === 0) {
+    return (
+      <div className="rounded-lg border p-10 text-center mt-4"
+        style={{ background: '#2a1a1a', borderColor: 'rgba(192,57,43,0.2)' }}>
+        <p className="text-lg font-bold mb-1" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          No skill entries recorded yet
+        </p>
+        <p className="text-sm" style={{ color: 'rgba(245,240,232,0.45)' }}>
+          Skill scores and notes will appear here once coaches have rated players.
+        </p>
+      </div>
+    );
+  }
+
+  const uniqueCoaches = new Set(allRows.map((r) => r.coachEmail)).size;
+  const cols = ['Player', 'Batch', 'Category', 'Coach', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes'];
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <TableSearch value={search} onChange={setSearch} />
+        <span className="text-xs flex-1" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {displayRows.length} of {allRows.length} skill entries · {uniqueCoaches} coach{uniqueCoaches !== 1 ? 'es' : ''}
+        </span>
+        <button onClick={() => exportAdminSkillDetailsToCSV(allRows)} style={EXPORT_BTN_STYLE} className="transition-opacity hover:opacity-80">
+          {EXPORT_ICON} Export CSV
+        </button>
+      </div>
+
+      <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#2a1818', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
+                {cols.map((h) => (
+                  <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                    className={TH_BASE}
+                    style={{ ...TH_STYLE, ...(h === 'Wt' || h === 'Score' ? { textAlign: 'center' } : {}) }} />
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {displayRows.map((r, i) => {
+                const color = SCHEMA_COLORS[r.schemaName];
+                return (
+                  <tr
+                    key={`${r.player.rowIndex}-${r.coachEmail}-${r.schemaName}-${r.sectionLetter}-${r.skillName}-${i}`}
+                    onClick={() => onRowClick(r.player)}
+                    className="cursor-pointer"
+                    style={{ background: i % 2 === 0 ? '#1e1212' : '#221515', borderBottom: '1px solid rgba(192,57,43,0.06)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(192,57,43,0.12)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? '#1e1212' : '#221515')}
+                  >
+                    <td className="px-4 py-2">
+                      <span className="font-bold whitespace-nowrap" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>
+                        {r.player.name}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.batch || '—'}</span>
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.6)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.category || '—'}</span>
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span className="font-semibold" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.coachName}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="font-bold text-[10px] px-1.5 py-0.5 rounded" style={{ background: color, color: '#fff', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.schemaLabel}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span className="font-bold" style={{ color, fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.schemaLabel}{r.sectionLetter}
+                      </span>
+                      <span className="ml-1.5" style={{ color: 'rgba(245,240,232,0.38)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.sectionName}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }} title={r.skillDesc}>
+                        {r.skillName}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <span className="text-[10px] font-bold px-1.5 py-px rounded" style={{ background: 'rgba(200,168,75,0.1)', color: 'rgba(200,168,75,0.6)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        ×{r.weight}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-center whitespace-nowrap">
+                      {r.score > 0 ? (
+                        <span>
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <span key={n} style={{ color: n <= r.score ? '#c8a84b' : 'rgba(245,240,232,0.12)', fontSize: '0.9rem', lineHeight: 1 }}>★</span>
+                          ))}
+                          <span className="ml-1.5" style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: '0.7rem' }}>
+                            {r.score}/5
+                          </span>
+                        </span>
+                      ) : (
+                        <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2" style={{ maxWidth: '300px' }}>
+                      {r.note ? (
+                        <span style={{ color: 'rgba(245,240,232,0.7)', fontFamily: 'Barlow, sans-serif', fontStyle: 'italic' }}>
+                          "{r.note}"
+                        </span>
+                      ) : (
+                        <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2600);
@@ -1405,7 +1845,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'all-fitness' | 'admin-evals'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'admin-evals' | 'admin-skill-details'>('board');
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [pinnedIds, setPinnedIds] = useState<Set<number>>(() => {
@@ -1717,6 +2157,27 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                 );
               })()}
 
+              {/* Skill Notes tab */}
+              {(() => {
+                const isActive = viewMode === 'my-skill-details';
+                return (
+                  <button
+                    onClick={() => { setViewMode('my-skill-details'); setSearchQuery(''); }}
+                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
+                    style={{
+                      fontFamily: 'Barlow Condensed, sans-serif',
+                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
+                      borderColor: isActive ? '#c8a84b' : 'transparent',
+                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
+                    }}
+                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
+                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
+                  >
+                    Skill Notes
+                  </button>
+                );
+              })()}
+
               {/* All Fitness tab */}
               {(() => {
                 const isActive = viewMode === 'all-fitness';
@@ -1761,6 +2222,24 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                       </svg>
                       All Coach Evals
+                    </button>
+                    <button
+                      onClick={() => { setViewMode('admin-skill-details'); setSearchQuery(''); }}
+                      className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5"
+                      style={{
+                        fontFamily: 'Barlow Condensed, sans-serif',
+                        color: viewMode === 'admin-skill-details' ? '#ef9a9a' : 'rgba(239,154,154,0.45)',
+                        borderColor: viewMode === 'admin-skill-details' ? '#c0392b' : 'transparent',
+                        background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
+                      }}
+                      onMouseEnter={(e) => { if (viewMode !== 'admin-skill-details') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.75)'; }}
+                      onMouseLeave={(e) => { if (viewMode !== 'admin-skill-details') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.45)'; }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      All Skill Notes
                     </button>
                   </>
                 );
@@ -1866,9 +2345,30 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
             <MyEvalDetailsTable players={players} onRowClick={setActivePlayer} />
           )}
 
+          {/* Skill Notes table */}
+          {!loading && !error && viewMode === 'my-skill-details' && (
+            <MySkillDetailsTable players={players} onRowClick={setActivePlayer} />
+          )}
+
           {/* All Fitness table */}
           {!loading && !error && viewMode === 'all-fitness' && (
             <AllFitnessTable players={players} allBatchNames={allBatchNames} onRowClick={setActivePlayer} />
+          )}
+
+          {/* Admin: All Skill Notes table */}
+          {!loading && !error && viewMode === 'admin-skill-details' && isAdmin && (
+            <>
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef9a9a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.1em' }}>
+                  Admin Report — All Coaches · Individual Skill Scores &amp; Notes
+                </span>
+              </div>
+              <AdminSkillDetailsTable players={players} onRowClick={setActivePlayer} />
+            </>
           )}
 
           {/* Admin: All Coach Evals table */}
