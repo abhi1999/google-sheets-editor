@@ -9,7 +9,7 @@ const TEAM_COLORS = [
   { name: 'Red',    bg: '#c0392b', text: '#ef9a9a', dim: 'rgba(192,57,43,0.18)' },
   { name: 'Blue',   bg: '#1565c0', text: '#90caf9', dim: 'rgba(21,101,192,0.18)' },
   { name: 'Green',  bg: '#2e7d32', text: '#a5d6a7', dim: 'rgba(46,125,50,0.18)' },
-  { name: 'Gold',   bg: '#9a7e00', text: '#ffe082', dim: 'rgba(154,126,0,0.18)' },
+  { name: 'Yellow', bg: '#f57f17', text: '#fff176', dim: 'rgba(245,127,23,0.18)' },
   { name: 'Orange', bg: '#e65100', text: '#ffcc80', dim: 'rgba(230,81,0,0.18)' },
   { name: 'Purple', bg: '#6a1b9a', text: '#ce93d8', dim: 'rgba(106,27,154,0.18)' },
 ] as const;
@@ -68,6 +68,35 @@ function yoyoColor(yy: number | null): string {
   if (yy >= 15.5) return '#81c784';
   if (yy >= 15.2) return '#ffb74d';
   return '#ef9a9a';
+}
+
+function exportPackage(pkg: TeamPackage, players: ScoutPlayer[]) {
+  const playerMap = new Map(players.map((p) => [p.rowIndex, p]));
+  const headers = ['Slot', 'Role', 'Type', ...pkg.teams.map((t) => t.teamName)];
+  const rows = TEAM_SLOTS.map((comp) => {
+    const row: string[] = [
+      String(comp.slot),
+      comp.role,
+      comp.variant ?? '',
+      ...pkg.teams.map((team) => {
+        const s = team.slots.find((sl) => sl.slot === comp.slot);
+        if (!s?.playerRowIndex) return '';
+        const p = playerMap.get(s.playerRowIndex);
+        return p ? p.name : s.playerName;
+      }),
+    ];
+    return row;
+  });
+
+  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const csv = [headers, ...rows].map((r) => r.map(escape).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${pkg.packageName.replace(/\s+/g, '-')}-teams.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ─── PackageCard ──────────────────────────────────────────────────────────────
@@ -676,10 +705,34 @@ export function TeamSelectionBoard({
             </div>
           )}
 
+          {!isEditable && (
+            <button
+              onClick={() => exportPackage(editPkg, players)}
+              style={{
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
+                color: 'rgba(245,240,232,0.55)', borderRadius: 6, padding: '6px 14px',
+                fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+                textTransform: 'uppercase' as const, cursor: 'pointer', marginLeft: 'auto',
+              }}>
+              ↓ Export CSV
+            </button>
+          )}
+
           {isEditable && (
             <div className="flex flex-wrap items-center gap-2 ml-auto">
               {dirty && <span style={{ color: 'rgba(200,168,75,0.7)', fontFamily: FONT, fontSize: 11 }}>Unsaved changes</span>}
               {saveError && <span style={{ color: '#ef9a9a', fontFamily: FONT, fontSize: 11 }}>{saveError}</span>}
+
+              <button
+                onClick={() => exportPackage(editPkg, players)}
+                style={{
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
+                  color: 'rgba(245,240,232,0.55)', borderRadius: 6, padding: '6px 14px',
+                  fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+                  textTransform: 'uppercase' as const, cursor: 'pointer',
+                }}>
+                ↓ Export CSV
+              </button>
 
               <button
                 onClick={() => updatePkg((p) => ({ ...p, shared: !p.shared }))}
