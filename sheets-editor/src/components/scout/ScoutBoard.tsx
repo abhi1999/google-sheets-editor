@@ -3012,11 +3012,6 @@ function AdminPivotTable({
       .filter(({ visSkills }) => visSkills.length > 0);
   }
 
-  // Visible schemas (schemas with ≥1 visible skill, within schemaFilter)
-  const visibleSchemasWithData = visibleSchemas.filter(([schemaName, def]) =>
-    def.sections.some((sec) => sec.skills.some((sk) => visibleSkillKeys.has(`${schemaName}|${sec.letter}|${sk.name}`)))
-  );
-
   function getSkillStat(player: ScoutPlayer, skillName: string) {
     const entries = player.coachEvals
       .map((e) => ({ coachName: e.coachName || e.coachEmail, score: e.evaluation.skills?.[skillName] || 0 }))
@@ -3254,13 +3249,25 @@ function AdminPivotTable({
           style={{
             padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700,
             fontFamily: 'Barlow Condensed, sans-serif',
-            background: showCoveragePanel ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.05)',
-            color: showCoveragePanel ? '#c8a84b' : 'rgba(245,240,232,0.5)',
-            border: `1px solid ${showCoveragePanel ? 'rgba(200,168,75,0.4)' : 'rgba(255,255,255,0.1)'}`,
+            background: showCoveragePanel || (Object.values(schemaCoverage).some((c) => c.category !== 'all' || c.yoyo !== 'all' || c.threshold > 0)) ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.05)',
+            color: showCoveragePanel || (Object.values(schemaCoverage).some((c) => c.category !== 'all' || c.yoyo !== 'all' || c.threshold > 0)) ? '#c8a84b' : 'rgba(245,240,232,0.5)',
+            border: `1px solid ${showCoveragePanel || (Object.values(schemaCoverage).some((c) => c.category !== 'all' || c.yoyo !== 'all' || c.threshold > 0)) ? 'rgba(200,168,75,0.4)' : 'rgba(255,255,255,0.1)'}`,
             cursor: 'pointer',
           }}>
           ⚙ Skill Filter {showCoveragePanel ? '▲' : '▼'}
         </button>
+        {Object.values(schemaCoverage).some((c) => c.category !== 'all' || c.yoyo !== 'all' || c.threshold > 0) && (
+          <button
+            onClick={() => setSchemaCoverage({ ...DEFAULT_SCHEMA_COVERAGE })}
+            style={{
+              padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+              fontFamily: 'Barlow Condensed, sans-serif',
+              background: 'rgba(192,57,43,0.12)', color: 'rgba(220,100,90,0.85)',
+              border: '1px solid rgba(192,57,43,0.3)', cursor: 'pointer',
+            }}>
+            ✕ reset skills
+          </button>
+        )}
       </div>
 
       {/* Coverage filter panel — one row per schema */}
@@ -3355,7 +3362,7 @@ function AdminPivotTable({
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(0, PLAYER_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Player</th>
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W, YOYO_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Yo-Yo</th>
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Category</th>
-                {visibleSchemasWithData.map(([schemaName, def]) => {
+                {visibleSchemas.map(([schemaName, def]) => {
                   const visSecs = getVisibleSections(schemaName, def);
                   const colSpan = visSecs.reduce((s, { visSkills }) => s + visSkills.length * 2 + 1, 0) + 1;
                   const color = SCHEMA_COLORS[schemaName];
@@ -3370,7 +3377,7 @@ function AdminPivotTable({
               </tr>
               {/* Row 2: Section headers + Schema Avg (rowSpan=3) */}
               <tr>
-                {visibleSchemasWithData.map(([schemaName, def]) => (
+                {visibleSchemas.map(([schemaName, def]) => (
                   <Fragment key={`hdr2-${schemaName}`}>
                     {getVisibleSections(schemaName, def).map(({ sec, visSkills }) => (
                       <th key={`${schemaName}-${sec.letter}`} colSpan={visSkills.length * 2 + 1}
@@ -3388,7 +3395,7 @@ function AdminPivotTable({
               </tr>
               {/* Row 3: Skill headers + Section Avg (rowSpan=2) */}
               <tr>
-                {visibleSchemasWithData.map(([schemaName, def]) =>
+                {visibleSchemas.map(([schemaName, def]) =>
                   getVisibleSections(schemaName, def).map(({ sec, visSkills }) => (
                     <Fragment key={`hdr3-${schemaName}-${sec.letter}`}>
                       {visSkills.map((sk) => (
@@ -3408,7 +3415,7 @@ function AdminPivotTable({
               </tr>
               {/* Row 4: Avg | N (only skill sub-cols; sec/schema avg covered by rowSpan) */}
               <tr>
-                {visibleSchemasWithData.map(([schemaName, def]) =>
+                {visibleSchemas.map(([schemaName, def]) =>
                   getVisibleSections(schemaName, def).flatMap(({ sec, visSkills }) =>
                     visSkills.map((sk) => (
                       <Fragment key={`${schemaName}-${sec.letter}-${sk.name}-sub`}>
@@ -3456,7 +3463,7 @@ function AdminPivotTable({
                       </span>
                     </td>
                     {/* Skill cells + section avg + schema avg (only visible skills/sections/schemas) */}
-                    {visibleSchemasWithData.map(([schemaName, def]) => {
+                    {visibleSchemas.map(([schemaName, def]) => {
                       const visSecs = getVisibleSections(schemaName, def);
                       const schemaAvg = player.schema === schemaName ? getSchemaAvgVis(player, visSecs) : null;
                       const schemaAvgSc = schemaAvg !== null ? skillScoreColor(schemaAvg) : null;

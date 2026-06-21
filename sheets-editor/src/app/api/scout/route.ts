@@ -14,7 +14,11 @@ const SYSTEM_COLUMNS = new Set([
 ]);
 
 function toSchemaType(raw: string): SchemaType {
-  if (VALID_SCHEMAS.includes(raw as SchemaType)) return raw as SchemaType;
+  const trimmed = raw.trim();
+  if (VALID_SCHEMAS.includes(trimmed as SchemaType)) return trimmed as SchemaType;
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith('fast')) return 'Fast Bowler';
+  if (lower.startsWith('spin')) return 'Spin Bowler';
   return 'Batsman';
 }
 
