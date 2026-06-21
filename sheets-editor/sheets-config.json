@@ -63,6 +63,17 @@
       "editableColumns": ["Evaluation", "Score", "Pct", "Rating", "Remarks"],
       "editorEmails": [],
       "useEditAccessSheet": true
+    },
+    {
+      "id": "demo",
+      "name": "Scout Demo",
+      "description": "Public demo — open to all logged-in users, no AuthorizedUsers check. Replace sheetId with your demo Google Sheet ID.",
+      "sheetId": "1nfxSlO6faIWrkJQuIn7nVNxW7mimZuH8kE-ZQpRrNWM",
+      "range": "Players!A1:AZ1000",
+      "auditSheetName": "AuditLog",
+      "editableColumns": ["Evaluation", "Score", "Pct", "Rating", "Remarks"],
+      "editorEmails": [],
+      "useEditAccessSheet": false
     }
   ]
 }

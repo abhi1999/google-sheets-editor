@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     const user = await requireAuth();
 
-    if (!(await checkAuthorized(user.email, sheetKey))) {
+    if (sheetKey !== 'demo' && !(await checkAuthorized(user.email, sheetKey))) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 403 });
     }
 

@@ -31,18 +31,35 @@ async function checkAuthorized(userEmail: string, sheetKey: string): Promise<boo
   }
 }
 
+async function checkAdmin(userEmail: string, sheetKey: string): Promise<boolean> {
+  try {
+    const { rows } = await readTab('AdminUsers', sheetKey);
+    return rows.some((row) =>
+      Object.entries(row)
+        .filter(([k]) => k !== '__rowIndex')
+        .some(([, v]) => typeof v === 'string' && v.trim().toLowerCase() === userEmail.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const sheetKey = url.searchParams.get('sheetKey') || 'tryout';
 
     const user = await requireAuth();
+    const isDemo = sheetKey === 'demo';
 
-    if (!(await checkAuthorized(user.email, sheetKey))) {
+    if (!isDemo && !(await checkAuthorized(user.email, sheetKey))) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 403 });
     }
 
-    const { headers, rows } = await readSheetData(sheetKey);
+    const [{ headers, rows }, isAdmin] = await Promise.all([
+      readSheetData(sheetKey),
+      checkAdmin(user.email, sheetKey),
+    ]);
 
     const extraColumns = headers.filter((h) => !SYSTEM_COLUMNS.has(h));
 
@@ -107,6 +124,7 @@ export async function GET(request: Request) {
     const response: ScoutApiResponse = {
       players,
       isEditor: user.isEditor,
+      isAdmin,
     };
 
     return NextResponse.json(response);
