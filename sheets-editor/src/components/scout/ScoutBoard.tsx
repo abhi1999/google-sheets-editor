@@ -2928,10 +2928,12 @@ function AdminPivotTable({
   players,
   onRowClick,
   sheetKey,
+  allowCoachBreakdown = false,
 }: {
   players: ScoutPlayer[];
   onRowClick: (p: ScoutPlayer) => void;
   sheetKey: string;
+  allowCoachBreakdown?: boolean;
 }) {
   const [schemaFilter, setSchemaFilter] = useState<SchemaType | 'all'>('all');
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
@@ -3578,14 +3580,14 @@ function AdminPivotTable({
                                   return (
                                     <Fragment key={`${player.rowIndex}-${schemaName}-${sec.letter}-${sk.name}`}>
                                       <td
-                                        title={`${player.name} · ${sk.name}: avg ${stat.avg.toFixed(1)} from ${stat.count} coach${stat.count !== 1 ? 'es' : ''}`}
+                                        title={allowCoachBreakdown ? `${player.name} · ${sk.name}: avg ${stat.avg.toFixed(1)} from ${stat.count} coach${stat.count !== 1 ? 'es' : ''}` : `${stat.avg.toFixed(1)} (${stat.count} coach${stat.count !== 1 ? 'es' : ''})`}
                                         style={{
                                           textAlign: 'center', padding: '4px 3px', fontSize: 11, fontWeight: 700,
                                           fontFamily: 'Barlow Condensed, sans-serif',
                                           background: sc.bg, color: sc.color,
-                                          cursor: 'pointer', borderLeft: '1px solid rgba(255,255,255,0.04)',
+                                          cursor: allowCoachBreakdown ? 'pointer' : 'default', borderLeft: '1px solid rgba(255,255,255,0.04)',
                                         }}
-                                        onClick={(e) => {
+                                        onClick={allowCoachBreakdown ? (e) => {
                                           e.stopPropagation();
                                           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                           setPopover({
@@ -3595,7 +3597,7 @@ function AdminPivotTable({
                                             x: rect.left,
                                             y: rect.bottom + 6,
                                           });
-                                        }}>
+                                        } : undefined}>
                                         {stat.avg.toFixed(1)}
                                       </td>
                                       <td style={{ textAlign: 'center', padding: '4px 2px', fontSize: 9, color: 'rgba(245,240,232,0.3)', background: rowBg }}>
@@ -4371,7 +4373,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                   Admin Report — Skill Pivot (Schema → Section → Skill Averages)
                 </span>
               </div>
-              <AdminPivotTable players={players} onRowClick={setActivePlayer} sheetKey={sheetKey} />
+              <AdminPivotTable players={players} onRowClick={setActivePlayer} sheetKey={sheetKey} allowCoachBreakdown />
             </>
           )}
 
