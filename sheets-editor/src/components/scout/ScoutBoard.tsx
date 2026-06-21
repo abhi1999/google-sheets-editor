@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
+import { useState, useEffect, useMemo, useCallback, Fragment, createContext, useContext } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import type { ScoutPlayer, PlayerEvaluation, SchemaType, CoachEval } from '@/types/scout';
@@ -14,6 +14,10 @@ interface ScoutBoardProps {
   sheetKey: string;
   user: AppUser;
 }
+
+export type YoyoThresholds = { greenMin: number; amberMin: number };
+export const DEFAULT_YOYO_THRESHOLDS: YoyoThresholds = { greenMin: 15.5, amberMin: 15.2 };
+const YoyoThresholdsCtx = createContext<YoyoThresholds>(DEFAULT_YOYO_THRESHOLDS);
 
 interface CategoryGroup {
   name: string;
@@ -55,14 +59,14 @@ function getDivStyle(div: string): { bg: string; text: string } | null {
   return { bg: '#5d4037', text: '#fff' };
 }
 
-function getYoYoBadge(coachEvals: ScoutPlayer['coachEvals']): { best: number; bg: string; text: string } | null {
+function getYoYoBadge(coachEvals: ScoutPlayer['coachEvals'], t: YoyoThresholds = DEFAULT_YOYO_THRESHOLDS): { best: number; bg: string; text: string } | null {
   const vals = coachEvals
     .map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || ''))
     .filter((v) => !isNaN(v) && v > 0);
   if (vals.length === 0) return null;
   const best = Math.min(...vals);
-  if (best >= 15.5) return { best, bg: '#1b5e20', text: '#a5d6a7' };
-  if (best >= 15.2) return { best, bg: '#7f3f00', text: '#ffcc80' };
+  if (best >= t.greenMin) return { best, bg: '#1b5e20', text: '#a5d6a7' };
+  if (best >= t.amberMin) return { best, bg: '#7f3f00', text: '#ffcc80' };
   return { best, bg: '#7f1f1f', text: '#ef9a9a' };
 }
 
@@ -107,6 +111,7 @@ function PlayerCard({
   showBatch?: boolean;
   userEmail: string;
 }) {
+  const t = useContext(YoyoThresholdsCtx);
   const catColor = getCategoryColor(player.category);
   const divStyle = getDivStyle(player.div);
 
@@ -212,7 +217,7 @@ function PlayerCard({
         </div>
       )}
       {(() => {
-        const yoyo = getYoYoBadge(player.coachEvals);
+        const yoyo = getYoYoBadge(player.coachEvals, t);
         return yoyo ? (
           <div
             className="inline-block mt-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded"
@@ -1143,11 +1148,11 @@ const YOYO_FILTERS: { key: YoyoFilterKey; label: string; bg: string; text: strin
   { key: 'grey',  label: 'No Score', bg: 'rgba(0,0,0,0.12)',   text: 'rgba(245,240,232,0.35)', activeBg: 'rgba(0,0,0,0.3)' },
 ];
 
-function yoyoCategory(coachEvals: ScoutPlayer['coachEvals']): YoyoFilterKey {
-  const badge = getYoYoBadge(coachEvals);
+function yoyoCategory(coachEvals: ScoutPlayer['coachEvals'], t: YoyoThresholds = DEFAULT_YOYO_THRESHOLDS): YoyoFilterKey {
+  const badge = getYoYoBadge(coachEvals, t);
   if (!badge) return 'grey';
-  if (badge.best >= 15.5) return 'green';
-  if (badge.best >= 15.2) return 'amber';
+  if (badge.best >= t.greenMin) return 'green';
+  if (badge.best >= t.amberMin) return 'amber';
   return 'red';
 }
 
@@ -1177,6 +1182,7 @@ function AllFitnessTable({
   allBatchNames: string[];
   onRowClick: (p: ScoutPlayer) => void;
 }) {
+  const t = useContext(YoyoThresholdsCtx);
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
 
   // Flatten: one row per coach eval that has any fitness data, sorted by batch → player name
@@ -1189,14 +1195,14 @@ function AllFitnessTable({
     });
     const result: { player: ScoutPlayer; coachName: string; fitness: Record<string, string>; cat: YoyoFilterKey }[] = [];
     for (const player of sorted) {
-      const cat = yoyoCategory(player.coachEvals);
+      const cat = yoyoCategory(player.coachEvals, t);
       for (const ev of player.coachEvals) {
         if (!FITNESS_FIELDS.some((f) => ev.evaluation.fitness?.[f])) continue;
         result.push({ player, coachName: ev.coachName || ev.coachEmail, fitness: ev.evaluation.fitness || {}, cat });
       }
     }
     return result;
-  }, [players, allBatchNames]);
+  }, [players, allBatchNames, t]);
 
   const filtered = useMemo(
     () => yoyoFilter === 'all' ? allRows : allRows.filter((r) => r.cat === yoyoFilter),
@@ -1305,7 +1311,7 @@ function AllFitnessTable({
             </thead>
             <tbody>
               {displayRows.map((row, i) => {
-                const badge = getYoYoBadge(row.player.coachEvals);
+                const badge = getYoYoBadge(row.player.coachEvals, t);
                 const yoyoVal = row.fitness['Yo-Yo'];
                 return (
                   <tr
@@ -1408,11 +1414,11 @@ const RAG_FILTERS: { key: RagKey; label: string; dot: string; bg: string; text: 
   { key: 'grey',  label: 'Not Rated', dot: 'rgba(245,240,232,0.2)', bg: 'rgba(0,0,0,0.12)',      text: 'rgba(245,240,232,0.35)', activeBg: 'rgba(0,0,0,0.3)' },
 ];
 
-function ragCategory(player: ScoutPlayer): RagKey {
+function ragCategory(player: ScoutPlayer, t: YoyoThresholds = DEFAULT_YOYO_THRESHOLDS): RagKey {
   const yoyo = maxYoyo(player);
   if (yoyo === null) return 'grey';
-  if (yoyo >= 15.5) return 'green';
-  if (yoyo >= 15.2) return 'amber';
+  if (yoyo >= t.greenMin) return 'green';
+  if (yoyo >= t.amberMin) return 'amber';
   return 'red';
 }
 
@@ -1430,10 +1436,10 @@ function maxYoyo(player: ScoutPlayer): number | null {
   return vals.length > 0 ? Math.min(...vals) : null;
 }
 
-function exportSelectionToCSV(players: ScoutPlayer[]) {
+function exportSelectionToCSV(players: ScoutPlayer[], t: YoyoThresholds) {
   const data = players.map((p) => {
     const yoyo = maxYoyo(p);
-    const rag = ragCategory(p);
+    const rag = ragCategory(p, t);
     const row: Record<string, string | number> = {
       Player: p.name,
       Batch: p.batch || '',
@@ -1468,6 +1474,7 @@ function SelectionSummaryTable({
   allBatchNames: string[];
   onRowClick: (p: ScoutPlayer) => void;
 }) {
+  const t = useContext(YoyoThresholdsCtx);
   const [ragFilters, setRagFilters] = useState<Set<RagKey>>(new Set());
   const [catFilters, setCatFilters] = useState<Set<string>>(new Set());
 
@@ -1510,17 +1517,17 @@ function SelectionSummaryTable({
 
   const ragCounts = useMemo(() => {
     const c: Record<RagKey, number> = { all: baseRows.length, green: 0, amber: 0, red: 0, grey: 0 };
-    baseRows.forEach((p) => { c[ragCategory(p)]++; });
+    baseRows.forEach((p) => { c[ragCategory(p, t)]++; });
     return c;
-  }, [baseRows]);
+  }, [baseRows, t]);
 
   const filtered = useMemo(() => {
     return baseRows.filter((p) => {
-      if (ragFilters.size > 0 && !ragFilters.has(ragCategory(p))) return false;
+      if (ragFilters.size > 0 && !ragFilters.has(ragCategory(p, t))) return false;
       if (catFilters.size > 0 && !catFilters.has(p.category)) return false;
       return true;
     });
-  }, [baseRows, ragFilters, catFilters]);
+  }, [baseRows, ragFilters, catFilters, t]);
 
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
 
@@ -1543,7 +1550,7 @@ function SelectionSummaryTable({
       if (col === 'Evals')     return p.coachEvals.length;
       if (col === 'Avg %')     return p.aggregatePct;
       if (col === 'Yo-Yo')     return maxYoyo(p) ?? -1;
-      if (col === 'RAG')       return ragCategory(p);
+      if (col === 'RAG')       return ragCategory(p, t);
       if ((SELECTION_EXTRA_COLS as readonly string[]).includes(col)) return p.extraInfo?.[col] || '';
       return '';
     });
@@ -1631,7 +1638,7 @@ function SelectionSummaryTable({
             <TableSearch value={search} onChange={setSearch} />
           </div>
           <button
-            onClick={() => exportSelectionToCSV(displayRows)}
+            onClick={() => exportSelectionToCSV(displayRows, t)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-bold uppercase tracking-wider transition-opacity hover:opacity-75 flex-shrink-0"
             style={{
               fontFamily: 'Barlow Condensed, sans-serif',
@@ -1681,12 +1688,12 @@ function SelectionSummaryTable({
                 </td>
               </tr>
             ) : displayRows.map((p, i) => {
-              const rag = ragCategory(p);
+              const rag = ragCategory(p, t);
               const rs = ragStyle(rag);
               const yoyo = maxYoyo(p);
               const yoyoBadge = yoyo !== null
-                ? (yoyo >= 15.5 ? { color: '#a5d6a7', bg: 'rgba(27,94,32,0.35)' }
-                  : yoyo >= 15.2 ? { color: '#ffcc80', bg: 'rgba(127,63,0,0.35)' }
+                ? (yoyo >= t.greenMin ? { color: '#a5d6a7', bg: 'rgba(27,94,32,0.35)' }
+                  : yoyo >= t.amberMin ? { color: '#ffcc80', bg: 'rgba(127,63,0,0.35)' }
                   : { color: '#ef9a9a', bg: 'rgba(127,31,31,0.35)' })
                 : null;
               const catCol = p.category ? getCategoryColor(p.category) : null;
@@ -2041,6 +2048,7 @@ function AdminSkillDetailsTable({
   players: ScoutPlayer[];
   onRowClick: (p: ScoutPlayer) => void;
 }) {
+  const t = useContext(YoyoThresholdsCtx);
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
   const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
@@ -2107,7 +2115,7 @@ function AdminSkillDetailsTable({
       : base;
     const yoyoFiltered = yoyoFilter === 'all'
       ? coachFiltered
-      : coachFiltered.filter((r) => yoyoCategory(r.player.coachEvals) === yoyoFilter);
+      : coachFiltered.filter((r) => yoyoCategory(r.player.coachEvals, t) === yoyoFilter);
     const schemaFiltered = schemaFilters.size > 0
       ? yoyoFiltered.filter((r) => schemaFilters.has(r.schemaName))
       : yoyoFiltered;
@@ -2160,11 +2168,11 @@ function AdminSkillDetailsTable({
     for (const r of allRows) {
       if (seen.has(r.player.rowIndex)) continue;
       seen.add(r.player.rowIndex);
-      c[yoyoCategory(r.player.coachEvals)]++;
+      c[yoyoCategory(r.player.coachEvals, t)]++;
       c.all++;
     }
     return c;
-  }, [allRows]);
+  }, [allRows, t]);
   const cols = ['Player', 'Batch', 'Div', 'Category', 'Academy', 'Primary Skill', 'Yo-Yo', 'Coach', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes', 'Overall Comment'];
 
   return (
@@ -2312,7 +2320,7 @@ function AdminSkillDetailsTable({
                       <span style={{ color: 'rgba(245,240,232,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.extraInfo?.['Primary Skill'] || <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>}</span>
                     </td>
                     <td className="px-4 py-2 text-center">
-                      {(() => { const yoyo = maxYoyo(r.player); if (yoyo === null) return <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>; const badge = getYoYoBadge(r.player.coachEvals); return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ background: badge?.bg ?? 'rgba(0,0,0,0.2)', color: badge?.text ?? 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>{yoyo}</span>; })()}
+                      {(() => { const yoyo = maxYoyo(r.player); if (yoyo === null) return <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>; const badge = getYoYoBadge(r.player.coachEvals, t); return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ background: badge?.bg ?? 'rgba(0,0,0,0.2)', color: badge?.text ?? 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>{yoyo}</span>; })()}
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
                       <span className="font-semibold" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -2447,6 +2455,7 @@ function AdminAggSkillTable({
   players: ScoutPlayer[];
   onRowClick: (p: ScoutPlayer) => void;
 }) {
+  const t = useContext(YoyoThresholdsCtx);
   const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
   const [schemaFilters, setSchemaFilters] = useState<Set<SchemaType>>(new Set());
@@ -2534,9 +2543,9 @@ function AdminAggSkillTable({
     const seen = new Map<number, ScoutPlayer>();
     for (const r of allRows) seen.set(r.player.rowIndex, r.player);
     const counts: Record<YoyoFilterKey, number> = { all: seen.size, green: 0, amber: 0, red: 0, grey: 0 };
-    for (const p of seen.values()) counts[yoyoCategory(p.coachEvals)]++;
+    for (const p of seen.values()) counts[yoyoCategory(p.coachEvals, t)]++;
     return counts;
-  }, [allRows]);
+  }, [allRows, t]);
 
   const displayRows = useMemo(() => {
     const q = search.toLowerCase();
@@ -2552,7 +2561,7 @@ function AdminAggSkillTable({
           r.overallComments.toLowerCase().includes(q)
         )
       : allRows;
-    const afterYoyo = yoyoFilter === 'all' ? afterSearch : afterSearch.filter((r) => yoyoCategory(r.player.coachEvals) === yoyoFilter);
+    const afterYoyo = yoyoFilter === 'all' ? afterSearch : afterSearch.filter((r) => yoyoCategory(r.player.coachEvals, t) === yoyoFilter);
     const afterSchema = schemaFilters.size > 0 ? afterYoyo.filter((r) => schemaFilters.has(r.schemaName)) : afterYoyo;
     return applySort(afterSchema, sortCol, sortDir, (r, col) => {
       if (col === 'Player')    return r.player.name;
@@ -2784,7 +2793,7 @@ function AdminAggSkillTable({
                       {(() => {
                         const yy = maxYoyo(r.player);
                         if (yy === null) return <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: 'Barlow Condensed, sans-serif' }}>—</span>;
-                        const cat = yoyoCategory(r.player.coachEvals);
+                        const cat = yoyoCategory(r.player.coachEvals, t);
                         const clr = cat === 'green' ? '#81c784' : cat === 'amber' ? '#ffb74d' : '#ef9a9a';
                         return <span className="font-bold text-[11px]" style={{ color: clr, fontFamily: 'Barlow Condensed, sans-serif' }}>{yy.toFixed(1)}</span>;
                       })()}
@@ -2938,6 +2947,7 @@ function AdminPivotTable({
   sheetKey: string;
   allowCoachBreakdown?: boolean;
 }) {
+  const t = useContext(YoyoThresholdsCtx);
   const [schemaFilter, setSchemaFilter] = useState<SchemaType | 'all'>('all');
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
   const [search, setSearch] = useState('');
@@ -3029,7 +3039,7 @@ function AdminPivotTable({
         );
         if (!hasSchemaRating) return false;
         if (cov.category !== 'all' && p.category !== cov.category) return false;
-        if (cov.yoyo !== 'all' && yoyoCategory(p.coachEvals) !== cov.yoyo) return false;
+        if (cov.yoyo !== 'all' && yoyoCategory(p.coachEvals, t) !== cov.yoyo) return false;
         if (cov.bowlTypes.length > 0) {
           const bt = (p.extraInfo?.['Bowling type'] || '').trim();
           if (!cov.bowlTypes.includes(bt)) return false;
@@ -3148,12 +3158,12 @@ function AdminPivotTable({
     const q = search.toLowerCase();
     return effectivePlayers.filter((p) => {
       if (p.coachEvals.length === 0) return false;
-      if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals) !== yoyoFilter) return false;
+      if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals, t) !== yoyoFilter) return false;
       if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
       return true;
     });
-  }, [effectivePlayers, yoyoFilter, categoryFilter, search]);
+  }, [effectivePlayers, yoyoFilter, categoryFilter, search, t]);
 
   const yoyoCounts = useMemo(() => {
     const q = search.toLowerCase();
@@ -3164,23 +3174,23 @@ function AdminPivotTable({
       return true;
     });
     const counts: Record<YoyoFilterKey, number> = { all: pool.length, green: 0, amber: 0, red: 0, grey: 0 };
-    pool.forEach((p) => { counts[yoyoCategory(p.coachEvals)]++; });
+    pool.forEach((p) => { counts[yoyoCategory(p.coachEvals, t)]++; });
     return counts;
-  }, [effectivePlayers, categoryFilter, search]);
+  }, [effectivePlayers, categoryFilter, search, t]);
 
   const categoryCounts = useMemo(() => {
     const q = search.toLowerCase();
     const counts: Record<string, number> = {};
     effectivePlayers.filter((p) => {
       if (p.coachEvals.length === 0) return false;
-      if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals) !== yoyoFilter) return false;
+      if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals, t) !== yoyoFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
       return true;
     }).forEach((p) => {
       if (p.category) counts[p.category] = (counts[p.category] || 0) + 1;
     });
     return counts;
-  }, [effectivePlayers, yoyoFilter, search]);
+  }, [effectivePlayers, yoyoFilter, search, t]);
 
   const [pivotSortCol, setPivotSortCol] = useState<string | null>(null);
   const [pivotSortDir, setPivotSortDir] = useState<'asc' | 'desc'>('desc');
@@ -3586,7 +3596,7 @@ function AdminPivotTable({
             </thead>
             <tbody>
               {sortedPlayers.map((player, pi) => {
-                const yoyo = getYoYoBadge(player.coachEvals);
+                const yoyo = getYoYoBadge(player.coachEvals, t);
                 const catColor = getCategoryColor(player.category);
                 const remarkItems = player.coachEvals
                   .filter((e) => (e.remarks || '').trim())
@@ -3928,6 +3938,150 @@ function NavDropdown({
   );
 }
 
+// ── Yo-Yo Config Panel (admin settings) ──────────────────────────────
+
+function YoyoConfigPanel({
+  sheetKey,
+  thresholds,
+  onSave,
+}: {
+  sheetKey: string;
+  thresholds: YoyoThresholds;
+  onSave: (t: YoyoThresholds) => void;
+}) {
+  const [greenMin, setGreenMin] = useState(String(thresholds.greenMin));
+  const [amberMin, setAmberMin] = useState(String(thresholds.amberMin));
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const g = parseFloat(greenMin);
+  const a = parseFloat(amberMin);
+  const valid = !isNaN(g) && !isNaN(a) && g > a && a > 0;
+
+  async function handleSave() {
+    if (!valid) return;
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/scout/yoyo-config?sheetKey=${encodeURIComponent(sheetKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ greenMin: g, amberMin: a }),
+      });
+      if (res.ok) {
+        onSave({ greenMin: g, amberMin: a });
+        setMsg({ text: 'Saved successfully', ok: true });
+      } else {
+        const data = await res.json();
+        setMsg({ text: data.error || 'Failed to save', ok: false });
+      }
+    } catch {
+      setMsg({ text: 'Network error', ok: false });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const INPUT_STYLE: React.CSSProperties = {
+    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
+    borderRadius: 4, color: '#f5f0e8', padding: '5px 10px', width: 90,
+    fontFamily: 'Barlow Condensed, sans-serif', fontSize: 14, fontWeight: 700,
+    textAlign: 'center',
+  };
+
+  const preview = [
+    { label: 'Green', min: g, color: '#a5d6a7', bg: 'rgba(27,94,32,0.35)' },
+    { label: 'Amber', min: a, max: g, color: '#ffcc80', bg: 'rgba(127,63,0,0.35)' },
+    { label: 'Red', max: a, color: '#ef9a9a', bg: 'rgba(127,31,31,0.35)' },
+  ];
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-6 pb-3 border-b" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef9a9a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.1em' }}>
+          Admin — Settings
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-6" style={{ maxWidth: 480 }}>
+        <div className="rounded-lg border p-5" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(192,57,43,0.2)' }}>
+          <p className="text-sm font-bold mb-4 uppercase tracking-wider" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em' }}>
+            Yo-Yo Test Thresholds
+          </p>
+
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold w-28 uppercase" style={{ color: '#a5d6a7', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}>Green (≥)</span>
+              <input
+                type="number" step="0.1" min="0" max="25"
+                value={greenMin}
+                onChange={(e) => setGreenMin(e.target.value)}
+                style={INPUT_STYLE}
+              />
+              <span className="text-xs" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>score qualifies as Green</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold w-28 uppercase" style={{ color: '#ffcc80', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}>Amber (≥)</span>
+              <input
+                type="number" step="0.1" min="0" max="25"
+                value={amberMin}
+                onChange={(e) => setAmberMin(e.target.value)}
+                style={INPUT_STYLE}
+              />
+              <span className="text-xs" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>score qualifies as Amber</span>
+            </div>
+          </div>
+
+          {!valid && (greenMin || amberMin) && (
+            <p className="text-xs mt-3" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif' }}>
+              Green must be greater than Amber, and both must be positive numbers.
+            </p>
+          )}
+
+          {/* Live preview */}
+          {valid && (
+            <div className="mt-4 pt-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+              <p className="text-[10px] font-bold uppercase mb-2" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em' }}>Preview</p>
+              <div className="flex gap-2">
+                {preview.map((p) => (
+                  <span key={p.label} className="px-2 py-1 rounded text-xs font-bold" style={{ background: p.bg, color: p.color, fontFamily: 'Barlow Condensed, sans-serif' }}>
+                    {p.label}: {p.min !== undefined ? `≥ ${p.min}` : `< ${p.max}`}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 mt-5">
+            <button
+              onClick={handleSave}
+              disabled={!valid || saving}
+              style={{
+                padding: '6px 18px', borderRadius: 4, fontSize: 12, fontWeight: 800,
+                fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em',
+                background: valid && !saving ? '#c0392b' : 'rgba(192,57,43,0.3)',
+                color: valid && !saving ? '#f5f0e8' : 'rgba(245,240,232,0.35)',
+                border: 'none', cursor: valid && !saving ? 'pointer' : 'not-allowed',
+                textTransform: 'uppercase',
+              }}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            {msg && (
+              <span className="text-xs font-bold" style={{ color: msg.ok ? '#a5d6a7' : '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {msg.text}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────
 
 export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
@@ -3943,8 +4097,9 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'team-packages' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'team-packages' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot' | 'admin-settings'>('board');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [yoyoThresholds, setYoyoThresholds] = useState<YoyoThresholds>(DEFAULT_YOYO_THRESHOLDS);
   const isDemo = sheetKey === 'demo';
 
   const [pinnedIds, setPinnedIds] = useState<Set<number>>(() => {
@@ -3957,14 +4112,15 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/scout?sheetKey=${encodeURIComponent(sheetKey)}`)
-      .then(async (r) => {
-        if (r.status === 403) { setUnauthorized(true); return; }
-        const data = await r.json();
-        if (data.error) setError(data.error);
-        else { setPlayers(data.players || []); setIsAdmin(!!data.isAdmin); }
-      })
-      .catch(() => setError('Failed to load player data.'))
+    Promise.all([
+      fetch(`/api/scout?sheetKey=${encodeURIComponent(sheetKey)}`).then((r) => r.json()),
+      fetch(`/api/scout/yoyo-config?sheetKey=${encodeURIComponent(sheetKey)}`).then((r) => r.json()).catch(() => DEFAULT_YOYO_THRESHOLDS),
+    ]).then(([data, cfg]) => {
+      if (data.error === 'unauthorized' || data.status === 403) { setUnauthorized(true); return; }
+      if (data.error) setError(data.error);
+      else { setPlayers(data.players || []); setIsAdmin(!!data.isAdmin); }
+      if (cfg && typeof cfg.greenMin === 'number') setYoyoThresholds(cfg);
+    }).catch(() => setError('Failed to load player data.'))
       .finally(() => setLoading(false));
   }, [sheetKey]);
 
@@ -4079,6 +4235,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const totalEvaluated = players.filter(isEvaluated).length;
 
   return (
+    <YoyoThresholdsCtx.Provider value={yoyoThresholds}>
     <>
       <style>{`
         @keyframes slideUp { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
@@ -4258,6 +4415,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                         { label: 'Skill Averages', mode: 'admin-agg-skills' },
                         { label: 'Skill Pivot', mode: 'admin-pivot' },
                         { label: 'All Packages', mode: 'admin-team-packages' },
+                        { label: 'Settings', mode: 'admin-settings' },
                       ]}
                       activeMode={viewMode}
                       onSelect={(mode) => { setViewMode(mode as typeof viewMode); setSearchQuery(''); }}
@@ -4474,6 +4632,15 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
             </>
           )}
 
+          {/* Admin: Settings */}
+          {!loading && !error && viewMode === 'admin-settings' && isAdmin && (
+            <YoyoConfigPanel
+              sheetKey={sheetKey}
+              thresholds={yoyoThresholds}
+              onSave={setYoyoThresholds}
+            />
+          )}
+
           {!loading && !error && players.length > 0 && viewMode === 'board' && (
             <>
               {/* Search result banner */}
@@ -4559,5 +4726,6 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
 
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
     </>
+    </YoyoThresholdsCtx.Provider>
   );
 }
