@@ -3160,7 +3160,11 @@ function AdminPivotTable({
     if (selectedCoaches === null) return players;
     return players.map((p) => ({
       ...p,
-      coachEvals: p.coachEvals.filter((e) => selectedCoaches.has(e.coachEmail)),
+      coachEvals: p.coachEvals.map((e) =>
+        selectedCoaches.has(e.coachEmail)
+          ? e
+          : { ...e, evaluation: { ...e.evaluation, skills: {} } }
+      ),
     }));
   }, [players, selectedCoaches]);
 
@@ -3294,22 +3298,25 @@ function AdminPivotTable({
     } catch {}
   }
 
+  // Player visibility (yoyo/category/div/search) always uses original evals so coach filter
+  // only affects score calculations, not which players appear in the list.
   const filteredPlayers = useMemo(() => {
     const q = search.toLowerCase();
-    return effectivePlayers.filter((p) => {
-      if (p.coachEvals.length === 0) return false;
-      if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals, t) !== yoyoFilter) return false;
-      if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
-      if (divFilter !== 'all' && p.div !== divFilter) return false;
-      if (q && !matchesSearch(p, q)) return false;
-      return true;
-    });
-  }, [effectivePlayers, yoyoFilter, categoryFilter, divFilter, search, t]);
+    const visibleIndexes = new Set(
+      players.filter((p) => {
+        if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals, t) !== yoyoFilter) return false;
+        if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
+        if (divFilter !== 'all' && p.div !== divFilter) return false;
+        if (q && !matchesSearch(p, q)) return false;
+        return true;
+      }).map((p) => p.rowIndex)
+    );
+    return effectivePlayers.filter((p) => visibleIndexes.has(p.rowIndex));
+  }, [players, effectivePlayers, yoyoFilter, categoryFilter, divFilter, search, t]);
 
   const yoyoCounts = useMemo(() => {
     const q = search.toLowerCase();
-    const pool = effectivePlayers.filter((p) => {
-      if (p.coachEvals.length === 0) return false;
+    const pool = players.filter((p) => {
       if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
       if (divFilter !== 'all' && p.div !== divFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
@@ -3318,13 +3325,12 @@ function AdminPivotTable({
     const counts: Record<YoyoFilterKey, number> = { all: pool.length, green: 0, amber: 0, red: 0, grey: 0 };
     pool.forEach((p) => { counts[yoyoCategory(p.coachEvals, t)]++; });
     return counts;
-  }, [effectivePlayers, categoryFilter, divFilter, search, t]);
+  }, [players, categoryFilter, divFilter, search, t]);
 
   const categoryCounts = useMemo(() => {
     const q = search.toLowerCase();
     const counts: Record<string, number> = {};
-    effectivePlayers.filter((p) => {
-      if (p.coachEvals.length === 0) return false;
+    players.filter((p) => {
       if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals, t) !== yoyoFilter) return false;
       if (divFilter !== 'all' && p.div !== divFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
@@ -3333,7 +3339,7 @@ function AdminPivotTable({
       if (p.category) counts[p.category] = (counts[p.category] || 0) + 1;
     });
     return counts;
-  }, [effectivePlayers, yoyoFilter, divFilter, search, t]);
+  }, [players, yoyoFilter, divFilter, search, t]);
 
   const [pivotSortCol, setPivotSortCol] = useState<string | null>(null);
   const [pivotSortDir, setPivotSortDir] = useState<'asc' | 'desc'>('desc');
