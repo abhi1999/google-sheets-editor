@@ -7,11 +7,11 @@ import type { AppUser } from '@/types';
 
 const TEAM_COLORS = [
   { name: 'Red',    bg: '#c0392b', text: '#ef9a9a', dim: 'rgba(192,57,43,0.18)' },
-  { name: 'Blue',   bg: '#1565c0', text: '#90caf9', dim: 'rgba(21,101,192,0.18)' },
-  { name: 'Green',  bg: '#2e7d32', text: '#a5d6a7', dim: 'rgba(46,125,50,0.18)' },
   { name: 'Yellow', bg: '#f57f17', text: '#fff176', dim: 'rgba(245,127,23,0.18)' },
-  { name: 'Orange', bg: '#e65100', text: '#ffcc80', dim: 'rgba(230,81,0,0.18)' },
+  { name: 'Blue',   bg: '#1565c0', text: '#90caf9', dim: 'rgba(21,101,192,0.18)' },
   { name: 'Purple', bg: '#6a1b9a', text: '#ce93d8', dim: 'rgba(106,27,154,0.18)' },
+  { name: 'Orange', bg: '#e65100', text: '#ffcc80', dim: 'rgba(230,81,0,0.18)' },
+  { name: 'Maroon', bg: '#880e4f', text: '#f48fb1', dim: 'rgba(136,14,79,0.18)' },
 ] as const;
 
 const TEAM_SLOTS = [
@@ -19,14 +19,14 @@ const TEAM_SLOTS = [
   { slot: 2,  role: 'Top Order',       variant: null,    color: '#64b5f6' },
   { slot: 3,  role: 'Top Order',       variant: null,    color: '#64b5f6' },
   { slot: 4,  role: 'Top Order',       variant: null,    color: '#64b5f6' },
-  { slot: 5,  role: 'Batting AR',      variant: 'Pace',  color: '#81c784' },
-  { slot: 6,  role: 'Batting AR',      variant: 'Pace',  color: '#81c784' },
-  { slot: 7,  role: 'Bowling AR',      variant: 'Spin',  color: '#ffb74d' },
-  { slot: 8,  role: 'Bowling AR',      variant: 'Spin',  color: '#ffb74d' },
+  { slot: 5,  role: 'All Rounder',     variant: null,    color: '#81c784' },
+  { slot: 6,  role: 'All Rounder',     variant: null,    color: '#81c784' },
+  { slot: 7,  role: 'All Rounder',     variant: null,    color: '#ffb74d' },
+  { slot: 8,  role: 'All Rounder',     variant: null,    color: '#ffb74d' },
   { slot: 9,  role: 'Bowler',          variant: 'Spin',  color: '#ff8a65' },
   { slot: 10, role: 'Bowler',          variant: 'Pace',  color: '#ff8a65' },
   { slot: 11, role: 'Bowler',          variant: 'Pace',  color: '#ff8a65' },
-  { slot: 12, role: 'Bat/Bowl AR',     variant: 'Spin',  color: '#ce93d8' },
+  { slot: 12, role: 'All Rounder',     variant: null,    color: '#ce93d8' },
   { slot: 13, role: 'Wicket Keeper',   variant: null,    color: '#80cbc4' },
 ] as const;
 
