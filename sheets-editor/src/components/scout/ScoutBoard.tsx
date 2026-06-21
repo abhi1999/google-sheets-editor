@@ -3253,6 +3253,17 @@ function AdminPivotTable({
         const sb = STR_SORTS[pivotSortCol](b).toLowerCase();
         return pivotSortDir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa);
       }
+      if (pivotSortCol === 'yoyo') {
+        const getYoyo = (p: ScoutPlayer) => {
+          const vals = p.coachEvals.map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || '')).filter((v) => !isNaN(v) && v > 0);
+          return vals.length > 0 ? Math.min(...vals) : null;
+        };
+        const va2 = getYoyo(a), vb2 = getYoyo(b);
+        if (va2 === null && vb2 === null) return 0;
+        if (va2 === null) return 1;
+        if (vb2 === null) return -1;
+        return pivotSortDir === 'desc' ? vb2 - va2 : va2 - vb2;
+      }
       // Numeric sorts (schema/section averages)
       let va: number | null = null;
       let vb: number | null = null;
@@ -3582,7 +3593,7 @@ function AdminPivotTable({
               {/* Row 1: Schema headers (colSpan = visibleSkills*2 + visSections + 1 for schema avg) */}
               <tr>
                 <th rowSpan={4} onClick={() => togglePivotSort('player', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(0, PLAYER_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'player' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Player{sortIndicator('player')}</th>
-                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W, YOYO_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Yo-Yo</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('yoyo')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W, YOYO_W, '#1a1010', 3), textAlign: 'center', color: pivotSortCol === 'yoyo' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Yo-Yo{sortIndicator('yoyo')}</th>
                 <th rowSpan={4} onClick={() => togglePivotSort('category', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'category' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Category{sortIndicator('category')}</th>
                 <th rowSpan={4} onClick={() => togglePivotSort('primary-skill', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, PRIM_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'primary-skill' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Skill{sortIndicator('primary-skill')}</th>
                 <th rowSpan={4} onClick={() => togglePivotSort('batting-hand', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W, BAT_HAND_W, '#1a1010', 3), textAlign: 'center', color: pivotSortCol === 'batting-hand' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bat{sortIndicator('batting-hand')}</th>
