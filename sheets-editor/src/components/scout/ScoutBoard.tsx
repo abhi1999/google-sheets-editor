@@ -2505,7 +2505,7 @@ function exportAggSkillsToCSV(rows: AggSkillRow[]) {
     'Sec %': r.sectionPct,
     Skill: r.skillName,
     Weight: r.weight,
-    'Avg Score': r.avgScore > 0 ? r.avgScore.toFixed(2) : '',
+    'Avg Score': r.avgScore > 0 ? r.avgScore.toFixed(5) : '',
     'Coaches Rated': r.coachCount > 0 ? `${r.coachCount}/${r.totalCoaches}` : '',
     'Comments': r.commentCount > 0 ? `${r.commentCount} coach${r.commentCount !== 1 ? 'es' : ''}: ${r.overallComments}` : '',
   }));
@@ -2881,7 +2881,7 @@ function AdminAggSkillTable({
                           <span key={n} style={{ color: n <= Math.round(r.avgScore) ? '#c8a84b' : 'rgba(245,240,232,0.12)', fontSize: '0.85rem', lineHeight: 1 }}>★</span>
                         ))}
                         <span className="ml-1" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: '0.68rem' }}>
-                          {r.avgScore.toFixed(2)}/5
+                          {r.avgScore.toFixed(3)}/5
                         </span>
                       </span>
                     </td>
@@ -2901,7 +2901,7 @@ function AdminAggSkillTable({
                         if (yy === null) return <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: 'Barlow Condensed, sans-serif' }}>—</span>;
                         const cat = yoyoCategory(r.player.coachEvals, t);
                         const clr = cat === 'green' ? '#81c784' : cat === 'amber' ? '#ffb74d' : '#ef9a9a';
-                        return <span className="font-bold text-[11px]" style={{ color: clr, fontFamily: 'Barlow Condensed, sans-serif' }}>{yy.toFixed(2)}</span>;
+                        return <span className="font-bold text-[11px]" style={{ color: clr, fontFamily: 'Barlow Condensed, sans-serif' }}>{yy.toFixed(3)}</span>;
                       })()}
                     </td>
                     {/* Overall Comments */}
@@ -3019,7 +3019,7 @@ function exportPivotToCSV(players: ScoutPlayer[], visibleSkillKeys: Set<string>)
             const scores = p.coachEvals.map((e) => e.evaluation.skills?.[sk.name] || 0).filter((s) => s > 0);
             if (scores.length > 0) {
               const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-              row[`${colKey} Avg`] = avg.toFixed(2);
+              row[`${colKey} Avg`] = avg.toFixed(5);
               row[`${colKey} N`] = scores.length;
               secSkillAvgs.push(avg);
               schemaSkillAvgs.push(avg);
@@ -3031,12 +3031,12 @@ function exportPivotToCSV(players: ScoutPlayer[], visibleSkillKeys: Set<string>)
         }
         const secAvgKey = `${label} ${sec.letter}:${sec.name} Sec Avg`;
         row[secAvgKey] = isMatchingSchema && secSkillAvgs.length > 0
-          ? (secSkillAvgs.reduce((a, b) => a + b, 0) / secSkillAvgs.length).toFixed(2)
+          ? (secSkillAvgs.reduce((a, b) => a + b, 0) / secSkillAvgs.length).toFixed(5)
           : '';
       }
       const schemaAvgKey = `${label} Avg`;
       row[schemaAvgKey] = isMatchingSchema && schemaSkillAvgs.length > 0
-        ? (schemaSkillAvgs.reduce((a, b) => a + b, 0) / schemaSkillAvgs.length).toFixed(2)
+        ? (schemaSkillAvgs.reduce((a, b) => a + b, 0) / schemaSkillAvgs.length).toFixed(5)
         : '';
     }
     row['Remarks'] = p.coachEvals
@@ -3887,7 +3887,7 @@ function AdminPivotTable({
                                   return (
                                     <Fragment key={`${player.rowIndex}-${schemaName}-${sec.letter}-${sk.name}`}>
                                       <td
-                                        title={allowCoachBreakdown ? `${player.name} · ${sk.name}: avg ${stat.avg.toFixed(2)} from ${stat.count} coach${stat.count !== 1 ? 'es' : ''}` : `${stat.avg.toFixed(2)} (${stat.count} coach${stat.count !== 1 ? 'es' : ''})`}
+                                        title={allowCoachBreakdown ? `${player.name} · ${sk.name}: avg ${stat.avg.toFixed(3)} from ${stat.count} coach${stat.count !== 1 ? 'es' : ''}` : `${stat.avg.toFixed(3)} (${stat.count} coach${stat.count !== 1 ? 'es' : ''})`}
                                         style={{
                                           textAlign: 'center', padding: '4px 3px', fontSize: 11, fontWeight: 700,
                                           fontFamily: 'Barlow Condensed, sans-serif',
@@ -3905,7 +3905,7 @@ function AdminPivotTable({
                                             y: rect.bottom + 6,
                                           });
                                         } : undefined}>
-                                        {stat.avg.toFixed(2)}
+                                        {stat.avg.toFixed(3)}
                                       </td>
                                       <td style={{ textAlign: 'center', padding: '4px 2px', fontSize: 9, color: 'rgba(245,240,232,0.3)', background: rowBg }}>
                                         {stat.count}
@@ -3921,7 +3921,7 @@ function AdminPivotTable({
                                   color: secAvgSc ? secAvgSc.color : 'rgba(245,240,232,0.2)',
                                   borderLeft: '1px solid rgba(255,255,255,0.1)',
                                 }}>
-                                  {secAvg !== null ? secAvg.toFixed(2) : '—'}
+                                  {secAvg !== null ? secAvg.toFixed(3) : '—'}
                                 </td>
                               </Fragment>
                             );
@@ -3934,7 +3934,7 @@ function AdminPivotTable({
                             color: schemaAvgSc ? schemaAvgSc.color : 'rgba(245,240,232,0.2)',
                             borderLeft: `2px solid ${SCHEMA_COLORS[schemaName]}33`,
                           }}>
-                            {schemaAvg !== null ? schemaAvg.toFixed(2) : '—'}
+                            {schemaAvg !== null ? schemaAvg.toFixed(3) : '—'}
                           </td>
                         </Fragment>
                       );
