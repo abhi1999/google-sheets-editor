@@ -888,6 +888,7 @@ function MyEvalDetailsTable({
 
 type SkillDetailRow = {
   player: ScoutPlayer;
+  academy: string;
   schemaName: SchemaType;
   schemaLabel: string;
   sectionLetter: string;
@@ -897,6 +898,7 @@ type SkillDetailRow = {
   weight: number;
   score: number;
   note: string;
+  remarks: string;
 };
 
 function exportMySkillDetailsToCSV(rows: SkillDetailRow[]) {
@@ -904,12 +906,14 @@ function exportMySkillDetailsToCSV(rows: SkillDetailRow[]) {
     Player: r.player.name,
     Batch: r.player.batch || '',
     Category: r.player.category || '',
+    Academy: r.academy,
     Schema: r.schemaName,
     Section: `${r.schemaLabel}${r.sectionLetter}: ${r.sectionName}`,
     Skill: r.skillName,
     Weight: r.weight,
     Score: r.score > 0 ? r.score : '',
     Notes: r.note,
+    'Overall Comment': r.remarks,
   }));
   const csv = Papa.unparse(data);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -935,6 +939,8 @@ function MySkillDetailsTable({
     for (const player of players) {
       if (!player.myEval) continue;
       const { skills, notes } = player.myEval.evaluation;
+      const remarks = player.myEval.remarks || '';
+      const academy = player.extraInfo?.['Academy'] || '';
       for (const [schemaName, def] of Object.entries(SCHEMAS) as [SchemaType, typeof SCHEMAS[SchemaType]][]) {
         const schemaLabel = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
         for (const sec of def.sections) {
@@ -943,10 +949,10 @@ function MySkillDetailsTable({
             const note = notes[sk.name] || '';
             if (score === 0 && !note) continue;
             result.push({
-              player, schemaName, schemaLabel,
+              player, academy, schemaName, schemaLabel,
               sectionLetter: sec.letter, sectionName: sec.name,
               skillName: sk.name, skillDesc: sk.desc, weight: sk.weight,
-              score, note,
+              score, note, remarks,
             });
           }
         }
@@ -964,19 +970,23 @@ function MySkillDetailsTable({
           (r.player.category || '').toLowerCase().includes(q) ||
           r.skillName.toLowerCase().includes(q) ||
           r.sectionName.toLowerCase().includes(q) ||
-          r.note.toLowerCase().includes(q)
+          r.note.toLowerCase().includes(q) ||
+          r.remarks.toLowerCase().includes(q) ||
+          r.academy.toLowerCase().includes(q)
         )
       : allRows;
     return applySort(base, sortCol, sortDir, (r, col) => {
       if (col === 'Player') return r.player.name;
       if (col === 'Batch') return r.player.batch || '';
       if (col === 'Category') return r.player.category || '';
+      if (col === 'Academy') return r.academy;
       if (col === 'Schema') return r.schemaName;
       if (col === 'Section') return `${r.schemaLabel}${r.sectionLetter}`;
       if (col === 'Skill') return r.skillName;
       if (col === 'Wt') return r.weight;
       if (col === 'Score') return r.score;
       if (col === 'Notes') return r.note;
+      if (col === 'Overall Comment') return r.remarks;
       return '';
     });
   }, [allRows, search, sortCol, sortDir]);
@@ -995,7 +1005,7 @@ function MySkillDetailsTable({
     );
   }
 
-  const cols = ['Player', 'Batch', 'Category', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes'];
+  const cols = ['Player', 'Batch', 'Category', 'Academy', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes', 'Overall Comment'];
 
   return (
     <div>
@@ -1047,6 +1057,10 @@ function MySkillDetailsTable({
                     <td className="px-4 py-2 whitespace-nowrap">
                       <span style={{ color: 'rgba(245,240,232,0.6)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.category || '—'}</span>
                     </td>
+                    {/* Academy */}
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.academy || <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>}</span>
+                    </td>
                     {/* Schema badge */}
                     <td className="px-4 py-2">
                       <span className="font-bold text-[10px] px-1.5 py-0.5 rounded" style={{ background: color, color: '#fff', fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -1094,6 +1108,16 @@ function MySkillDetailsTable({
                       {r.note ? (
                         <span style={{ color: 'rgba(245,240,232,0.7)', fontFamily: 'Barlow, sans-serif', fontStyle: 'italic' }}>
                           "{r.note}"
+                        </span>
+                      ) : (
+                        <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
+                      )}
+                    </td>
+                    {/* Overall Comment */}
+                    <td className="px-4 py-2" style={{ maxWidth: '320px' }}>
+                      {r.remarks ? (
+                        <span style={{ color: 'rgba(245,240,232,0.6)', fontFamily: 'Barlow, sans-serif', fontStyle: 'italic' }}>
+                          "{r.remarks}"
                         </span>
                       ) : (
                         <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
@@ -1985,6 +2009,7 @@ function exportAdminSkillDetailsToCSV(rows: AdminSkillDetailRow[]) {
     Player: r.player.name,
     Batch: r.player.batch || '',
     Category: r.player.category || '',
+    Academy: r.academy,
     Coach: r.coachName,
     Schema: r.schemaName,
     Section: `${r.schemaLabel}${r.sectionLetter}: ${r.sectionName}`,
@@ -1992,6 +2017,7 @@ function exportAdminSkillDetailsToCSV(rows: AdminSkillDetailRow[]) {
     Weight: r.weight,
     Score: r.score > 0 ? r.score : '',
     Notes: r.note,
+    'Overall Comment': r.remarks,
   }));
   const csv = Papa.unparse(data);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -2011,12 +2037,23 @@ function AdminSkillDetailsTable({
   onRowClick: (p: ScoutPlayer) => void;
 }) {
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
+  const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
+
+  function toggleCoach(email: string) {
+    setCoachFilters((prev) => {
+      const next = new Set(prev);
+      next.has(email) ? next.delete(email) : next.add(email);
+      return next;
+    });
+  }
 
   const allRows = useMemo((): AdminSkillDetailRow[] => {
     const result: AdminSkillDetailRow[] = [];
     for (const player of players) {
       for (const ev of player.coachEvals) {
         const { skills, notes } = ev.evaluation;
+        const remarks = ev.remarks || '';
+        const academy = player.extraInfo?.['Academy'] || '';
         for (const [schemaName, def] of Object.entries(SCHEMAS) as [SchemaType, typeof SCHEMAS[SchemaType]][]) {
           const schemaLabel = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
           for (const sec of def.sections) {
@@ -2025,10 +2062,10 @@ function AdminSkillDetailsTable({
               const note = notes[sk.name] || '';
               if (score === 0 && !note) continue;
               result.push({
-                player, schemaName, schemaLabel,
+                player, academy, schemaName, schemaLabel,
                 sectionLetter: sec.letter, sectionName: sec.name,
                 skillName: sk.name, skillDesc: sk.desc, weight: sk.weight,
-                score, note,
+                score, note, remarks,
                 coachName: ev.coachName || ev.coachEmail,
                 coachEmail: ev.coachEmail,
               });
@@ -2050,13 +2087,19 @@ function AdminSkillDetailsTable({
           r.coachName.toLowerCase().includes(q) ||
           r.skillName.toLowerCase().includes(q) ||
           r.sectionName.toLowerCase().includes(q) ||
-          r.note.toLowerCase().includes(q)
+          r.note.toLowerCase().includes(q) ||
+          r.remarks.toLowerCase().includes(q) ||
+          r.academy.toLowerCase().includes(q)
         )
       : allRows;
-    return applySort(base, sortCol, sortDir, (r, col) => {
+    const coachFiltered = coachFilters.size > 0
+      ? base.filter((r) => coachFilters.has(r.coachEmail))
+      : base;
+    return applySort(coachFiltered, sortCol, sortDir, (r, col) => {
       if (col === 'Player') return r.player.name;
       if (col === 'Batch') return r.player.batch || '';
       if (col === 'Category') return r.player.category || '';
+      if (col === 'Academy') return r.academy;
       if (col === 'Coach') return r.coachName;
       if (col === 'Schema') return r.schemaName;
       if (col === 'Section') return `${r.schemaLabel}${r.sectionLetter}`;
@@ -2064,9 +2107,10 @@ function AdminSkillDetailsTable({
       if (col === 'Wt') return r.weight;
       if (col === 'Score') return r.score;
       if (col === 'Notes') return r.note;
+      if (col === 'Overall Comment') return r.remarks;
       return '';
     });
-  }, [allRows, search, sortCol, sortDir]);
+  }, [allRows, search, sortCol, sortDir, coachFilters]);
 
   if (allRows.length === 0) {
     return (
@@ -2082,11 +2126,54 @@ function AdminSkillDetailsTable({
     );
   }
 
-  const uniqueCoaches = new Set(allRows.map((r) => r.coachEmail)).size;
-  const cols = ['Player', 'Batch', 'Category', 'Coach', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes'];
+  const allCoaches = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of allRows) {
+      if (!seen.has(r.coachEmail)) seen.set(r.coachEmail, r.coachName);
+    }
+    return Array.from(seen.entries()).map(([email, name]) => ({ email, name }));
+  }, [allRows]);
+
+  const uniqueCoaches = allCoaches.length;
+  const cols = ['Player', 'Batch', 'Category', 'Academy', 'Coach', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes', 'Overall Comment'];
 
   return (
     <div>
+      {/* Coach filter chips */}
+      {allCoaches.length > 1 && (
+        <div className="flex flex-col gap-1.5 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(239,154,154,0.5)', fontFamily: 'Barlow Condensed, sans-serif' }}>Coach</span>
+            {coachFilters.size > 0 && (
+              <button onClick={() => setCoachFilters(new Set())} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                Clear ✕
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {allCoaches.map(({ email, name }) => {
+              const isActive = coachFilters.has(email);
+              return (
+                <button
+                  key={email}
+                  onClick={() => toggleCoach(email)}
+                  className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                  style={{
+                    fontFamily: 'Barlow Condensed, sans-serif',
+                    background: isActive ? 'rgba(192,57,43,0.45)' : 'rgba(192,57,43,0.12)',
+                    color: isActive ? '#f5f0e8' : '#ef9a9a',
+                    border: `1px solid ${isActive ? 'rgba(192,57,43,0.6)' : 'rgba(192,57,43,0.2)'}`,
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <TableSearch value={search} onChange={setSearch} />
         <span className="text-xs flex-1" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -2131,6 +2218,9 @@ function AdminSkillDetailsTable({
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
                       <span style={{ color: 'rgba(245,240,232,0.6)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.category || '—'}</span>
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.academy || <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>}</span>
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
                       <span className="font-semibold" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -2178,6 +2268,16 @@ function AdminSkillDetailsTable({
                       {r.note ? (
                         <span style={{ color: 'rgba(245,240,232,0.7)', fontFamily: 'Barlow, sans-serif', fontStyle: 'italic' }}>
                           "{r.note}"
+                        </span>
+                      ) : (
+                        <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
+                      )}
+                    </td>
+                    {/* Overall Comment */}
+                    <td className="px-4 py-2" style={{ maxWidth: '320px' }}>
+                      {r.remarks ? (
+                        <span style={{ color: 'rgba(245,240,232,0.6)', fontFamily: 'Barlow, sans-serif', fontStyle: 'italic' }}>
+                          "{r.remarks}"
                         </span>
                       ) : (
                         <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
