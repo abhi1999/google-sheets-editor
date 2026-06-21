@@ -2852,7 +2852,12 @@ function NavDropdown({
   lockIcon?: boolean;
   align?: 'left' | 'right';
 }) {
-  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  // On touch/mobile devices (hover: none), click toggles the menu; on desktop, hover controls it
+  const [touchOnly, setTouchOnly] = useState(false);
+  useEffect(() => { setTouchOnly(!window.matchMedia('(hover: hover)').matches); }, []);
+  const isOpen = touchOnly ? pinned : hovered;
   const hasActive = items.some((i) => i.mode === activeMode);
   const dimColor = `${accentColor}66`;
   const hoverColor = `${accentColor}bb`;
@@ -2860,11 +2865,12 @@ function NavDropdown({
   return (
     <div
       className="relative flex-shrink-0 flex items-stretch"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={() => { if (!touchOnly) setHovered(true); }}
+      onMouseLeave={() => { if (!touchOnly) setHovered(false); }}
     >
       <button
         className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2"
+        onClick={() => { if (touchOnly) setPinned((p) => !p); }}
         style={{
           fontFamily: 'Barlow Condensed, sans-serif',
           color: hasActive ? accentColor : dimColor,
@@ -2882,12 +2888,12 @@ function NavDropdown({
           </svg>
         )}
         {label}
-        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6, marginTop: 1 }}>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6, marginTop: 1, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
 
-      {open && (
+      {isOpen && (
         <div style={{
           position: 'absolute', top: '100%', ...(align === 'right' ? { right: 0 } : { left: 0 }), minWidth: 200,
           background: '#1e1010', border: '1px solid rgba(192,57,43,0.28)',
@@ -2899,7 +2905,7 @@ function NavDropdown({
             return (
               <button
                 key={item.mode}
-                onClick={() => { onSelect(item.mode); setOpen(false); }}
+                onClick={() => { onSelect(item.mode); setPinned(false); setHovered(false); }}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   width: '100%', padding: '10px 16px',
