@@ -3396,7 +3396,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
 
           {/* Team Packages */}
           {!loading && !error && viewMode === 'team-packages' && (
-            <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} />
+            <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} onPlayerClick={setActivePlayer} />
           )}
 
           {/* Admin: All Team Packages */}
@@ -3411,7 +3411,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                   Admin Report — All Coach Team Packages
                 </span>
               </div>
-              <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} initialSubView="admin" />
+              <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} initialSubView="admin" onPlayerClick={setActivePlayer} />
             </>
           )}
 

@@ -183,11 +183,13 @@ export function TeamSelectionBoard({
   user,
   sheetKey,
   initialSubView = 'list',
+  onPlayerClick,
 }: {
   players: ScoutPlayer[];
   user: AppUser;
   sheetKey: string;
   initialSubView?: 'list' | 'admin';
+  onPlayerClick?: (player: ScoutPlayer) => void;
 }) {
   // ── State (ALL hooks before any conditional return) ──
   const [packages, setPackages] = useState<TeamPackage[]>([]);
@@ -595,7 +597,16 @@ export function TeamSelectionBoard({
                   return (
                     <tr key={player.rowIndex}
                       style={{ background: i % 2 === 0 ? '#1e1212' : '#221515', borderBottom: '1px solid rgba(192,57,43,0.06)' }}>
-                      <td className="px-3 py-2 font-bold whitespace-nowrap" style={{ color: '#f5f0e8', fontFamily: FONT }}>{player.name}</td>
+                      <td className="px-3 py-2 font-bold whitespace-nowrap" style={{ color: '#f5f0e8', fontFamily: FONT }}>
+                        {onPlayerClick ? (
+                          <button onClick={() => onPlayerClick(player)}
+                            style={{ background: 'none', border: 'none', color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: 'pointer', padding: 0, textAlign: 'left' }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#c8a84b'; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#f5f0e8'; }}>
+                            {player.name}
+                          </button>
+                        ) : player.name}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: FONT }}>{player.batch || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: FONT }}>{player.div || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.55)', fontFamily: FONT }}>{player.category || '—'}</td>
@@ -822,6 +833,19 @@ export function TeamSelectionBoard({
                                 <span style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 11, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {slotData!.playerName}
                                 </span>
+                                {onPlayerClick && (() => {
+                                  const p = players.find((pl) => pl.rowIndex === slotData!.playerRowIndex);
+                                  return p ? (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); onPlayerClick(p); }}
+                                      title="View player details"
+                                      style={{ background: 'none', border: 'none', color: 'rgba(245,240,232,0.2)', cursor: 'pointer', fontSize: 10, padding: '0 1px', lineHeight: 1, flexShrink: 0 }}
+                                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.7)'; }}
+                                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.2)'; }}>
+                                      ↗
+                                    </button>
+                                  ) : null;
+                                })()}
                                 {isEditable && (
                                   <button
                                     onClick={(e) => { e.stopPropagation(); clearSlot(team.teamIndex, comp.slot); }}
