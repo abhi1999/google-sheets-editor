@@ -3080,7 +3080,7 @@ function AdminPivotTable({
     setSchemaCoverage({
       ...DEFAULT_SCHEMA_COVERAGE,
       ...Object.fromEntries(
-        (Object.keys(loaded) as SchemaType[]).map((k) => [k, { bowlTypes: [], ...loaded[k] }])
+        (Object.keys(loaded) as SchemaType[]).map((k) => [k, { ...loaded[k], bowlTypes: loaded[k].bowlTypes ?? [] }])
       ),
     } as Record<SchemaType, SchemaCoverage>);
   }
