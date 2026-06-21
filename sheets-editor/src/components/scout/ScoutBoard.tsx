@@ -1233,11 +1233,14 @@ function AllFitnessTable({
     coachName: r.coachName,
   }));
 
-  // Count per category for filter badges
+  // Count unique players per category for filter badges
   const counts = useMemo(() => {
-    const c: Record<YoyoFilterKey, number> = { all: allRows.length, green: 0, amber: 0, red: 0, grey: 0 };
-    allRows.forEach((r) => { c[r.cat]++; });
-    return c;
+    const seen: Record<YoyoFilterKey, Set<number>> = { all: new Set(), green: new Set(), amber: new Set(), red: new Set(), grey: new Set() };
+    allRows.forEach((r) => {
+      seen.all.add(r.player.rowIndex);
+      seen[r.cat].add(r.player.rowIndex);
+    });
+    return { all: seen.all.size, green: seen.green.size, amber: seen.amber.size, red: seen.red.size, grey: seen.grey.size };
   }, [allRows]);
 
   if (allRows.length === 0) {
@@ -3117,6 +3120,35 @@ function AdminPivotTable({
     });
   }, [players, schemaFilter, yoyoFilter, categoryFilter, search]);
 
+  const yoyoCounts = useMemo(() => {
+    const q = search.toLowerCase();
+    const pool = players.filter((p) => {
+      if (p.coachEvals.length === 0) return false;
+      if (schemaFilter !== 'all' && p.schema !== schemaFilter) return false;
+      if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
+      if (q && !matchesSearch(p, q)) return false;
+      return true;
+    });
+    const counts: Record<YoyoFilterKey, number> = { all: pool.length, green: 0, amber: 0, red: 0, grey: 0 };
+    pool.forEach((p) => { counts[yoyoCategory(p.coachEvals)]++; });
+    return counts;
+  }, [players, schemaFilter, categoryFilter, search]);
+
+  const categoryCounts = useMemo(() => {
+    const q = search.toLowerCase();
+    const counts: Record<string, number> = {};
+    players.filter((p) => {
+      if (p.coachEvals.length === 0) return false;
+      if (schemaFilter !== 'all' && p.schema !== schemaFilter) return false;
+      if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals) !== yoyoFilter) return false;
+      if (q && !matchesSearch(p, q)) return false;
+      return true;
+    }).forEach((p) => {
+      if (p.category) counts[p.category] = (counts[p.category] || 0) + 1;
+    });
+    return counts;
+  }, [players, schemaFilter, yoyoFilter, search]);
+
   const [pivotSortCol, setPivotSortCol] = useState<string | null>(null);
   const [pivotSortDir, setPivotSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -3257,6 +3289,7 @@ function AdminPivotTable({
                   cursor: 'pointer',
                 }}>
                 {f.label}
+                <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.7 }}>({yoyoCounts[f.key]})</span>
               </button>
             );
           })}
@@ -3277,6 +3310,7 @@ function AdminPivotTable({
                     cursor: 'pointer',
                   }}>
                   {cat}
+                  <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.7 }}>({categoryCounts[cat] ?? 0})</span>
                 </button>
               );
             })}
