@@ -1184,6 +1184,13 @@ function AllFitnessTable({
 }) {
   const t = useContext(YoyoThresholdsCtx);
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
+  const [divFilter, setDivFilter] = useState<string>('all');
+
+  const allDivs = useMemo(() => {
+    const seen = new Set<string>();
+    for (const p of players) if (p.div) seen.add(p.div);
+    return Array.from(seen).sort();
+  }, [players]);
 
   // Flatten: one row per coach eval that has any fitness data, sorted by batch → player name
   const allRows = useMemo(() => {
@@ -1204,10 +1211,11 @@ function AllFitnessTable({
     return result;
   }, [players, allBatchNames, t]);
 
-  const filtered = useMemo(
-    () => yoyoFilter === 'all' ? allRows : allRows.filter((r) => r.cat === yoyoFilter),
-    [allRows, yoyoFilter]
-  );
+  const filtered = useMemo(() => {
+    let rows = yoyoFilter === 'all' ? allRows : allRows.filter((r) => r.cat === yoyoFilter);
+    if (divFilter !== 'all') rows = rows.filter((r) => r.player.div === divFilter);
+    return rows;
+  }, [allRows, yoyoFilter, divFilter]);
 
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
   const displayRows = useMemo(() => {
@@ -1288,6 +1296,30 @@ function AllFitnessTable({
             );
           })}
         </div>
+
+        {allDivs.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Div:</span>
+            {allDivs.map((div) => {
+              const active = divFilter === div;
+              return (
+                <button key={div} onClick={() => setDivFilter(active ? 'all' : div)}
+                  className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                  style={{
+                    fontFamily: 'Barlow Condensed, sans-serif',
+                    background: active ? 'rgba(200,168,75,0.2)' : 'rgba(255,255,255,0.05)',
+                    color: active ? '#c8a84b' : 'rgba(245,240,232,0.4)',
+                    border: `1px solid ${active ? 'rgba(200,168,75,0.45)' : 'rgba(245,240,232,0.08)'}`,
+                  }}>
+                  {div}
+                </button>
+              );
+            })}
+            {divFilter !== 'all' && (
+              <button onClick={() => setDivFilter('all')} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>Clear ✕</button>
+            )}
+          </div>
+        )}
 
         <TableSearch value={search} onChange={setSearch} />
 
@@ -1477,6 +1509,7 @@ function SelectionSummaryTable({
   const t = useContext(YoyoThresholdsCtx);
   const [ragFilters, setRagFilters] = useState<Set<RagKey>>(new Set());
   const [catFilters, setCatFilters] = useState<Set<string>>(new Set());
+  const [divFilter, setDivFilter] = useState<string>('all');
 
   function toggleRag(key: RagKey) {
     setRagFilters((prev) => {
@@ -1504,6 +1537,12 @@ function SelectionSummaryTable({
     return cats;
   }, [players, allBatchNames]);
 
+  const allDivs = useMemo(() => {
+    const seen = new Set<string>();
+    for (const p of players) if (p.div) seen.add(p.div);
+    return Array.from(seen).sort();
+  }, [players]);
+
   const baseRows = useMemo(() => {
     const batchOrder = new Map(allBatchNames.map((b, i) => [b, i]));
     return [...players]
@@ -1525,9 +1564,10 @@ function SelectionSummaryTable({
     return baseRows.filter((p) => {
       if (ragFilters.size > 0 && !ragFilters.has(ragCategory(p, t))) return false;
       if (catFilters.size > 0 && !catFilters.has(p.category)) return false;
+      if (divFilter !== 'all' && p.div !== divFilter) return false;
       return true;
     });
-  }, [baseRows, ragFilters, catFilters, t]);
+  }, [baseRows, ragFilters, catFilters, divFilter, t]);
 
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
 
@@ -1625,6 +1665,37 @@ function SelectionSummaryTable({
                     }}
                   >
                     {cat}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Div filter chips */}
+        {allDivs.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Div</span>
+              {divFilter !== 'all' && (
+                <button onClick={() => setDivFilter('all')} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                  Clear ✕
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {allDivs.map((div) => {
+                const isActive = divFilter === div;
+                return (
+                  <button key={div} onClick={() => setDivFilter(isActive ? 'all' : div)}
+                    className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                    style={{
+                      fontFamily: 'Barlow Condensed, sans-serif',
+                      background: isActive ? 'rgba(200,168,75,0.2)' : 'rgba(255,255,255,0.05)',
+                      color: isActive ? '#c8a84b' : 'rgba(245,240,232,0.45)',
+                      border: `1px solid ${isActive ? 'rgba(200,168,75,0.45)' : 'rgba(245,240,232,0.08)'}`,
+                    }}>
+                    {div}
                   </button>
                 );
               })}
@@ -2459,6 +2530,7 @@ function AdminAggSkillTable({
   const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
   const [schemaFilters, setSchemaFilters] = useState<Set<SchemaType>>(new Set());
+  const [divFilter, setDivFilter] = useState<string>('all');
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
 
   function toggleCoach(email: string) {
@@ -2467,6 +2539,12 @@ function AdminAggSkillTable({
   function toggleSchema(s: SchemaType) {
     setSchemaFilters((prev) => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
   }
+
+  const allDivs = useMemo(() => {
+    const seen = new Set<string>();
+    for (const p of players) if (p.div) seen.add(p.div);
+    return Array.from(seen).sort();
+  }, [players]);
 
   // All coaches (for filter chips — from all evals regardless of filter)
   const allCoaches = useMemo(() => {
@@ -2563,7 +2641,8 @@ function AdminAggSkillTable({
       : allRows;
     const afterYoyo = yoyoFilter === 'all' ? afterSearch : afterSearch.filter((r) => yoyoCategory(r.player.coachEvals, t) === yoyoFilter);
     const afterSchema = schemaFilters.size > 0 ? afterYoyo.filter((r) => schemaFilters.has(r.schemaName)) : afterYoyo;
-    return applySort(afterSchema, sortCol, sortDir, (r, col) => {
+    const afterDiv = divFilter === 'all' ? afterSchema : afterSchema.filter((r) => r.player.div === divFilter);
+    return applySort(afterDiv, sortCol, sortDir, (r, col) => {
       if (col === 'Player')    return r.player.name;
       if (col === 'Batch')     return r.player.batch || '';
       if (col === 'Div')       return r.player.div || '';
@@ -2580,7 +2659,7 @@ function AdminAggSkillTable({
       if (col === 'Comments')  return r.commentCount;
       return '';
     });
-  }, [allRows, search, yoyoFilter, schemaFilters, sortCol, sortDir]);
+  }, [allRows, search, yoyoFilter, schemaFilters, divFilter, sortCol, sortDir]);
 
   if (allRows.length === 0) {
     return (
@@ -2680,6 +2759,33 @@ function AdminAggSkillTable({
           </button>
         )}
       </div>
+
+      {/* Div filter */}
+      {allDivs.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap mb-3">
+          <span className="text-[10px] font-bold uppercase tracking-widest mr-1" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Div:</span>
+          {allDivs.map((div) => {
+            const active = divFilter === div;
+            return (
+              <button key={div} onClick={() => setDivFilter(active ? 'all' : div)}
+                className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                style={{
+                  fontFamily: 'Barlow Condensed, sans-serif',
+                  background: active ? 'rgba(200,168,75,0.2)' : 'rgba(255,255,255,0.05)',
+                  color: active ? '#c8a84b' : 'rgba(245,240,232,0.4)',
+                  border: `1px solid ${active ? 'rgba(200,168,75,0.45)' : 'rgba(245,240,232,0.08)'}`,
+                }}>
+                {div}
+              </button>
+            );
+          })}
+          {divFilter !== 'all' && (
+            <button onClick={() => setDivFilter('all')} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
+              Clear ✕
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -2974,6 +3080,7 @@ function AdminPivotTable({
   const [popover, setPopover] = useState<PivotPopover | null>(null);
   const [remarksPopover, setRemarksPopover] = useState<RemarksPopover | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [divFilter, setDivFilter] = useState<string>('all');
   const [selectedCoaches, setSelectedCoaches] = useState<Set<string> | null>(null); // null = all
   const [showExtraCols, setShowExtraCols] = useState(true);
   // Per-schema coverage filter — controls which skill columns are visible
@@ -3014,6 +3121,12 @@ function AdminPivotTable({
     const cats = new Set<string>();
     for (const p of players) if (p.category) cats.add(p.category);
     return Array.from(cats).sort();
+  }, [players]);
+
+  const allDivs = useMemo(() => {
+    const seen = new Set<string>();
+    for (const p of players) if (p.div) seen.add(p.div);
+    return Array.from(seen).sort();
   }, [players]);
 
   const allCoaches = useMemo(() => {
@@ -3187,23 +3300,25 @@ function AdminPivotTable({
       if (p.coachEvals.length === 0) return false;
       if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals, t) !== yoyoFilter) return false;
       if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
+      if (divFilter !== 'all' && p.div !== divFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
       return true;
     });
-  }, [effectivePlayers, yoyoFilter, categoryFilter, search, t]);
+  }, [effectivePlayers, yoyoFilter, categoryFilter, divFilter, search, t]);
 
   const yoyoCounts = useMemo(() => {
     const q = search.toLowerCase();
     const pool = effectivePlayers.filter((p) => {
       if (p.coachEvals.length === 0) return false;
       if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
+      if (divFilter !== 'all' && p.div !== divFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
       return true;
     });
     const counts: Record<YoyoFilterKey, number> = { all: pool.length, green: 0, amber: 0, red: 0, grey: 0 };
     pool.forEach((p) => { counts[yoyoCategory(p.coachEvals, t)]++; });
     return counts;
-  }, [effectivePlayers, categoryFilter, search, t]);
+  }, [effectivePlayers, categoryFilter, divFilter, search, t]);
 
   const categoryCounts = useMemo(() => {
     const q = search.toLowerCase();
@@ -3211,13 +3326,14 @@ function AdminPivotTable({
     effectivePlayers.filter((p) => {
       if (p.coachEvals.length === 0) return false;
       if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals, t) !== yoyoFilter) return false;
+      if (divFilter !== 'all' && p.div !== divFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
       return true;
     }).forEach((p) => {
       if (p.category) counts[p.category] = (counts[p.category] || 0) + 1;
     });
     return counts;
-  }, [effectivePlayers, yoyoFilter, search, t]);
+  }, [effectivePlayers, yoyoFilter, divFilter, search, t]);
 
   const [pivotSortCol, setPivotSortCol] = useState<string | null>(null);
   const [pivotSortDir, setPivotSortDir] = useState<'asc' | 'desc'>('desc');
@@ -3243,6 +3359,7 @@ function AdminPivotTable({
       const STR_SORTS: Record<string, (p: ScoutPlayer) => string> = {
         'player':       (p) => p.name,
         'category':     (p) => p.category || '',
+        'div':          (p) => p.div || '',
         'primary-skill':(p) => p.extraInfo?.['Primary Skill'] || '',
         'batting-hand': (p) => p.extraInfo?.['Batting hand'] || '',
         'bowler-arm':   (p) => p.extraInfo?.['Bowler arm'] || '',
@@ -3310,6 +3427,7 @@ function AdminPivotTable({
   const PLAYER_W = 150;
   const YOYO_W = 65;
   const CAT_W = 115;
+  const DIV_W = 52;
   const PRIM_W = 75;
   const BAT_HAND_W = 52;
   const BOWL_ARM_W = 52;
@@ -3392,6 +3510,27 @@ function AdminPivotTable({
                   }}>
                   {cat}
                   <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.7 }}>({categoryCounts[cat] ?? 0})</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {allDivs.length > 0 && (
+          <div className="flex items-center gap-1">
+            <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif', marginRight: 2 }}>Div:</span>
+            {allDivs.map((div) => {
+              const active = divFilter === div;
+              return (
+                <button key={div} onClick={() => setDivFilter(active ? 'all' : div)}
+                  style={{
+                    padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+                    fontFamily: 'Barlow Condensed, sans-serif',
+                    background: active ? 'rgba(200,168,75,0.2)' : 'rgba(255,255,255,0.05)',
+                    color: active ? '#c8a84b' : 'rgba(245,240,232,0.4)',
+                    border: `1px solid ${active ? 'rgba(200,168,75,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                    cursor: 'pointer',
+                  }}>
+                  {div}
                 </button>
               );
             })}
@@ -3595,10 +3734,11 @@ function AdminPivotTable({
                 <th rowSpan={4} onClick={() => togglePivotSort('player', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(0, PLAYER_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'player' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Player{sortIndicator('player')}</th>
                 <th rowSpan={4} onClick={() => togglePivotSort('yoyo')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W, YOYO_W, '#1a1010', 3), textAlign: 'center', color: pivotSortCol === 'yoyo' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Yo-Yo{sortIndicator('yoyo')}</th>
                 <th rowSpan={4} onClick={() => togglePivotSort('category', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'category' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Category{sortIndicator('category')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('primary-skill', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, PRIM_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'primary-skill' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Skill{sortIndicator('primary-skill')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('batting-hand', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W, BAT_HAND_W, '#1a1010', 3), textAlign: 'center', color: pivotSortCol === 'batting-hand' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bat{sortIndicator('batting-hand')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('bowler-arm', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, '#1a1010', 3), textAlign: 'center', color: pivotSortCol === 'bowler-arm' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Arm{sortIndicator('bowler-arm')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('bowling-type', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'bowling-type' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bowl Type{sortIndicator('bowling-type')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('div', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, DIV_W, '#1a1010', 3), textAlign: 'center', color: pivotSortCol === 'div' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Div{sortIndicator('div')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('primary-skill', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W, PRIM_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'primary-skill' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Skill{sortIndicator('primary-skill')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('batting-hand', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W, BAT_HAND_W, '#1a1010', 3), textAlign: 'center', color: pivotSortCol === 'batting-hand' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bat{sortIndicator('batting-hand')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('bowler-arm', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, '#1a1010', 3), textAlign: 'center', color: pivotSortCol === 'bowler-arm' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Arm{sortIndicator('bowler-arm')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('bowling-type', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'bowling-type' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bowl Type{sortIndicator('bowling-type')}</th>
                 {visibleSchemas.map(([schemaName, def]) => {
                   const visSecs = getVisibleSections(schemaName, def);
                   const colSpan = visSecs.reduce((s, { visSkills }) => s + visSkills.length * 2 + 1, 0) + 1;
@@ -3699,17 +3839,20 @@ function AdminPivotTable({
                         {player.category || player.schema}
                       </span>
                     </td>
-                    {/* Sticky: Primary Skill, Batting Hand, Bowler Arm, Bowling Type — collapsible */}
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, PRIM_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
+                    {/* Sticky: Div, Primary Skill, Batting Hand, Bowler Arm, Bowling Type — collapsible */}
+                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, DIV_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', display: showExtraCols ? undefined : 'none' }}>
+                      {player.div || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                    </td>
+                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W, PRIM_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
                       {player.extraInfo?.['Primary Skill'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
                     </td>
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W, BAT_HAND_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', display: showExtraCols ? undefined : 'none' }}>
+                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W, BAT_HAND_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', display: showExtraCols ? undefined : 'none' }}>
                       {player.extraInfo?.['Batting hand'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
                     </td>
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', display: showExtraCols ? undefined : 'none' }}>
+                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', display: showExtraCols ? undefined : 'none' }}>
                       {player.extraInfo?.['Bowler arm'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
                     </td>
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
+                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
                       {player.extraInfo?.['Bowling type'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
                     </td>
                     {/* Skill cells + section avg + schema avg (only visible skills/sections/schemas) */}
