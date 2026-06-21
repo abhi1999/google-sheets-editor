@@ -2864,14 +2864,6 @@ type PivotSavedFilter = {
   schemaCoverage: Record<SchemaType, SchemaCoverage>;
 };
 
-const PIVOT_FILTERS_LS_KEY = 'scout_pivot_filters_v3';
-
-function loadPivotFilters(): PivotSavedFilter[] {
-  try { return JSON.parse(localStorage.getItem(PIVOT_FILTERS_LS_KEY) || '[]'); } catch { return []; }
-}
-function savePivotFiltersLS(filters: PivotSavedFilter[]) {
-  try { localStorage.setItem(PIVOT_FILTERS_LS_KEY, JSON.stringify(filters)); } catch {}
-}
 
 function exportPivotToCSV(players: ScoutPlayer[], visibleSkillKeys: Set<string>) {
   const schemaEntries = Object.entries(SCHEMAS) as [SchemaType, SchemaDef][];
@@ -2935,9 +2927,11 @@ function skillScoreColor(avg: number): { bg: string; color: string } {
 function AdminPivotTable({
   players,
   onRowClick,
+  sheetKey,
 }: {
   players: ScoutPlayer[];
   onRowClick: (p: ScoutPlayer) => void;
+  sheetKey: string;
 }) {
   const [schemaFilter, setSchemaFilter] = useState<SchemaType | 'all'>('all');
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
@@ -2952,11 +2946,17 @@ function AdminPivotTable({
   function updateCov(schema: SchemaType, patch: Partial<SchemaCoverage>) {
     setSchemaCoverage((prev) => ({ ...prev, [schema]: { ...prev[schema], ...patch } }));
   }
-  // Saved filters
-  const [savedFilters, setSavedFilters] = useState<PivotSavedFilter[]>(() =>
-    typeof window !== 'undefined' ? loadPivotFilters() : []
-  );
+  // Saved filters — persisted in the Sheet (shared across all coaches)
+  const [savedFilters, setSavedFilters] = useState<PivotSavedFilter[]>([]);
   const [filterName, setFilterName] = useState('');
+  const [filterSaving, setFilterSaving] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/scout/pivot-filters?sheetKey=${encodeURIComponent(sheetKey)}`)
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data.filters)) setSavedFilters(data.filters); })
+      .catch(() => {});
+  }, [sheetKey]);
 
   const schemaEntries = useMemo(
     () => Object.entries(SCHEMAS) as [SchemaType, SchemaDef][],
@@ -3060,17 +3060,26 @@ function AdminPivotTable({
   }
 
   // Save / load / delete filter helpers
-  function handleSaveFilter() {
-    if (!filterName.trim()) return;
+  async function handleSaveFilter() {
+    if (!filterName.trim() || filterSaving) return;
     const next: PivotSavedFilter = {
-      id: Date.now().toString(),
+      id: `pf_${Date.now()}`,
       name: filterName.trim(),
       schemaFilter, yoyoFilter, categoryFilter, schemaCoverage,
     };
-    const updated = [...savedFilters, next];
-    setSavedFilters(updated);
-    savePivotFiltersLS(updated);
-    setFilterName('');
+    setFilterSaving(true);
+    try {
+      const res = await fetch(`/api/scout/pivot-filters?sheetKey=${encodeURIComponent(sheetKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next),
+      });
+      if (res.ok) {
+        setSavedFilters((prev) => [...prev, next]);
+        setFilterName('');
+      }
+    } catch {}
+    setFilterSaving(false);
   }
   function handleLoadFilter(f: PivotSavedFilter) {
     setSchemaFilter(f.schemaFilter);
@@ -3084,10 +3093,14 @@ function AdminPivotTable({
       ),
     } as Record<SchemaType, SchemaCoverage>);
   }
-  function handleDeleteFilter(id: string) {
-    const updated = savedFilters.filter((f) => f.id !== id);
-    setSavedFilters(updated);
-    savePivotFiltersLS(updated);
+  async function handleDeleteFilter(id: string) {
+    setSavedFilters((prev) => prev.filter((f) => f.id !== id));
+    try {
+      await fetch(
+        `/api/scout/pivot-filters?sheetKey=${encodeURIComponent(sheetKey)}&filterId=${encodeURIComponent(id)}`,
+        { method: 'DELETE' }
+      );
+    } catch {}
   }
 
   const filteredPlayers = useMemo(() => {
@@ -3385,9 +3398,9 @@ function AdminPivotTable({
               onChange={(e) => setFilterName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSaveFilter(); }}
               style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontFamily: 'Barlow Condensed, sans-serif', background: '#2a1a1a', color: '#f5f0e8', border: '1px solid rgba(255,255,255,0.12)', width: 140 }} />
-            <button onClick={handleSaveFilter} disabled={!filterName.trim()}
-              style={{ padding: '2px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: 'Barlow Condensed, sans-serif', background: filterName.trim() ? 'rgba(200,168,75,0.2)' : 'rgba(255,255,255,0.04)', color: filterName.trim() ? '#c8a84b' : 'rgba(245,240,232,0.2)', border: '1px solid rgba(200,168,75,0.25)', cursor: filterName.trim() ? 'pointer' : 'not-allowed' }}>
-              💾 Save
+            <button onClick={handleSaveFilter} disabled={!filterName.trim() || filterSaving}
+              style={{ padding: '2px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: 'Barlow Condensed, sans-serif', background: filterName.trim() && !filterSaving ? 'rgba(200,168,75,0.2)' : 'rgba(255,255,255,0.04)', color: filterName.trim() && !filterSaving ? '#c8a84b' : 'rgba(245,240,232,0.2)', border: '1px solid rgba(200,168,75,0.25)', cursor: filterName.trim() && !filterSaving ? 'pointer' : 'not-allowed' }}>
+              {filterSaving ? '…' : '💾 Save'}
             </button>
             {savedFilters.length > 0 && (
               <div className="flex items-center gap-1 flex-wrap">
@@ -4343,7 +4356,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
 
           {/* Reports: Skill Pivot (all coaches) */}
           {!loading && !error && viewMode === 'skill-pivot' && (
-            <AdminPivotTable players={players} onRowClick={setActivePlayer} />
+            <AdminPivotTable players={players} onRowClick={setActivePlayer} sheetKey={sheetKey} />
           )}
 
           {/* Admin: Skill Pivot table */}
@@ -4358,7 +4371,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                   Admin Report — Skill Pivot (Schema → Section → Skill Averages)
                 </span>
               </div>
-              <AdminPivotTable players={players} onRowClick={setActivePlayer} />
+              <AdminPivotTable players={players} onRowClick={setActivePlayer} sheetKey={sheetKey} />
             </>
           )}
 
