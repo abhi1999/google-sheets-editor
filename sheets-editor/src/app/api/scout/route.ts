@@ -58,7 +58,7 @@ export async function GET(request: Request) {
 
     const [{ headers, rows }, isAdmin] = await Promise.all([
       readSheetData(sheetKey),
-      checkAdmin(user.email, sheetKey),
+      isDemo ? Promise.resolve(true) : checkAdmin(user.email, sheetKey),
     ]);
 
     const extraColumns = headers.filter((h) => !SYSTEM_COLUMNS.has(h));

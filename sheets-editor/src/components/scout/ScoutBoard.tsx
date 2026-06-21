@@ -8,6 +8,7 @@ import type { AppUser } from '@/types';
 import { SCHEMAS, FITNESS_FIELDS, calcScore, getRating, playerInitials, type SectionDef } from '@/lib/scout-schemas';
 import Papa from 'papaparse';
 import { PlayerModal } from './PlayerModal';
+import { TeamSelectionBoard } from './TeamSelectionBoard';
 
 interface ScoutBoardProps {
   sheetKey: string;
@@ -2040,6 +2041,7 @@ function AdminSkillDetailsTable({
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
   const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
+  const [skillFilters, setSkillFilters] = useState<Set<string>>(new Set());
 
   function toggleCoach(email: string) {
     setCoachFilters((prev) => {
@@ -2047,6 +2049,9 @@ function AdminSkillDetailsTable({
       next.has(email) ? next.delete(email) : next.add(email);
       return next;
     });
+  }
+  function toggleSkill(name: string) {
+    setSkillFilters((prev) => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
   }
 
   const allRows = useMemo((): AdminSkillDetailRow[] => {
@@ -2100,7 +2105,10 @@ function AdminSkillDetailsTable({
     const yoyoFiltered = yoyoFilter === 'all'
       ? coachFiltered
       : coachFiltered.filter((r) => yoyoCategory(r.player.coachEvals) === yoyoFilter);
-    return applySort(yoyoFiltered, sortCol, sortDir, (r, col) => {
+    const skillFiltered = skillFilters.size > 0
+      ? yoyoFiltered.filter((r) => skillFilters.has(r.skillName))
+      : yoyoFiltered;
+    return applySort(skillFiltered, sortCol, sortDir, (r, col) => {
       if (col === 'Player') return r.player.name;
       if (col === 'Batch') return r.player.batch || '';
       if (col === 'Div') return r.player.div || '';
@@ -2118,7 +2126,7 @@ function AdminSkillDetailsTable({
       if (col === 'Overall Comment') return r.remarks;
       return '';
     });
-  }, [allRows, search, sortCol, sortDir, coachFilters, yoyoFilter]);
+  }, [allRows, search, sortCol, sortDir, coachFilters, yoyoFilter, skillFilters]);
 
   const allCoaches = useMemo(() => {
     const seen = new Map<string, string>();
@@ -2127,6 +2135,11 @@ function AdminSkillDetailsTable({
     }
     return Array.from(seen.entries()).map(([email, name]) => ({ email, name }));
   }, [allRows]);
+
+  const allSkills = useMemo(
+    () => [...new Set(allRows.map((r) => r.skillName))].sort(),
+    [allRows]
+  );
 
   if (allRows.length === 0) {
     return (
@@ -2210,6 +2223,37 @@ function AdminSkillDetailsTable({
                   }}
                 >
                   {name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Skill filter chips */}
+      {allSkills.length > 0 && (
+        <div className="flex flex-col gap-1.5 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(200,168,75,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>Skill</span>
+            {skillFilters.size > 0 && (
+              <button onClick={() => setSkillFilters(new Set())} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                Clear ✕
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {allSkills.map((skill) => {
+              const isActive = skillFilters.has(skill);
+              return (
+                <button key={skill} onClick={() => toggleSkill(skill)}
+                  className="px-2.5 py-1 rounded text-[11px] font-bold tracking-wider transition-all"
+                  style={{
+                    fontFamily: 'Barlow Condensed, sans-serif',
+                    background: isActive ? 'rgba(200,168,75,0.35)' : 'rgba(200,168,75,0.07)',
+                    color: isActive ? '#ffe082' : 'rgba(200,168,75,0.55)',
+                    border: `1px solid ${isActive ? 'rgba(200,168,75,0.5)' : 'rgba(200,168,75,0.15)'}`,
+                  }}>
+                  {skill}
                 </button>
               );
             })}
@@ -2413,10 +2457,14 @@ function AdminAggSkillTable({
 }) {
   const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
+  const [skillFilters, setSkillFilters] = useState<Set<string>>(new Set());
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
 
   function toggleCoach(email: string) {
     setCoachFilters((prev) => { const n = new Set(prev); n.has(email) ? n.delete(email) : n.add(email); return n; });
+  }
+  function toggleSkill(name: string) {
+    setSkillFilters((prev) => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
   }
 
   // All coaches (for filter chips — from all evals regardless of filter)
@@ -2498,6 +2546,11 @@ function AdminAggSkillTable({
     return counts;
   }, [allRows]);
 
+  const allSkills = useMemo(
+    () => [...new Set(allRows.map((r) => r.skillName))].sort(),
+    [allRows]
+  );
+
   const displayRows = useMemo(() => {
     const q = search.toLowerCase();
     const afterSearch = q
@@ -2513,7 +2566,8 @@ function AdminAggSkillTable({
         )
       : allRows;
     const afterYoyo = yoyoFilter === 'all' ? afterSearch : afterSearch.filter((r) => yoyoCategory(r.player.coachEvals) === yoyoFilter);
-    return applySort(afterYoyo, sortCol, sortDir, (r, col) => {
+    const afterSkill = skillFilters.size > 0 ? afterYoyo.filter((r) => skillFilters.has(r.skillName)) : afterYoyo;
+    return applySort(afterSkill, sortCol, sortDir, (r, col) => {
       if (col === 'Player')    return r.player.name;
       if (col === 'Batch')     return r.player.batch || '';
       if (col === 'Div')       return r.player.div || '';
@@ -2530,7 +2584,7 @@ function AdminAggSkillTable({
       if (col === 'Comments')  return r.commentCount;
       return '';
     });
-  }, [allRows, search, yoyoFilter, sortCol, sortDir]);
+  }, [allRows, search, yoyoFilter, skillFilters, sortCol, sortDir]);
 
   if (allRows.length === 0) {
     return (
@@ -2605,6 +2659,37 @@ function AdminAggSkillTable({
           );
         })}
       </div>
+
+      {/* Skill filter chips */}
+      {allSkills.length > 0 && (
+        <div className="flex flex-col gap-1.5 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(200,168,75,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>Skill</span>
+            {skillFilters.size > 0 && (
+              <button onClick={() => setSkillFilters(new Set())} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                Clear ✕
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {allSkills.map((skill) => {
+              const isActive = skillFilters.has(skill);
+              return (
+                <button key={skill} onClick={() => toggleSkill(skill)}
+                  className="px-2.5 py-1 rounded text-[11px] font-bold tracking-wider transition-all"
+                  style={{
+                    fontFamily: 'Barlow Condensed, sans-serif',
+                    background: isActive ? 'rgba(200,168,75,0.35)' : 'rgba(200,168,75,0.07)',
+                    color: isActive ? '#ffe082' : 'rgba(200,168,75,0.55)',
+                    border: `1px solid ${isActive ? 'rgba(200,168,75,0.5)' : 'rgba(200,168,75,0.15)'}`,
+                  }}>
+                  {skill}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -2783,7 +2868,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'team-packages' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills'>('board');
   const [isAdmin, setIsAdmin] = useState(false);
   const isDemo = sheetKey === 'demo';
 
@@ -3185,6 +3270,27 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                 );
               })()}
 
+              {/* Team Packages tab */}
+              {(() => {
+                const isActive = viewMode === 'team-packages';
+                return (
+                  <button
+                    onClick={() => { setViewMode('team-packages'); setSearchQuery(''); }}
+                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
+                    style={{
+                      fontFamily: 'Barlow Condensed, sans-serif',
+                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
+                      borderColor: isActive ? '#c8a84b' : 'transparent',
+                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
+                    }}
+                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
+                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
+                  >
+                    Team Packages
+                  </button>
+                );
+              })()}
+
               {/* Admin: All Coach Evals tab — only for admins */}
               {isAdmin && (() => {
                 const isActive = viewMode === 'admin-evals';
@@ -3362,6 +3468,11 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {/* Selection Summary table */}
           {!loading && !error && viewMode === 'selection' && (
             <SelectionSummaryTable players={players} allBatchNames={allBatchNames} onRowClick={setActivePlayer} />
+          )}
+
+          {/* Team Packages */}
+          {!loading && !error && viewMode === 'team-packages' && (
+            <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} />
           )}
 
           {/* Admin: Skill Averages table */}

@@ -58,3 +58,25 @@ export interface ScoutApiResponse {
   isEditor: boolean;
   isAdmin: boolean;
 }
+
+export interface TeamSlot {
+  slot: number;
+  playerRowIndex: number | null;
+  playerName: string;
+}
+
+export interface PackageTeam {
+  teamIndex: number;
+  teamName: string;
+  slots: TeamSlot[];
+}
+
+export interface TeamPackage {
+  packageId: string;
+  coachEmail: string;
+  coachName: string;
+  packageName: string;
+  status: 'draft' | 'submitted';
+  teams: PackageTeam[];
+  savedAt: string;
+}
