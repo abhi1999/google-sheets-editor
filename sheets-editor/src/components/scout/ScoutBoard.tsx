@@ -2041,7 +2041,7 @@ function AdminSkillDetailsTable({
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
   const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
-  const [skillFilters, setSkillFilters] = useState<Set<string>>(new Set());
+  const [schemaFilters, setSchemaFilters] = useState<Set<SchemaType>>(new Set());
 
   function toggleCoach(email: string) {
     setCoachFilters((prev) => {
@@ -2050,8 +2050,8 @@ function AdminSkillDetailsTable({
       return next;
     });
   }
-  function toggleSkill(name: string) {
-    setSkillFilters((prev) => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
+  function toggleSchema(s: SchemaType) {
+    setSchemaFilters((prev) => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
   }
 
   const allRows = useMemo((): AdminSkillDetailRow[] => {
@@ -2105,10 +2105,10 @@ function AdminSkillDetailsTable({
     const yoyoFiltered = yoyoFilter === 'all'
       ? coachFiltered
       : coachFiltered.filter((r) => yoyoCategory(r.player.coachEvals) === yoyoFilter);
-    const skillFiltered = skillFilters.size > 0
-      ? yoyoFiltered.filter((r) => skillFilters.has(r.skillName))
+    const schemaFiltered = schemaFilters.size > 0
+      ? yoyoFiltered.filter((r) => schemaFilters.has(r.schemaName))
       : yoyoFiltered;
-    return applySort(skillFiltered, sortCol, sortDir, (r, col) => {
+    return applySort(schemaFiltered, sortCol, sortDir, (r, col) => {
       if (col === 'Player') return r.player.name;
       if (col === 'Batch') return r.player.batch || '';
       if (col === 'Div') return r.player.div || '';
@@ -2126,7 +2126,7 @@ function AdminSkillDetailsTable({
       if (col === 'Overall Comment') return r.remarks;
       return '';
     });
-  }, [allRows, search, sortCol, sortDir, coachFilters, yoyoFilter, skillFilters]);
+  }, [allRows, search, sortCol, sortDir, coachFilters, yoyoFilter, schemaFilters]);
 
   const allCoaches = useMemo(() => {
     const seen = new Map<string, string>();
@@ -2135,11 +2135,6 @@ function AdminSkillDetailsTable({
     }
     return Array.from(seen.entries()).map(([email, name]) => ({ email, name }));
   }, [allRows]);
-
-  const allSkills = useMemo(
-    () => [...new Set(allRows.map((r) => r.skillName))].sort(),
-    [allRows]
-  );
 
   if (allRows.length === 0) {
     return (
@@ -2230,36 +2225,30 @@ function AdminSkillDetailsTable({
         </div>
       )}
 
-      {/* Skill filter chips */}
-      {allSkills.length > 0 && (
-        <div className="flex flex-col gap-1.5 mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(200,168,75,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>Skill</span>
-            {skillFilters.size > 0 && (
-              <button onClick={() => setSkillFilters(new Set())} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
-                Clear ✕
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {allSkills.map((skill) => {
-              const isActive = skillFilters.has(skill);
-              return (
-                <button key={skill} onClick={() => toggleSkill(skill)}
-                  className="px-2.5 py-1 rounded text-[11px] font-bold tracking-wider transition-all"
-                  style={{
-                    fontFamily: 'Barlow Condensed, sans-serif',
-                    background: isActive ? 'rgba(200,168,75,0.35)' : 'rgba(200,168,75,0.07)',
-                    color: isActive ? '#ffe082' : 'rgba(200,168,75,0.55)',
-                    border: `1px solid ${isActive ? 'rgba(200,168,75,0.5)' : 'rgba(200,168,75,0.15)'}`,
-                  }}>
-                  {skill}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Schema filter chips */}
+      <div className="flex items-center gap-1.5 flex-wrap mb-3">
+        {(Object.entries(SCHEMA_COLORS) as [SchemaType, string][]).map(([schema, color]) => {
+          const isActive = schemaFilters.has(schema);
+          const label = schema === 'Batsman' ? 'BAT' : schema === 'Fast Bowler' ? 'FB' : 'SB';
+          return (
+            <button key={schema} onClick={() => toggleSchema(schema)}
+              className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+              style={{
+                fontFamily: 'Barlow Condensed, sans-serif',
+                background: isActive ? `${color}44` : `${color}14`,
+                color: isActive ? '#f5f0e8' : `${color}bb`,
+                border: `1px solid ${isActive ? `${color}99` : `${color}33`}`,
+              }}>
+              {label} · {schema}
+            </button>
+          );
+        })}
+        {schemaFilters.size > 0 && (
+          <button onClick={() => setSchemaFilters(new Set())} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
+            Clear ✕
+          </button>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <TableSearch value={search} onChange={setSearch} />
@@ -2457,14 +2446,14 @@ function AdminAggSkillTable({
 }) {
   const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
-  const [skillFilters, setSkillFilters] = useState<Set<string>>(new Set());
+  const [schemaFilters, setSchemaFilters] = useState<Set<SchemaType>>(new Set());
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
 
   function toggleCoach(email: string) {
     setCoachFilters((prev) => { const n = new Set(prev); n.has(email) ? n.delete(email) : n.add(email); return n; });
   }
-  function toggleSkill(name: string) {
-    setSkillFilters((prev) => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
+  function toggleSchema(s: SchemaType) {
+    setSchemaFilters((prev) => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
   }
 
   // All coaches (for filter chips — from all evals regardless of filter)
@@ -2546,11 +2535,6 @@ function AdminAggSkillTable({
     return counts;
   }, [allRows]);
 
-  const allSkills = useMemo(
-    () => [...new Set(allRows.map((r) => r.skillName))].sort(),
-    [allRows]
-  );
-
   const displayRows = useMemo(() => {
     const q = search.toLowerCase();
     const afterSearch = q
@@ -2566,8 +2550,8 @@ function AdminAggSkillTable({
         )
       : allRows;
     const afterYoyo = yoyoFilter === 'all' ? afterSearch : afterSearch.filter((r) => yoyoCategory(r.player.coachEvals) === yoyoFilter);
-    const afterSkill = skillFilters.size > 0 ? afterYoyo.filter((r) => skillFilters.has(r.skillName)) : afterYoyo;
-    return applySort(afterSkill, sortCol, sortDir, (r, col) => {
+    const afterSchema = schemaFilters.size > 0 ? afterYoyo.filter((r) => schemaFilters.has(r.schemaName)) : afterYoyo;
+    return applySort(afterSchema, sortCol, sortDir, (r, col) => {
       if (col === 'Player')    return r.player.name;
       if (col === 'Batch')     return r.player.batch || '';
       if (col === 'Div')       return r.player.div || '';
@@ -2584,7 +2568,7 @@ function AdminAggSkillTable({
       if (col === 'Comments')  return r.commentCount;
       return '';
     });
-  }, [allRows, search, yoyoFilter, skillFilters, sortCol, sortDir]);
+  }, [allRows, search, yoyoFilter, schemaFilters, sortCol, sortDir]);
 
   if (allRows.length === 0) {
     return (
@@ -2660,36 +2644,30 @@ function AdminAggSkillTable({
         })}
       </div>
 
-      {/* Skill filter chips */}
-      {allSkills.length > 0 && (
-        <div className="flex flex-col gap-1.5 mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(200,168,75,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>Skill</span>
-            {skillFilters.size > 0 && (
-              <button onClick={() => setSkillFilters(new Set())} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
-                Clear ✕
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {allSkills.map((skill) => {
-              const isActive = skillFilters.has(skill);
-              return (
-                <button key={skill} onClick={() => toggleSkill(skill)}
-                  className="px-2.5 py-1 rounded text-[11px] font-bold tracking-wider transition-all"
-                  style={{
-                    fontFamily: 'Barlow Condensed, sans-serif',
-                    background: isActive ? 'rgba(200,168,75,0.35)' : 'rgba(200,168,75,0.07)',
-                    color: isActive ? '#ffe082' : 'rgba(200,168,75,0.55)',
-                    border: `1px solid ${isActive ? 'rgba(200,168,75,0.5)' : 'rgba(200,168,75,0.15)'}`,
-                  }}>
-                  {skill}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Schema filter chips */}
+      <div className="flex items-center gap-1.5 flex-wrap mb-3">
+        {(Object.entries(SCHEMA_COLORS) as [SchemaType, string][]).map(([schema, color]) => {
+          const isActive = schemaFilters.has(schema);
+          const label = schema === 'Batsman' ? 'BAT' : schema === 'Fast Bowler' ? 'FB' : 'SB';
+          return (
+            <button key={schema} onClick={() => toggleSchema(schema)}
+              className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+              style={{
+                fontFamily: 'Barlow Condensed, sans-serif',
+                background: isActive ? `${color}44` : `${color}14`,
+                color: isActive ? '#f5f0e8' : `${color}bb`,
+                border: `1px solid ${isActive ? `${color}99` : `${color}33`}`,
+              }}>
+              {label} · {schema}
+            </button>
+          );
+        })}
+        {schemaFilters.size > 0 && (
+          <button onClick={() => setSchemaFilters(new Set())} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
+            Clear ✕
+          </button>
+        )}
+      </div>
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
