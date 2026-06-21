@@ -59,7 +59,7 @@ function getYoYoBadge(coachEvals: ScoutPlayer['coachEvals']): { best: number; bg
     .map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || ''))
     .filter((v) => !isNaN(v) && v > 0);
   if (vals.length === 0) return null;
-  const best = Math.max(...vals);
+  const best = Math.min(...vals);
   if (best >= 15.5) return { best, bg: '#1b5e20', text: '#a5d6a7' };
   if (best >= 15.2) return { best, bg: '#7f3f00', text: '#ffcc80' };
   return { best, bg: '#7f1f1f', text: '#ef9a9a' };
@@ -1423,7 +1423,7 @@ function maxYoyo(player: ScoutPlayer): number | null {
   const vals = player.coachEvals
     .map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || ''))
     .filter((v) => !isNaN(v) && v > 0);
-  return vals.length > 0 ? Math.max(...vals) : null;
+  return vals.length > 0 ? Math.min(...vals) : null;
 }
 
 function exportSelectionToCSV(players: ScoutPlayer[]) {
@@ -2006,8 +2006,11 @@ function exportAdminSkillDetailsToCSV(rows: AdminSkillDetailRow[]) {
   const data = rows.map((r) => ({
     Player: r.player.name,
     Batch: r.player.batch || '',
+    Div: r.player.div || '',
     Category: r.player.category || '',
     Academy: r.academy,
+    'Primary Skill': r.player.extraInfo?.['Primary Skill'] || '',
+    'Yo-Yo': maxYoyo(r.player) ?? '',
     Coach: r.coachName,
     Schema: r.schemaName,
     Section: `${r.schemaLabel}${r.sectionLetter}: ${r.sectionName}`,
@@ -2036,6 +2039,7 @@ function AdminSkillDetailsTable({
 }) {
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
   const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
+  const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
 
   function toggleCoach(email: string) {
     setCoachFilters((prev) => {
@@ -2093,11 +2097,17 @@ function AdminSkillDetailsTable({
     const coachFiltered = coachFilters.size > 0
       ? base.filter((r) => coachFilters.has(r.coachEmail))
       : base;
-    return applySort(coachFiltered, sortCol, sortDir, (r, col) => {
+    const yoyoFiltered = yoyoFilter === 'all'
+      ? coachFiltered
+      : coachFiltered.filter((r) => yoyoCategory(r.player.coachEvals) === yoyoFilter);
+    return applySort(yoyoFiltered, sortCol, sortDir, (r, col) => {
       if (col === 'Player') return r.player.name;
       if (col === 'Batch') return r.player.batch || '';
+      if (col === 'Div') return r.player.div || '';
       if (col === 'Category') return r.player.category || '';
       if (col === 'Academy') return r.academy;
+      if (col === 'Primary Skill') return r.player.extraInfo?.['Primary Skill'] || '';
+      if (col === 'Yo-Yo') return maxYoyo(r.player) ?? -1;
       if (col === 'Coach') return r.coachName;
       if (col === 'Schema') return r.schemaName;
       if (col === 'Section') return `${r.schemaLabel}${r.sectionLetter}`;
@@ -2108,7 +2118,7 @@ function AdminSkillDetailsTable({
       if (col === 'Overall Comment') return r.remarks;
       return '';
     });
-  }, [allRows, search, sortCol, sortDir, coachFilters]);
+  }, [allRows, search, sortCol, sortDir, coachFilters, yoyoFilter]);
 
   const allCoaches = useMemo(() => {
     const seen = new Map<string, string>();
@@ -2133,10 +2143,45 @@ function AdminSkillDetailsTable({
   }
 
   const uniqueCoaches = allCoaches.length;
-  const cols = ['Player', 'Batch', 'Category', 'Academy', 'Coach', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes', 'Overall Comment'];
+  const yoyoCounts = useMemo(() => {
+    const seen = new Set<number>();
+    const c: Record<YoyoFilterKey, number> = { all: 0, green: 0, amber: 0, red: 0, grey: 0 };
+    for (const r of allRows) {
+      if (seen.has(r.player.rowIndex)) continue;
+      seen.add(r.player.rowIndex);
+      c[yoyoCategory(r.player.coachEvals)]++;
+      c.all++;
+    }
+    return c;
+  }, [allRows]);
+  const cols = ['Player', 'Batch', 'Div', 'Category', 'Academy', 'Primary Skill', 'Yo-Yo', 'Coach', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes', 'Overall Comment'];
 
   return (
     <div>
+      {/* Yo-Yo filter chips */}
+      <div className="flex flex-col gap-1.5 mb-3">
+        <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Yo-Yo Status</span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {YOYO_FILTERS.map((f) => {
+            const isActive = yoyoFilter === f.key;
+            return (
+              <button key={f.key} onClick={() => setYoyoFilter(f.key)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                style={{
+                  fontFamily: 'Barlow Condensed, sans-serif',
+                  background: isActive ? f.activeBg : f.bg,
+                  color: isActive ? '#fff' : f.text,
+                  border: `1px solid ${isActive ? 'transparent' : 'rgba(245,240,232,0.08)'}`,
+                  letterSpacing: '0.07em',
+                }}>
+                {f.label}
+                <span className="opacity-70 text-[10px]">({yoyoCounts[f.key]})</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Coach filter chips */}
       {allCoaches.length > 1 && (
         <div className="flex flex-col gap-1.5 mb-3">
@@ -2215,10 +2260,23 @@ function AdminSkillDetailsTable({
                       <span style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.batch || '—'}</span>
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
+                      {r.player.div ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase" style={(() => { const s = getDivStyle(r.player.div); return s ? { background: s.bg, color: s.text } : { color: 'rgba(245,240,232,0.4)' }; })()}>
+                          {r.player.div}
+                        </span>
+                      ) : <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
                       <span style={{ color: 'rgba(245,240,232,0.6)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.category || '—'}</span>
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
                       <span style={{ color: 'rgba(245,240,232,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.academy || <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>}</span>
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.extraInfo?.['Primary Skill'] || <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>}</span>
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      {(() => { const yoyo = maxYoyo(r.player); if (yoyo === null) return <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>; const badge = getYoYoBadge(r.player.coachEvals); return <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ background: badge?.bg ?? 'rgba(0,0,0,0.2)', color: badge?.text ?? 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>{yoyo}</span>; })()}
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap">
                       <span className="font-semibold" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -2323,8 +2381,10 @@ function exportAggSkillsToCSV(rows: AggSkillRow[]) {
   const data = rows.map((r) => ({
     Player: r.player.name,
     Batch: r.player.batch || '',
+    Div: r.player.div || '',
     Category: r.player.category || '',
     Academy: r.academy,
+    'Yo-Yo': maxYoyo(r.player) ?? '',
     Schema: r.schemaName,
     Section: `${r.schemaLabel}${r.sectionLetter}: ${r.sectionName}`,
     'Sec %': r.sectionPct,
@@ -2352,6 +2412,7 @@ function AdminAggSkillTable({
   onRowClick: (p: ScoutPlayer) => void;
 }) {
   const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
+  const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
 
   function toggleCoach(email: string) {
@@ -2429,12 +2490,21 @@ function AdminAggSkillTable({
     return result;
   }, [players, coachFilters]);
 
+  const yoyoCounts = useMemo(() => {
+    const seen = new Map<number, ScoutPlayer>();
+    for (const r of allRows) seen.set(r.player.rowIndex, r.player);
+    const counts: Record<YoyoFilterKey, number> = { all: seen.size, green: 0, amber: 0, red: 0, grey: 0 };
+    for (const p of seen.values()) counts[yoyoCategory(p.coachEvals)]++;
+    return counts;
+  }, [allRows]);
+
   const displayRows = useMemo(() => {
     const q = search.toLowerCase();
-    const base = q
+    const afterSearch = q
       ? allRows.filter((r) =>
           r.player.name.toLowerCase().includes(q) ||
           (r.player.batch || '').toLowerCase().includes(q) ||
+          (r.player.div || '').toLowerCase().includes(q) ||
           (r.player.category || '').toLowerCase().includes(q) ||
           r.academy.toLowerCase().includes(q) ||
           r.skillName.toLowerCase().includes(q) ||
@@ -2442,11 +2512,14 @@ function AdminAggSkillTable({
           r.overallComments.toLowerCase().includes(q)
         )
       : allRows;
-    return applySort(base, sortCol, sortDir, (r, col) => {
+    const afterYoyo = yoyoFilter === 'all' ? afterSearch : afterSearch.filter((r) => yoyoCategory(r.player.coachEvals) === yoyoFilter);
+    return applySort(afterYoyo, sortCol, sortDir, (r, col) => {
       if (col === 'Player')    return r.player.name;
       if (col === 'Batch')     return r.player.batch || '';
+      if (col === 'Div')       return r.player.div || '';
       if (col === 'Category')  return r.player.category || '';
       if (col === 'Academy')   return r.academy;
+      if (col === 'Yo-Yo')     return maxYoyo(r.player) ?? -1;
       if (col === 'Schema')    return r.schemaName;
       if (col === 'Section')   return `${r.schemaLabel}${r.sectionLetter}`;
       if (col === 'Sec %')     return r.sectionPct;
@@ -2457,7 +2530,7 @@ function AdminAggSkillTable({
       if (col === 'Comments')  return r.commentCount;
       return '';
     });
-  }, [allRows, search, sortCol, sortDir]);
+  }, [allRows, search, yoyoFilter, sortCol, sortDir]);
 
   if (allRows.length === 0) {
     return (
@@ -2470,7 +2543,7 @@ function AdminAggSkillTable({
   }
 
   const TH_BASE = 'px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer select-none';
-  const cols = ['Player', 'Batch', 'Category', 'Academy', 'Schema', 'Section', 'Sec %', 'Skill', 'Wt', 'Avg Score', 'Rated By', 'Comments'];
+  const cols = ['Player', 'Batch', 'Div', 'Category', 'Academy', 'Schema', 'Section', 'Sec %', 'Skill', 'Wt', 'Avg Score', 'Rated By', 'Yo-Yo', 'Comments'];
 
   return (
     <div>
@@ -2513,6 +2586,26 @@ function AdminAggSkillTable({
         </div>
       )}
 
+      {/* Yo-Yo filter */}
+      <div className="flex items-center gap-1.5 flex-wrap mb-3">
+        {YOYO_FILTERS.map(({ key, label, bg, text, activeBg }) => {
+          const count = yoyoCounts[key];
+          const isActive = yoyoFilter === key;
+          return (
+            <button key={key} onClick={() => setYoyoFilter(key as YoyoFilterKey)}
+              className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+              style={{
+                fontFamily: 'Barlow Condensed, sans-serif',
+                background: isActive ? activeBg : bg,
+                color: text,
+                border: `1px solid ${isActive ? text : 'transparent'}`,
+              }}>
+              {label} <span style={{ opacity: 0.7 }}>({count})</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <TableSearch value={search} onChange={setSearch} />
@@ -2535,8 +2628,8 @@ function AdminAggSkillTable({
                     className={TH_BASE}
                     style={{
                       ...TH_STYLE,
-                      textAlign: ['Wt', 'Avg Score', 'Rated By', 'Comments', 'Sec %'].includes(h) ? 'center' : 'left',
-                      color: h === 'Sec %' ? '#c8a84b' : 'rgba(245,240,232,0.55)',
+                      textAlign: ['Wt', 'Avg Score', 'Rated By', 'Comments', 'Sec %', 'Yo-Yo'].includes(h) ? 'center' : 'left',
+                      color: h === 'Sec %' ? '#c8a84b' : h === 'Yo-Yo' ? '#81c784' : 'rgba(245,240,232,0.55)',
                     }} />
                 ))}
               </tr>
@@ -2560,6 +2653,12 @@ function AdminAggSkillTable({
                     {/* Batch */}
                     <td className="px-3 py-2 whitespace-nowrap">
                       <span style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.batch || '—'}</span>
+                    </td>
+                    {/* Div */}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase" style={(() => { const s = getDivStyle(r.player.div); return s ? { background: s.bg, color: s.text } : { color: 'rgba(245,240,232,0.4)' }; })()}>
+                        {r.player.div || '—'}
+                      </span>
                     </td>
                     {/* Category */}
                     <td className="px-3 py-2 whitespace-nowrap">
@@ -2613,6 +2712,16 @@ function AdminAggSkillTable({
                       <span className="text-[10px]" style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
                         /{r.totalCoaches}
                       </span>
+                    </td>
+                    {/* Yo-Yo */}
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                      {(() => {
+                        const yy = maxYoyo(r.player);
+                        if (yy === null) return <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: 'Barlow Condensed, sans-serif' }}>—</span>;
+                        const cat = yoyoCategory(r.player.coachEvals);
+                        const clr = cat === 'green' ? '#81c784' : cat === 'amber' ? '#ffb74d' : '#ef9a9a';
+                        return <span className="font-bold text-[11px]" style={{ color: clr, fontFamily: 'Barlow Condensed, sans-serif' }}>{yy.toFixed(1)}</span>;
+                      })()}
                     </td>
                     {/* Overall Comments */}
                     <td className="px-3 py-2" style={{ maxWidth: '280px' }}>
