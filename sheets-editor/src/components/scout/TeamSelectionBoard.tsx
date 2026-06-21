@@ -74,14 +74,22 @@ function yoyoColor(yy: number | null): string {
 function PackageCard({
   pkg,
   editable,
+  requiredIds,
   onOpen,
 }: {
   pkg: TeamPackage;
   editable: boolean;
+  requiredIds: Set<number>;
   onOpen: () => void;
 }) {
   const totalFilled = pkg.teams.reduce((s, t) => s + teamFillCount(t), 0);
   const totalPossible = pkg.teams.length * 13;
+  const pickedIds = new Set(
+    pkg.teams.flatMap((t) => t.slots.map((s) => s.playerRowIndex)).filter(Boolean) as number[]
+  );
+  const missingCount = requiredIds.size > 0
+    ? [...requiredIds].filter((id) => !pickedIds.has(id)).length
+    : 0;
 
   return (
     <div
@@ -125,6 +133,20 @@ function PackageCard({
         })}
       </div>
 
+      {requiredIds.size > 0 && (
+        <div className="mt-2">
+          {missingCount > 0 ? (
+            <span style={{ color: '#ffb74d', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+              ⚠ {missingCount} required player{missingCount !== 1 ? 's' : ''} missing
+            </span>
+          ) : (
+            <span style={{ color: '#81c784', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+              ✓ All required players included
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mt-3">
         {pkg.savedAt ? (
           <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 10 }}>
@@ -167,6 +189,7 @@ export function TeamSelectionBoard({
   const [pickerSearch, setPickerSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [compareFilter, setCompareFilter] = useState<'all' | 'consensus' | 'majority' | 'unique'>('all');
+  const [dragOver, setDragOver] = useState<{ teamIndex: number; slot: number } | null>(null);
 
   const myPackages = useMemo(
     () => packages.filter((p) => p.coachEmail === user.email),
@@ -206,6 +229,30 @@ export function TeamSelectionBoard({
       (p.extraInfo?.['Primary Skill'] || '').toLowerCase().includes(q)
     );
   }, [players, pickerSearch]);
+
+  // Players who MUST appear in at least one team: Pre- category + green Yo-Yo (≥15.5)
+  const requiredPlayers = useMemo(
+    () => players.filter((p) => {
+      if (!p.category.startsWith('Pre-')) return false;
+      const yy = playerYoyo(p);
+      return yy !== null && yy >= 15.5;
+    }),
+    [players]
+  );
+
+  const requiredIds = useMemo(
+    () => new Set(requiredPlayers.map((p) => p.rowIndex)),
+    [requiredPlayers]
+  );
+
+  // Required players not present in any slot of the package being edited
+  const missingRequired = useMemo(() => {
+    if (!editPkg) return requiredPlayers;
+    const pickedIds = new Set(
+      editPkg.teams.flatMap((t) => t.slots.map((s) => s.playerRowIndex)).filter(Boolean) as number[]
+    );
+    return requiredPlayers.filter((p) => !pickedIds.has(p.rowIndex));
+  }, [editPkg, requiredPlayers]);
 
   const compareData = useMemo(() => {
     const totalPkgs = packages.length;
@@ -587,15 +634,40 @@ export function TeamSelectionBoard({
                       const slotData = team.slots.find((s) => s.slot === comp.slot);
                       const hasPlayer = !!slotData?.playerRowIndex;
                       const tc = TEAM_COLORS[ti];
+                      const isDragTarget = isEditable && dragOver?.teamIndex === team.teamIndex && dragOver?.slot === comp.slot;
                       return (
                         <td key={ti}
                           onClick={() => isEditable && setPicker({ teamIndex: team.teamIndex, slot: comp.slot })}
+                          onDragOver={(e) => { if (isEditable) { e.preventDefault(); setDragOver({ teamIndex: team.teamIndex, slot: comp.slot }); } }}
+                          onDragLeave={() => setDragOver(null)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDragOver(null);
+                            if (!isEditable) return;
+                            const rowIdx = parseInt(e.dataTransfer.getData('playerRowIndex'), 10);
+                            if (!rowIdx || usedMap.has(rowIdx)) return;
+                            const player = players.find((p) => p.rowIndex === rowIdx);
+                            if (!player) return;
+                            updatePkg((pkg) => ({
+                              ...pkg,
+                              teams: pkg.teams.map((t) =>
+                                t.teamIndex !== team.teamIndex ? t : {
+                                  ...t,
+                                  slots: t.slots.map((s) => s.slot !== comp.slot ? s : { ...s, playerRowIndex: player.rowIndex, playerName: player.name }),
+                                }
+                              ),
+                            }));
+                          }}
                           style={{
                             padding: '5px 8px', minWidth: 130, maxWidth: 170,
                             cursor: isEditable ? 'pointer' : 'default',
+                            outline: isDragTarget ? '2px dashed rgba(255,183,77,0.6)' : 'none',
+                            outlineOffset: -2,
+                            background: isDragTarget ? 'rgba(255,183,77,0.12)' : 'transparent',
+                            transition: 'background 0.1s',
                           }}
-                          onMouseEnter={(e) => { if (isEditable) (e.currentTarget as HTMLElement).style.background = 'rgba(192,57,43,0.08)'; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
+                          onMouseEnter={(e) => { if (isEditable && !isDragTarget) (e.currentTarget as HTMLElement).style.background = 'rgba(192,57,43,0.08)'; }}
+                          onMouseLeave={(e) => { if (!isDragTarget) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             {hasPlayer ? (
                               <>
@@ -629,6 +701,71 @@ export function TeamSelectionBoard({
             </table>
           </div>
         </div>
+
+        {/* ── Required players panel ── */}
+        {requiredPlayers.length > 0 && (
+          <div className="mt-4 rounded-lg border overflow-hidden" style={{
+            borderColor: missingRequired.length > 0 ? 'rgba(255,183,77,0.3)' : 'rgba(129,199,132,0.25)',
+            background: missingRequired.length > 0 ? 'rgba(255,183,77,0.06)' : 'rgba(129,199,132,0.06)',
+          }}>
+            <div className="flex items-center gap-2 px-4 py-2.5" style={{
+              borderBottom: missingRequired.length > 0
+                ? '1px solid rgba(255,183,77,0.2)'
+                : '1px solid rgba(129,199,132,0.15)',
+            }}>
+              <span style={{ fontSize: 13 }}>{missingRequired.length > 0 ? '⚠' : '✓'}</span>
+              <span style={{
+                color: missingRequired.length > 0 ? '#ffb74d' : '#81c784',
+                fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+              }}>
+                {missingRequired.length > 0
+                  ? `${missingRequired.length} required player${missingRequired.length !== 1 ? 's' : ''} not yet included`
+                  : 'All required players included'}
+              </span>
+              <span style={{ color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 10, marginLeft: 4 }}>
+                Pre- category · green Yo-Yo · must appear in at least one team
+              </span>
+              {isEditable && missingRequired.length > 0 && (
+                <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 10, marginLeft: 'auto' }}>
+                  drag to slot ↑
+                </span>
+              )}
+            </div>
+            {missingRequired.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-4 py-3">
+                {missingRequired.map((player) => {
+                  const yy = playerYoyo(player);
+                  return (
+                    <div
+                      key={player.rowIndex}
+                      draggable={isEditable}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('playerRowIndex', String(player.rowIndex));
+                        e.dataTransfer.setData('playerName', player.name);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      style={{
+                        background: 'rgba(255,183,77,0.1)', border: '1px solid rgba(255,183,77,0.2)',
+                        borderRadius: 6, padding: '5px 10px',
+                        cursor: isEditable ? 'grab' : 'default',
+                        userSelect: 'none',
+                      }}>
+                      <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>{player.name}</span>
+                      <span style={{ color: 'rgba(245,240,232,0.4)', fontFamily: FONT, fontSize: 10, marginLeft: 6 }}>
+                        {player.batch} · {player.category}
+                      </span>
+                      {yy !== null && (
+                        <span style={{ color: '#81c784', fontFamily: FONT, fontSize: 10, fontWeight: 700, marginLeft: 6 }}>
+                          {yy.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Player Picker Drawer ── */}
         {picker && isEditable && (
@@ -798,7 +935,7 @@ export function TeamSelectionBoard({
         ) : (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {myPackages.map((pkg) => (
-              <PackageCard key={pkg.packageId} pkg={pkg} editable onOpen={() => openEdit(pkg, true)} />
+              <PackageCard key={pkg.packageId} pkg={pkg} editable requiredIds={requiredIds} onOpen={() => openEdit(pkg, true)} />
             ))}
           </div>
         )}
@@ -817,7 +954,7 @@ export function TeamSelectionBoard({
               </div>
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                 {pkgs.map((pkg) => (
-                  <PackageCard key={pkg.packageId} pkg={pkg} editable={false} onOpen={() => openEdit(pkg, false)} />
+                  <PackageCard key={pkg.packageId} pkg={pkg} editable={false} requiredIds={requiredIds} onOpen={() => openEdit(pkg, false)} />
                 ))}
               </div>
             </div>
