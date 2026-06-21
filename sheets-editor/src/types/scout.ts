@@ -77,6 +77,7 @@ export interface TeamPackage {
   coachName: string;
   packageName: string;
   status: 'draft' | 'submitted';
+  shared: boolean;
   teams: PackageTeam[];
   savedAt: string;
 }

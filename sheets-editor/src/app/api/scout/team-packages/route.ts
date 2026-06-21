@@ -6,12 +6,26 @@ import type { TeamPackage, PackageTeam } from '@/types/scout';
 export const dynamic = 'force-dynamic';
 
 const TAB = 'TeamPackages';
-const HEADERS = ['PackageId', 'CoachEmail', 'CoachName', 'PackageName', 'Status', 'Teams', 'SavedAt'];
+// 'Shared' is appended at the end so existing sheets (7 cols) remain compatible
+const HEADERS = ['PackageId', 'CoachEmail', 'CoachName', 'PackageName', 'Status', 'Teams', 'SavedAt', 'Shared'];
 const MAX_PACKAGES = 5;
 
 async function checkAuthorized(userEmail: string, sheetKey: string): Promise<boolean> {
   try {
     const { rows } = await readTab('AuthorizedUsers', sheetKey);
+    return rows.some((row) =>
+      Object.entries(row)
+        .filter(([k]) => k !== '__rowIndex')
+        .some(([, v]) => typeof v === 'string' && v.trim().toLowerCase() === userEmail.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function checkAdmin(userEmail: string, sheetKey: string): Promise<boolean> {
+  try {
+    const { rows } = await readTab('AdminUsers', sheetKey);
     return rows.some((row) =>
       Object.entries(row)
         .filter(([k]) => k !== '__rowIndex')
@@ -31,6 +45,7 @@ function parsePackage(r: Record<string, unknown>): TeamPackage {
     coachName: String(r['CoachName'] || ''),
     packageName: String(r['PackageName'] || 'Default'),
     status: (String(r['Status'] || 'draft') as 'draft' | 'submitted'),
+    shared: String(r['Shared'] || '').toUpperCase() === 'TRUE',
     teams,
     savedAt: String(r['SavedAt'] || ''),
   };
@@ -47,14 +62,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 403 });
     }
 
-    await ensureTabExists(TAB, HEADERS, sheetKey);
+    const [, isAdmin] = await Promise.all([
+      ensureTabExists(TAB, HEADERS, sheetKey),
+      isDemo ? Promise.resolve(true) : checkAdmin(user.email, sheetKey),
+    ]);
     const { rows } = await readTab(TAB, sheetKey);
 
-    const packages = rows
+    const allPackages = rows
       .filter((r) => String(r['PackageId'] || '').trim().length > 0)
       .map(parsePackage);
 
-    return NextResponse.json({ packages });
+    // Admins see everything; others see own packages + packages shared by others
+    const packages = isAdmin
+      ? allPackages
+      : allPackages.filter((p) => p.coachEmail === user.email || p.shared);
+
+    return NextResponse.json({ packages, isAdmin });
   } catch (error: any) {
     if (error.name === 'AuthError') return NextResponse.json({ error: error.message }, { status: error.statusCode });
     console.error('[GET /api/scout/team-packages]', error);
@@ -77,6 +100,7 @@ export async function POST(request: NextRequest) {
       packageId?: string;
       packageName?: string;
       status?: 'draft' | 'submitted';
+      shared?: boolean;
       teams: PackageTeam[];
     };
 
@@ -110,6 +134,7 @@ export async function POST(request: NextRequest) {
       body.status || 'draft',
       JSON.stringify(body.teams),
       new Date().toISOString(),
+      body.shared ? 'TRUE' : 'FALSE',
     ];
 
     if (existingRow) {
@@ -153,7 +178,7 @@ export async function DELETE(request: NextRequest) {
     if (!row) return NextResponse.json({ error: 'Package not found' }, { status: 404 });
 
     // Clear the row — blank PackageId means it will be filtered out on future reads
-    await updateRowInTab(row.__rowIndex as number, ['', '', '', '', '', '', ''], TAB, sheetKey);
+    await updateRowInTab(row.__rowIndex as number, ['', '', '', '', '', '', '', ''], TAB, sheetKey);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

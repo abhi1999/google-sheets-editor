@@ -42,6 +42,7 @@ function makeNewPackage(email: string, name: string): TeamPackage {
     coachName: name,
     packageName: 'Default',
     status: 'draft',
+    shared: false,
     teams: TEAM_COLORS.map((tc, i) => ({
       teamIndex: i + 1,
       teamName: tc.name,
@@ -148,11 +149,21 @@ function PackageCard({
       )}
 
       <div className="flex items-center justify-between mt-3">
-        {pkg.savedAt ? (
-          <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 10 }}>
-            {new Date(pkg.savedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}
+        <div className="flex items-center gap-2">
+          {pkg.savedAt ? (
+            <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 10 }}>
+              {new Date(pkg.savedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}
+            </span>
+          ) : <span />}
+          <span style={{
+            background: pkg.shared ? 'rgba(129,199,132,0.12)' : 'rgba(255,255,255,0.04)',
+            color: pkg.shared ? '#81c784' : 'rgba(245,240,232,0.22)',
+            border: `1px solid ${pkg.shared ? 'rgba(129,199,132,0.25)' : 'rgba(255,255,255,0.07)'}`,
+            borderRadius: 4, padding: '2px 8px', fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
+          }}>
+            {pkg.shared ? '◉ Shared' : '◎ Private'}
           </span>
-        ) : <span />}
+        </div>
         <span style={{
           background: editable ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.06)',
           color: editable ? '#c8a84b' : 'rgba(245,240,232,0.4)',
@@ -171,15 +182,17 @@ export function TeamSelectionBoard({
   players,
   user,
   sheetKey,
+  initialSubView = 'list',
 }: {
   players: ScoutPlayer[];
   user: AppUser;
   sheetKey: string;
+  initialSubView?: 'list' | 'admin';
 }) {
   // ── State (ALL hooks before any conditional return) ──
   const [packages, setPackages] = useState<TeamPackage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [subView, setSubView] = useState<'list' | 'edit' | 'compare'>('list');
+  const [subView, setSubView] = useState<'list' | 'edit' | 'compare' | 'admin'>(initialSubView);
   const [editPkg, setEditPkg] = useState<TeamPackage | null>(null);
   const [isEditable, setIsEditable] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -190,6 +203,7 @@ export function TeamSelectionBoard({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [compareFilter, setCompareFilter] = useState<'all' | 'consensus' | 'majority' | 'unique'>('all');
   const [dragOver, setDragOver] = useState<{ teamIndex: number; slot: number } | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const myPackages = useMemo(
     () => packages.filter((p) => p.coachEmail === user.email),
@@ -254,6 +268,16 @@ export function TeamSelectionBoard({
     return requiredPlayers.filter((p) => !pickedIds.has(p.rowIndex));
   }, [editPkg, requiredPlayers]);
 
+  // All coaches grouped (admin only — admins receive all packages from the API)
+  const allCoachGroups = useMemo(() => {
+    const map = new Map<string, { coachName: string; coachEmail: string; pkgs: TeamPackage[] }>();
+    for (const pkg of packages) {
+      if (!map.has(pkg.coachEmail)) map.set(pkg.coachEmail, { coachName: pkg.coachName, coachEmail: pkg.coachEmail, pkgs: [] });
+      map.get(pkg.coachEmail)!.pkgs.push(pkg);
+    }
+    return Array.from(map.values());
+  }, [packages]);
+
   const compareData = useMemo(() => {
     const totalPkgs = packages.length;
     const freq = new Map<number, { player: ScoutPlayer; count: number; coaches: string[] }>();
@@ -282,6 +306,7 @@ export function TeamSelectionBoard({
       const res = await fetch(`/api/scout/team-packages?sheetKey=${encodeURIComponent(sheetKey)}`);
       const data = await res.json();
       if (data.packages) setPackages(data.packages);
+      if (data.isAdmin !== undefined) setIsAdmin(!!data.isAdmin);
     } catch {}
     setLoading(false);
   }, [sheetKey]);
@@ -350,7 +375,7 @@ export function TeamSelectionBoard({
       const res = await fetch(`/api/scout/team-packages?sheetKey=${encodeURIComponent(sheetKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packageId: editPkg.packageId, packageName: editPkg.packageName, teams: editPkg.teams }),
+        body: JSON.stringify({ packageId: editPkg.packageId, packageName: editPkg.packageName, shared: editPkg.shared, teams: editPkg.teams }),
       });
       const data = await res.json();
       if (!res.ok) { setSaveError(data.error || 'Failed to save'); return; }
@@ -385,6 +410,117 @@ export function TeamSelectionBoard({
     return (
       <div className="flex items-center justify-center py-20">
         <span style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT }}>Loading packages…</span>
+      </div>
+    );
+  }
+
+  // ── Admin view ──
+  if (subView === 'admin' && isAdmin) {
+    const sharedCount = packages.filter((p) => p.shared).length;
+    return (
+      <div>
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <h2 style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 20, fontWeight: 700, margin: 0 }}>
+            All Packages
+          </h2>
+          <span style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT, fontSize: 12 }}>
+            {packages.length} package{packages.length !== 1 ? 's' : ''} · {sharedCount} shared
+          </span>
+        </div>
+
+        {allCoachGroups.map(({ coachName, coachEmail, pkgs }) => (
+          <div key={coachEmail} className="mb-7">
+            <div className="flex items-center gap-3 mb-3">
+              <span style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>{coachName}</span>
+              <span style={{ color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 11 }}>{coachEmail}</span>
+              <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 11 }}>
+                {pkgs.filter((p) => p.shared).length}/{pkgs.length} shared
+              </span>
+            </div>
+
+            <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+              <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#2a1818', borderBottom: '2px solid rgba(192,57,43,0.3)' }}>
+                    {['Package', 'Teams', 'Fill', 'Visibility', 'Saved'].map((h) => (
+                      <th key={h} style={{
+                        padding: '8px 14px', textAlign: 'left', fontFamily: FONT,
+                        fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+                        textTransform: 'uppercase', color: 'rgba(245,240,232,0.4)',
+                        whiteSpace: 'nowrap',
+                      }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pkgs.map((pkg, i) => {
+                    const totalFilled = pkg.teams.reduce((s, t) => s + teamFillCount(t), 0);
+                    const totalPossible = pkg.teams.length * 13;
+                    const isOwn = pkg.coachEmail === user.email;
+                    return (
+                      <tr key={pkg.packageId}
+                        onClick={() => openEdit(pkg, isOwn)}
+                        style={{
+                          background: i % 2 === 0 ? '#1e1212' : '#1a1010',
+                          borderBottom: '1px solid rgba(192,57,43,0.06)',
+                          cursor: 'pointer',
+                        }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(192,57,43,0.07)'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = i % 2 === 0 ? '#1e1212' : '#1a1010'; }}>
+                        <td style={{ padding: '9px 14px', fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#f5f0e8', whiteSpace: 'nowrap' }}>
+                          {pkg.packageName}
+                        </td>
+                        <td style={{ padding: '9px 14px' }}>
+                          <div className="flex flex-wrap gap-1">
+                            {pkg.teams.map((t, ti) => {
+                              const tc = TEAM_COLORS[ti];
+                              return (
+                                <span key={ti} style={{
+                                  background: tc.dim, color: tc.text, borderRadius: 3,
+                                  padding: '1px 6px', fontFamily: FONT, fontSize: 9, fontWeight: 700,
+                                }}>
+                                  {t.teamName}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
+                        <td style={{ padding: '9px 14px', fontFamily: FONT, fontSize: 11, whiteSpace: 'nowrap',
+                          color: totalFilled === totalPossible ? '#81c784' : 'rgba(245,240,232,0.4)' }}>
+                          {totalFilled}/{totalPossible}
+                        </td>
+                        <td style={{ padding: '9px 14px' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            background: pkg.shared ? 'rgba(129,199,132,0.15)' : 'rgba(255,255,255,0.05)',
+                            color: pkg.shared ? '#81c784' : 'rgba(245,240,232,0.35)',
+                            border: `1px solid ${pkg.shared ? 'rgba(129,199,132,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                            borderRadius: 5, padding: '3px 10px',
+                            fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {pkg.shared ? '◉ Shared' : '◎ Private'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '9px 14px', fontFamily: FONT, fontSize: 11, color: 'rgba(245,240,232,0.3)', whiteSpace: 'nowrap' }}>
+                          {pkg.savedAt
+                            ? new Date(pkg.savedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })
+                            : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+
+        {packages.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(245,240,232,0.25)', fontFamily: FONT }}>
+            No packages created yet.
+          </div>
+        )}
       </div>
     );
   }
@@ -533,6 +669,18 @@ export function TeamSelectionBoard({
             <div className="flex flex-wrap items-center gap-2 ml-auto">
               {dirty && <span style={{ color: 'rgba(200,168,75,0.7)', fontFamily: FONT, fontSize: 11 }}>Unsaved changes</span>}
               {saveError && <span style={{ color: '#ef9a9a', fontFamily: FONT, fontSize: 11 }}>{saveError}</span>}
+
+              <button
+                onClick={() => updatePkg((p) => ({ ...p, shared: !p.shared }))}
+                style={{
+                  background: editPkg.shared ? 'rgba(129,199,132,0.15)' : 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${editPkg.shared ? 'rgba(129,199,132,0.35)' : 'rgba(255,255,255,0.1)'}`,
+                  color: editPkg.shared ? '#81c784' : 'rgba(245,240,232,0.35)',
+                  borderRadius: 6, padding: '6px 14px', fontFamily: FONT, fontSize: 11,
+                  fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer',
+                }}>
+                {editPkg.shared ? '◉ Shared' : '◎ Private'}
+              </button>
 
               <button onClick={handleSave} disabled={saving || !dirty}
                 style={{
@@ -719,7 +867,7 @@ export function TeamSelectionBoard({
                 fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
               }}>
                 {missingRequired.length > 0
-                  ? `${missingRequired.length} required player${missingRequired.length !== 1 ? 's' : ''} not yet included`
+                  ? `${missingRequired.length} required player${missingRequired.length !== 1 ? 's' : ''} who passed yo-yo not yet included`
                   : 'All required players included'}
               </span>
               <span style={{ color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 10, marginLeft: 4 }}>
@@ -944,9 +1092,14 @@ export function TeamSelectionBoard({
       {/* Other Coaches */}
       {otherPackages.length > 0 && (
         <section>
-          <h3 style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 16 }}>
-            Other Coaches
-          </h3>
+          <div className="flex items-center gap-3 mb-4">
+            <h3 style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 }}>
+              Other Coaches
+            </h3>
+            <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 10 }}>
+              {isAdmin ? 'all packages visible to admins' : 'shared packages only'}
+            </span>
+          </div>
           {coachGroups.map(({ coachName, pkgs }) => (
             <div key={coachName} className="mb-5">
               <div style={{ color: 'rgba(245,240,232,0.55)', fontFamily: FONT, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>

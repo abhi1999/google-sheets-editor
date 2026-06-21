@@ -2846,7 +2846,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'team-packages' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'team-packages' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages'>('board');
   const [isAdmin, setIsAdmin] = useState(false);
   const isDemo = sheetKey === 'demo';
 
@@ -3329,6 +3329,24 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                       </svg>
                       Skill Averages
                     </button>
+                    <button
+                      onClick={() => { setViewMode('admin-team-packages'); setSearchQuery(''); }}
+                      className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5"
+                      style={{
+                        fontFamily: 'Barlow Condensed, sans-serif',
+                        color: viewMode === 'admin-team-packages' ? '#ef9a9a' : 'rgba(239,154,154,0.45)',
+                        borderColor: viewMode === 'admin-team-packages' ? '#c0392b' : 'transparent',
+                        background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
+                      }}
+                      onMouseEnter={(e) => { if (viewMode !== 'admin-team-packages') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.75)'; }}
+                      onMouseLeave={(e) => { if (viewMode !== 'admin-team-packages') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.45)'; }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      All Packages
+                    </button>
                   </>
                 );
               })()}
@@ -3451,6 +3469,22 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {/* Team Packages */}
           {!loading && !error && viewMode === 'team-packages' && (
             <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} />
+          )}
+
+          {/* Admin: All Team Packages */}
+          {!loading && !error && viewMode === 'admin-team-packages' && isAdmin && (
+            <>
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef9a9a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.1em' }}>
+                  Admin Report — All Coach Team Packages
+                </span>
+              </div>
+              <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} initialSubView="admin" />
+            </>
           )}
 
           {/* Admin: Skill Averages table */}
