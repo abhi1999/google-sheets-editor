@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import type { ScoutPlayer, PlayerEvaluation, SchemaType, CoachEval } from '@/types/scout';
 import type { AppUser } from '@/types';
-import { SCHEMAS, FITNESS_FIELDS, calcScore, getRating, playerInitials, type SectionDef } from '@/lib/scout-schemas';
+import { SCHEMAS, FITNESS_FIELDS, calcScore, getRating, playerInitials, type SectionDef, type SchemaDef } from '@/lib/scout-schemas';
 import Papa from 'papaparse';
 import { PlayerModal } from './PlayerModal';
 import { TeamSelectionBoard } from './TeamSelectionBoard';
@@ -2831,6 +2831,536 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   );
 }
 
+// ── Admin Pivot Table ─────────────────────────────────────────────────
+
+type PivotPopover = {
+  playerName: string;
+  skillName: string;
+  entries: { coachName: string; score: number }[];
+  x: number;
+  y: number;
+};
+
+type RemarksPopover = {
+  playerName: string;
+  items: { coachName: string; remark: string }[];
+  x: number;
+  y: number;
+};
+
+function exportPivotToCSV(players: ScoutPlayer[]) {
+  const schemaEntries = Object.entries(SCHEMAS) as [SchemaType, SchemaDef][];
+  type CsvRow = Record<string, string | number>;
+  const rows: CsvRow[] = players.map((p) => {
+    const yoyoVals = p.coachEvals
+      .map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || ''))
+      .filter((v) => !isNaN(v) && v > 0);
+    const row: CsvRow = {
+      Player: p.name,
+      Batch: p.batch || '',
+      Div: p.div || '',
+      Category: p.category || '',
+      Schema: p.schema,
+      'Yo-Yo': yoyoVals.length > 0 ? Math.min(...yoyoVals) : '',
+    };
+    for (const [schemaName, def] of schemaEntries) {
+      const label = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
+      for (const sec of def.sections) {
+        for (const sk of sec.skills) {
+          const colKey = `${label} ${sec.letter}:${sec.name} - ${sk.name}`;
+          if (p.schema !== schemaName) {
+            row[`${colKey} Avg`] = '';
+            row[`${colKey} N`] = '';
+          } else {
+            const scores = p.coachEvals.map((e) => e.evaluation.skills?.[sk.name] || 0).filter((s) => s > 0);
+            row[`${colKey} Avg`] = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2) : '';
+            row[`${colKey} N`] = scores.length > 0 ? scores.length : '';
+          }
+        }
+      }
+    }
+    row['Remarks'] = p.coachEvals
+      .filter((e) => (e.remarks || '').trim())
+      .map((e) => `${e.coachName || e.coachEmail}: ${e.remarks}`)
+      .join(' | ');
+    return row;
+  });
+  const csv = Papa.unparse(rows);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `skill-pivot-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function skillScoreColor(avg: number): { bg: string; color: string } {
+  if (avg >= 4) return { bg: 'rgba(27,94,32,0.45)', color: '#a5d6a7' };
+  if (avg >= 3) return { bg: 'rgba(27,94,32,0.2)', color: '#81c784' };
+  if (avg >= 2) return { bg: 'rgba(127,63,0,0.35)', color: '#ffcc80' };
+  return { bg: 'rgba(127,31,31,0.35)', color: '#ef9a9a' };
+}
+
+function AdminPivotTable({
+  players,
+  onRowClick,
+}: {
+  players: ScoutPlayer[];
+  onRowClick: (p: ScoutPlayer) => void;
+}) {
+  const [schemaFilter, setSchemaFilter] = useState<SchemaType | 'all'>('all');
+  const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
+  const [search, setSearch] = useState('');
+  const [popover, setPopover] = useState<PivotPopover | null>(null);
+  const [remarksPopover, setRemarksPopover] = useState<RemarksPopover | null>(null);
+
+  const schemaEntries = useMemo(
+    () => Object.entries(SCHEMAS) as [SchemaType, SchemaDef][],
+    []
+  );
+
+  const visibleSchemas = schemaFilter === 'all'
+    ? schemaEntries
+    : schemaEntries.filter(([name]) => name === schemaFilter);
+
+  function getSkillStat(player: ScoutPlayer, skillName: string) {
+    const entries = player.coachEvals
+      .map((e) => ({ coachName: e.coachName || e.coachEmail, score: e.evaluation.skills?.[skillName] || 0 }))
+      .filter((e) => e.score > 0);
+    if (!entries.length) return null;
+    const avg = entries.reduce((s, e) => s + e.score, 0) / entries.length;
+    return { avg, count: entries.length, entries };
+  }
+
+  function getSectionAvg(player: ScoutPlayer, sec: SectionDef): number | null {
+    const avgs = sec.skills
+      .map((sk) => getSkillStat(player, sk.name)?.avg)
+      .filter((v): v is number => v !== undefined);
+    if (!avgs.length) return null;
+    return avgs.reduce((a, b) => a + b, 0) / avgs.length;
+  }
+
+  function getSchemaAvg(player: ScoutPlayer, def: SchemaDef): number | null {
+    const avgs = def.sections.flatMap((sec) =>
+      sec.skills.map((sk) => getSkillStat(player, sk.name)?.avg).filter((v): v is number => v !== undefined)
+    );
+    if (!avgs.length) return null;
+    return avgs.reduce((a, b) => a + b, 0) / avgs.length;
+  }
+
+  const filteredPlayers = useMemo(() => {
+    const q = search.toLowerCase();
+    return players.filter((p) => {
+      if (p.coachEvals.length === 0) return false;
+      if (schemaFilter !== 'all' && p.schema !== schemaFilter) return false;
+      if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals) !== yoyoFilter) return false;
+      if (q && !matchesSearch(p, q)) return false;
+      return true;
+    });
+  }, [players, schemaFilter, yoyoFilter, search]);
+
+  useEffect(() => {
+    if (!popover) return;
+    const close = () => setPopover(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [!!popover]);
+
+  useEffect(() => {
+    if (!remarksPopover) return;
+    const close = () => setRemarksPopover(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [!!remarksPopover]);
+
+  const PLAYER_W = 150;
+  const YOYO_W = 65;
+  const CAT_W = 115;
+
+  const stickyCellStyle = (left: number, w: number, bg: string, zIndex = 2): React.CSSProperties => ({
+    position: 'sticky',
+    left,
+    width: w,
+    minWidth: w,
+    maxWidth: w,
+    zIndex,
+    background: bg,
+    boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.06)',
+  });
+
+  const TH_BASE: React.CSSProperties = {
+    padding: '5px 6px',
+    fontSize: 10,
+    fontFamily: 'Barlow Condensed, sans-serif',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    whiteSpace: 'nowrap',
+    borderBottom: '1px solid rgba(192,57,43,0.25)',
+    borderRight: '1px solid rgba(255,255,255,0.05)',
+    background: '#1a1010',
+    color: 'rgba(245,240,232,0.5)',
+    verticalAlign: 'bottom',
+  };
+
+  if (players.filter((p) => p.coachEvals.length > 0).length === 0) {
+    return (
+      <div className="rounded-lg border p-10 text-center mt-4"
+        style={{ background: '#2a1a1a', borderColor: 'rgba(192,57,43,0.2)' }}>
+        <p className="text-lg font-bold mb-1" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }}>No data yet</p>
+        <p className="text-sm" style={{ color: 'rgba(245,240,232,0.45)' }}>Skill pivot will appear once coaches have rated players.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <TableSearch value={search} onChange={setSearch} />
+        <div className="flex items-center gap-1">
+          {(['all', ...Object.keys(SCHEMAS)] as (SchemaType | 'all')[]).map((s) => {
+            const label = s === 'all' ? 'All Schemas' : s === 'Batsman' ? 'BAT' : s === 'Fast Bowler' ? 'FB' : 'SB';
+            const color = s === 'all' ? '#c8a84b' : SCHEMA_COLORS[s as SchemaType];
+            const active = schemaFilter === s;
+            return (
+              <button key={s} onClick={() => setSchemaFilter(s)}
+                style={{
+                  padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.05em',
+                  background: active ? color + '33' : 'rgba(255,255,255,0.05)',
+                  color: active ? color : 'rgba(245,240,232,0.4)',
+                  border: `1px solid ${active ? color + '66' : 'rgba(255,255,255,0.08)'}`,
+                  cursor: 'pointer',
+                }}>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-1">
+          {YOYO_FILTERS.filter((f) => f.key !== 'all').map((f) => {
+            const active = yoyoFilter === f.key;
+            return (
+              <button key={f.key} onClick={() => setYoyoFilter(active ? 'all' : f.key)}
+                style={{
+                  padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  fontFamily: 'Barlow Condensed, sans-serif',
+                  background: active ? f.activeBg : 'rgba(255,255,255,0.05)',
+                  color: active ? f.text : 'rgba(245,240,232,0.4)',
+                  border: `1px solid ${active ? 'transparent' : 'rgba(255,255,255,0.08)'}`,
+                  cursor: 'pointer',
+                }}>
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+        <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif', marginLeft: 4 }}>
+          {filteredPlayers.length} player{filteredPlayers.length !== 1 ? 's' : ''} · click avg or remarks for detail
+        </span>
+        <button
+          onClick={() => exportPivotToCSV(filteredPlayers)}
+          style={EXPORT_BTN_STYLE}
+          className="transition-opacity hover:opacity-80"
+          title="Export to CSV (includes full remarks)">
+          ↓ Export CSV
+        </button>
+      </div>
+
+      {filteredPlayers.length === 0 ? (
+        <div className="py-8 text-center" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>No matching players</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              {/* Row 1: Schema headers (colSpan includes section-avg + schema-avg cols) */}
+              <tr>
+                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(0, PLAYER_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Player</th>
+                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W, YOYO_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Yo-Yo</th>
+                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Category</th>
+                {visibleSchemas.map(([schemaName, def]) => {
+                  const totalSkills = def.sections.reduce((s, sec) => s + sec.skills.length, 0);
+                  const colSpan = totalSkills * 2 + def.sections.length + 1; // skill pairs + 1 sec-avg per section + 1 schema-avg
+                  const color = SCHEMA_COLORS[schemaName];
+                  return (
+                    <th key={schemaName} colSpan={colSpan}
+                      style={{ ...TH_BASE, textAlign: 'center', color, borderBottom: `2px solid ${color}55`, fontSize: 12, letterSpacing: '0.1em' }}>
+                      {schemaName === 'Batsman' ? 'BATSMAN' : schemaName === 'Fast Bowler' ? 'FAST BOWLER' : 'SPIN BOWLER'}
+                    </th>
+                  );
+                })}
+                <th rowSpan={4} style={{ ...TH_BASE, textAlign: 'left', minWidth: 200, color: 'rgba(245,240,232,0.6)', paddingLeft: 10 }}>Remarks</th>
+              </tr>
+              {/* Row 2: Section headers + Schema Avg (rowSpan=3 to cover rows 2-4) */}
+              <tr>
+                {visibleSchemas.map(([schemaName, def]) => (
+                  <Fragment key={`hdr2-${schemaName}`}>
+                    {def.sections.map((sec) => (
+                      <th key={`${schemaName}-${sec.letter}`} colSpan={sec.skills.length * 2 + 1}
+                        style={{ ...TH_BASE, textAlign: 'center', fontSize: 10, color: 'rgba(245,240,232,0.45)', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
+                        {sec.letter}: {sec.name}
+                      </th>
+                    ))}
+                    <th rowSpan={3} style={{ ...TH_BASE, textAlign: 'center', width: 46, minWidth: 46, fontSize: 9, fontWeight: 800, color: SCHEMA_COLORS[schemaName], borderLeft: `2px solid ${SCHEMA_COLORS[schemaName]}44`, background: `${SCHEMA_COLORS[schemaName]}0d`, letterSpacing: '0.04em', verticalAlign: 'middle' }}>
+                      Avg
+                    </th>
+                  </Fragment>
+                ))}
+              </tr>
+              {/* Row 3: Skill headers + Section Avg (rowSpan=2 to cover rows 3-4) */}
+              <tr>
+                {visibleSchemas.map(([schemaName, def]) =>
+                  def.sections.map((sec) => (
+                    <Fragment key={`hdr3-${schemaName}-${sec.letter}`}>
+                      {sec.skills.map((sk) => (
+                        <th key={`${schemaName}-${sec.letter}-${sk.name}`} colSpan={2}
+                          style={{ ...TH_BASE, textAlign: 'center', fontSize: 9, color: 'rgba(245,240,232,0.45)', borderLeft: '1px solid rgba(255,255,255,0.07)', whiteSpace: 'normal', wordBreak: 'break-word', minWidth: 62, maxWidth: 80, padding: '4px 3px' }}>
+                          {sk.name}
+                        </th>
+                      ))}
+                      <th rowSpan={2} style={{ ...TH_BASE, textAlign: 'center', width: 40, minWidth: 40, fontSize: 9, fontWeight: 800, color: 'rgba(245,240,232,0.5)', borderLeft: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', letterSpacing: '0.04em', verticalAlign: 'middle' }}>
+                        Sec<br />Avg
+                      </th>
+                    </Fragment>
+                  ))
+                )}
+              </tr>
+              {/* Row 4: Avg | N sub-headers (only skill sub-cols; sec/schema avg covered by rowSpan) */}
+              <tr>
+                {visibleSchemas.map(([schemaName, def]) =>
+                  def.sections.map((sec) =>
+                    sec.skills.map((sk) => (
+                      <Fragment key={`${schemaName}-${sec.letter}-${sk.name}-sub`}>
+                        <th style={{ ...TH_BASE, textAlign: 'center', width: 36, minWidth: 36, borderLeft: '1px solid rgba(255,255,255,0.07)', fontSize: 9, color: 'rgba(245,240,232,0.35)', padding: '3px 2px' }}>Avg</th>
+                        <th style={{ ...TH_BASE, textAlign: 'center', width: 24, minWidth: 24, fontSize: 9, color: 'rgba(245,240,232,0.2)', padding: '3px 2px' }}>N</th>
+                      </Fragment>
+                    ))
+                  )
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPlayers.map((player, pi) => {
+                const yoyo = getYoYoBadge(player.coachEvals);
+                const catColor = getCategoryColor(player.category);
+                const remarkItems = player.coachEvals
+                  .filter((e) => (e.remarks || '').trim())
+                  .map((e) => ({ coachName: e.coachName || e.coachEmail, remark: e.remarks }));
+                const remarks = remarkItems.map((r) => `${r.coachName}: ${r.remark}`).join(' · ');
+                const rowBg = pi % 2 === 0 ? '#1a1010' : '#1e1212';
+
+                return (
+                  <tr key={player.rowIndex} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    {/* Sticky: Player */}
+                    <td style={{ ...stickyCellStyle(0, PLAYER_W, rowBg), padding: '5px 8px' }}>
+                      <button onClick={() => onRowClick(player)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: 12, color: '#f5f0e8', padding: 0, width: '100%' }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#c8a84b'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#f5f0e8'; }}>
+                        {player.name}
+                      </button>
+                    </td>
+                    {/* Sticky: Yo-Yo */}
+                    <td style={{ ...stickyCellStyle(PLAYER_W, YOYO_W, rowBg), textAlign: 'center', padding: '5px 4px' }}>
+                      {yoyo ? (
+                        <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: 11, color: yoyo.text, background: yoyo.bg, borderRadius: 4, padding: '2px 5px' }}>
+                          {yoyo.best}
+                        </span>
+                      ) : <span style={{ color: 'rgba(245,240,232,0.2)', fontSize: 10 }}>—</span>}
+                    </td>
+                    {/* Sticky: Category */}
+                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, rowBg), padding: '5px 6px' }}>
+                      <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, fontWeight: 700, color: catColor.text, background: catColor.bg, borderRadius: 3, padding: '2px 5px', whiteSpace: 'nowrap', display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {player.category || player.schema}
+                      </span>
+                    </td>
+                    {/* Skill cells + section avg + schema avg */}
+                    {visibleSchemas.map(([schemaName, def]) => {
+                      const schemaAvg = player.schema === schemaName ? getSchemaAvg(player, def) : null;
+                      const schemaAvgSc = schemaAvg !== null ? skillScoreColor(schemaAvg) : null;
+                      return (
+                        <Fragment key={`${player.rowIndex}-${schemaName}`}>
+                          {def.sections.map((sec) => {
+                            const secAvg = player.schema === schemaName ? getSectionAvg(player, sec) : null;
+                            const secAvgSc = secAvg !== null ? skillScoreColor(secAvg) : null;
+                            return (
+                              <Fragment key={`${player.rowIndex}-${schemaName}-${sec.letter}`}>
+                                {sec.skills.map((sk) => {
+                                  if (player.schema !== schemaName) {
+                                    return (
+                                      <Fragment key={`${player.rowIndex}-${schemaName}-${sec.letter}-${sk.name}`}>
+                                        <td style={{ background: rowBg, borderLeft: '1px solid rgba(255,255,255,0.03)' }} />
+                                        <td style={{ background: rowBg }} />
+                                      </Fragment>
+                                    );
+                                  }
+                                  const stat = getSkillStat(player, sk.name);
+                                  if (!stat) {
+                                    return (
+                                      <Fragment key={`${player.rowIndex}-${schemaName}-${sec.letter}-${sk.name}`}>
+                                        <td style={{ textAlign: 'center', padding: '4px 2px', fontSize: 10, color: 'rgba(245,240,232,0.15)', background: rowBg, borderLeft: '1px solid rgba(255,255,255,0.03)' }}>—</td>
+                                        <td style={{ background: rowBg }} />
+                                      </Fragment>
+                                    );
+                                  }
+                                  const sc = skillScoreColor(stat.avg);
+                                  return (
+                                    <Fragment key={`${player.rowIndex}-${schemaName}-${sec.letter}-${sk.name}`}>
+                                      <td
+                                        title={`${player.name} · ${sk.name}: avg ${stat.avg.toFixed(1)} from ${stat.count} coach${stat.count !== 1 ? 'es' : ''}`}
+                                        style={{
+                                          textAlign: 'center', padding: '4px 3px', fontSize: 11, fontWeight: 700,
+                                          fontFamily: 'Barlow Condensed, sans-serif',
+                                          background: sc.bg, color: sc.color,
+                                          cursor: 'pointer', borderLeft: '1px solid rgba(255,255,255,0.04)',
+                                        }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                          setPopover({
+                                            playerName: player.name,
+                                            skillName: sk.name,
+                                            entries: stat.entries,
+                                            x: rect.left,
+                                            y: rect.bottom + 6,
+                                          });
+                                        }}>
+                                        {stat.avg.toFixed(1)}
+                                      </td>
+                                      <td style={{ textAlign: 'center', padding: '4px 2px', fontSize: 9, color: 'rgba(245,240,232,0.3)', background: rowBg }}>
+                                        {stat.count}
+                                      </td>
+                                    </Fragment>
+                                  );
+                                })}
+                                {/* Section Avg */}
+                                <td style={{
+                                  textAlign: 'center', padding: '4px 4px', fontSize: 11, fontWeight: 800,
+                                  fontFamily: 'Barlow Condensed, sans-serif',
+                                  background: secAvgSc ? secAvgSc.bg : rowBg,
+                                  color: secAvgSc ? secAvgSc.color : 'rgba(245,240,232,0.2)',
+                                  borderLeft: '1px solid rgba(255,255,255,0.1)',
+                                }}>
+                                  {secAvg !== null ? secAvg.toFixed(1) : '—'}
+                                </td>
+                              </Fragment>
+                            );
+                          })}
+                          {/* Schema Avg */}
+                          <td style={{
+                            textAlign: 'center', padding: '4px 5px', fontSize: 12, fontWeight: 800,
+                            fontFamily: 'Barlow Condensed, sans-serif',
+                            background: schemaAvgSc ? schemaAvgSc.bg : rowBg,
+                            color: schemaAvgSc ? schemaAvgSc.color : 'rgba(245,240,232,0.2)',
+                            borderLeft: `2px solid ${SCHEMA_COLORS[schemaName]}33`,
+                          }}>
+                            {schemaAvg !== null ? schemaAvg.toFixed(1) : '—'}
+                          </td>
+                        </Fragment>
+                      );
+                    })}
+                    {/* Remarks — truncated, click to expand */}
+                    <td
+                      style={{ padding: '5px 10px', fontSize: 11, color: remarkItems.length ? 'rgba(245,240,232,0.6)' : 'rgba(245,240,232,0.2)', background: rowBg, maxWidth: 220, cursor: remarkItems.length ? 'pointer' : 'default' }}
+                      onClick={(e) => {
+                        if (!remarkItems.length) return;
+                        e.stopPropagation();
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setPopover(null);
+                        setRemarksPopover({ playerName: player.name, items: remarkItems, x: rect.left, y: rect.bottom + 6 });
+                      }}
+                      onMouseEnter={(e) => { if (remarkItems.length) (e.currentTarget as HTMLElement).style.color = '#c8a84b'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = remarkItems.length ? 'rgba(245,240,232,0.6)' : 'rgba(245,240,232,0.2)'; }}>
+                      {remarkItems.length ? (
+                        <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>
+                          {remarks}
+                        </span>
+                      ) : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Score popover */}
+      {popover && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            left: Math.min(popover.x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 230),
+            top: Math.min(popover.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 220),
+            zIndex: 1000,
+            background: '#1a1010',
+            border: '1px solid rgba(192,57,43,0.4)',
+            borderRadius: 8,
+            padding: '12px 14px',
+            minWidth: 200,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.7)',
+          }}>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: 13, color: '#c8a84b', marginBottom: 2 }}>
+            {popover.playerName}
+          </div>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 11, color: 'rgba(245,240,232,0.45)', marginBottom: 10, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 8 }}>
+            {popover.skillName}
+          </div>
+          {popover.entries.map((entry, i) => {
+            const sc = skillScoreColor(entry.score);
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 5 }}>
+                <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 12, color: 'rgba(245,240,232,0.75)', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {entry.coachName}
+                </span>
+                <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: 12, color: sc.color, whiteSpace: 'nowrap' }}>
+                  {'★'.repeat(entry.score)}{'☆'.repeat(Math.max(0, 5 - entry.score))} {entry.score}/5
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Remarks popover */}
+      {remarksPopover && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            left: Math.min(remarksPopover.x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 320),
+            top: Math.min(remarksPopover.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 260),
+            zIndex: 1000,
+            background: '#1a1010',
+            border: '1px solid rgba(200,168,75,0.35)',
+            borderRadius: 8,
+            padding: '12px 14px',
+            minWidth: 280,
+            maxWidth: 340,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.7)',
+          }}>
+          <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: 13, color: '#c8a84b', marginBottom: 10, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 8 }}>
+            {remarksPopover.playerName} — Remarks
+          </div>
+          {remarksPopover.items.map((item, i) => (
+            <div key={i} style={{ marginBottom: i < remarksPopover.items.length - 1 ? 10 : 0 }}>
+              <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 11, fontWeight: 700, color: 'rgba(245,240,232,0.5)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {item.coachName}
+              </div>
+              <div style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 12, color: 'rgba(245,240,232,0.85)', lineHeight: 1.5 }}>
+                {item.remark}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── NavDropdown ───────────────────────────────────────────────────────
 
 type NavItem = { label: string; mode: string; badge?: number };
@@ -2961,7 +3491,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'team-packages' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'team-packages' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot'>('board');
   const [isAdmin, setIsAdmin] = useState(false);
   const isDemo = sheetKey === 'demo';
 
@@ -3273,6 +3803,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                         { label: 'All Coach Evals', mode: 'admin-evals' },
                         { label: 'All Skill Notes', mode: 'admin-skill-details' },
                         { label: 'Skill Averages', mode: 'admin-agg-skills' },
+                        { label: 'Skill Pivot', mode: 'admin-pivot' },
                         { label: 'All Packages', mode: 'admin-team-packages' },
                       ]}
                       activeMode={viewMode}
@@ -3450,6 +3981,22 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                 </span>
               </div>
               <AdminSkillDetailsTable players={players} onRowClick={setActivePlayer} />
+            </>
+          )}
+
+          {/* Admin: Skill Pivot table */}
+          {!loading && !error && viewMode === 'admin-pivot' && isAdmin && (
+            <>
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef9a9a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.1em' }}>
+                  Admin Report — Skill Pivot (Schema → Section → Skill Averages)
+                </span>
+              </div>
+              <AdminPivotTable players={players} onRowClick={setActivePlayer} />
             </>
           )}
 
