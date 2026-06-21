@@ -2831,6 +2831,115 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   );
 }
 
+// ── NavDropdown ───────────────────────────────────────────────────────
+
+type NavItem = { label: string; mode: string; badge?: number };
+
+function NavDropdown({
+  label,
+  items,
+  activeMode,
+  onSelect,
+  accentColor = '#c8a84b',
+  lockIcon = false,
+  align = 'left',
+}: {
+  label: string;
+  items: NavItem[];
+  activeMode: string;
+  onSelect: (mode: string) => void;
+  accentColor?: string;
+  lockIcon?: boolean;
+  align?: 'left' | 'right';
+}) {
+  const [open, setOpen] = useState(false);
+  const hasActive = items.some((i) => i.mode === activeMode);
+  const dimColor = `${accentColor}66`;
+  const hoverColor = `${accentColor}bb`;
+
+  return (
+    <div
+      className="relative flex-shrink-0 flex items-stretch"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2"
+        style={{
+          fontFamily: 'Barlow Condensed, sans-serif',
+          color: hasActive ? accentColor : dimColor,
+          borderColor: hasActive ? accentColor : 'transparent',
+          background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
+          transition: 'color 0.15s',
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = hoverColor; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = hasActive ? accentColor : dimColor; }}
+      >
+        {lockIcon && (
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+        )}
+        {label}
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6, marginTop: 1 }}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', ...(align === 'right' ? { right: 0 } : { left: 0 }), minWidth: 200,
+          background: '#1e1010', border: '1px solid rgba(192,57,43,0.28)',
+          borderRadius: 8, zIndex: 200, boxShadow: '0 10px 36px rgba(0,0,0,0.65)',
+          overflow: 'hidden',
+        }}>
+          {items.map((item, idx) => {
+            const isItemActive = item.mode === activeMode;
+            return (
+              <button
+                key={item.mode}
+                onClick={() => { onSelect(item.mode); setOpen(false); }}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  width: '100%', padding: '10px 16px',
+                  background: isItemActive ? `${accentColor}18` : 'transparent',
+                  color: isItemActive ? accentColor : 'rgba(245,240,232,0.55)',
+                  fontFamily: 'Barlow Condensed, sans-serif', fontSize: 12, fontWeight: 700,
+                  letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer',
+                  border: 'none',
+                  borderBottom: idx < items.length - 1 ? '1px solid rgba(192,57,43,0.08)' : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.background = `${accentColor}12`;
+                  if (!isItemActive) el.style.color = 'rgba(245,240,232,0.88)';
+                }}
+                onMouseLeave={(e) => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.background = isItemActive ? `${accentColor}18` : 'transparent';
+                  if (!isItemActive) el.style.color = 'rgba(245,240,232,0.55)';
+                }}
+              >
+                <span>{item.label}</span>
+                {item.badge != null && item.badge > 0 && (
+                  <span style={{
+                    background: isItemActive ? `${accentColor}30` : 'rgba(255,255,255,0.08)',
+                    color: isItemActive ? accentColor : 'rgba(245,240,232,0.35)',
+                    borderRadius: 10, padding: '1px 7px', fontSize: 10, fontWeight: 700,
+                  }}>
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────
 
 export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
@@ -3105,251 +3214,70 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
             </div>
           )}
 
-          {/* Batch tab bar + My Evals toggle */}
+          {/* Batch tabs + Reports/Admin menus */}
           {!loading && !error && players.length > 0 && (
-            <div
-              className="batch-tabs flex overflow-x-auto border-t"
-              style={{ borderColor: 'rgba(192,57,43,0.2)', scrollbarWidth: 'none' }}
-            >
-              {/* Batch tabs */}
-              {allBatchNames.map((name) => {
-                const isActive = viewMode === 'board' && !isSearching && activeBatch === name;
-                return (
-                  <button
-                    key={name}
-                    onClick={() => { setViewMode('board'); setActiveBatch(name); setSearchQuery(''); }}
-                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
-                    style={{
-                      fontFamily: 'Barlow Condensed, sans-serif',
-                      color: isActive ? '#f5f0e8' : 'rgba(245,240,232,0.4)',
-                      borderColor: isActive ? '#c0392b' : 'transparent',
-                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
-                    }}
-                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.75)'; }}
-                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.4)'; }}
-                  >
-                    {name}
-                  </button>
-                );
-              })}
-
-              {/* Divider */}
-              <div className="w-px my-2 flex-shrink-0" style={{ background: 'rgba(245,240,232,0.1)' }} />
-
-              {/* My Evals tab */}
-              {(() => {
-                const myEvalsCount = players.filter((p) => p.myEval !== null).length;
-                const isActive = viewMode === 'my-evals';
-                return (
-                  <button
-                    onClick={() => { setViewMode('my-evals'); setSearchQuery(''); }}
-                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5"
-                    style={{
-                      fontFamily: 'Barlow Condensed, sans-serif',
-                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
-                      borderColor: isActive ? '#c8a84b' : 'transparent',
-                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
-                    }}
-                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
-                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
-                  >
-                    My Evals
-                    {myEvalsCount > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold"
-                        style={{ background: isActive ? 'rgba(200,168,75,0.2)' : 'rgba(200,168,75,0.1)', color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.6)' }}>
-                        {myEvalsCount}
-                      </span>
-                    )}
-                  </button>
-                );
-              })()}
-
-              {/* My Eval Details tab */}
-              {(() => {
-                const isActive = viewMode === 'my-eval-details';
-                return (
-                  <button
-                    onClick={() => { setViewMode('my-eval-details'); setSearchQuery(''); }}
-                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
-                    style={{
-                      fontFamily: 'Barlow Condensed, sans-serif',
-                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
-                      borderColor: isActive ? '#c8a84b' : 'transparent',
-                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
-                    }}
-                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
-                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
-                  >
-                    My Eval Details
-                  </button>
-                );
-              })()}
-
-              {/* Skill Notes tab */}
-              {(() => {
-                const isActive = viewMode === 'my-skill-details';
-                return (
-                  <button
-                    onClick={() => { setViewMode('my-skill-details'); setSearchQuery(''); }}
-                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
-                    style={{
-                      fontFamily: 'Barlow Condensed, sans-serif',
-                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
-                      borderColor: isActive ? '#c8a84b' : 'transparent',
-                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
-                    }}
-                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
-                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
-                  >
-                    Skill Notes
-                  </button>
-                );
-              })()}
-
-              {/* All Fitness tab */}
-              {(() => {
-                const isActive = viewMode === 'all-fitness';
-                return (
-                  <button
-                    onClick={() => { setViewMode('all-fitness'); setSearchQuery(''); }}
-                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
-                    style={{
-                      fontFamily: 'Barlow Condensed, sans-serif',
-                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
-                      borderColor: isActive ? '#c8a84b' : 'transparent',
-                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
-                    }}
-                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
-                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
-                  >
-                    All Fitness Scores
-                  </button>
-                );
-              })()}
-
-              {/* Selection Summary tab */}
-              {(() => {
-                const isActive = viewMode === 'selection';
-                return (
-                  <button
-                    onClick={() => { setViewMode('selection'); setSearchQuery(''); }}
-                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
-                    style={{
-                      fontFamily: 'Barlow Condensed, sans-serif',
-                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
-                      borderColor: isActive ? '#c8a84b' : 'transparent',
-                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
-                    }}
-                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
-                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
-                  >
-                    Selection
-                  </button>
-                );
-              })()}
-
-              {/* Team Packages tab */}
-              {(() => {
-                const isActive = viewMode === 'team-packages';
-                return (
-                  <button
-                    onClick={() => { setViewMode('team-packages'); setSearchQuery(''); }}
-                    className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
-                    style={{
-                      fontFamily: 'Barlow Condensed, sans-serif',
-                      color: isActive ? '#c8a84b' : 'rgba(200,168,75,0.45)',
-                      borderColor: isActive ? '#c8a84b' : 'transparent',
-                      background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
-                    }}
-                    onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.75)'; }}
-                    onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.45)'; }}
-                  >
-                    Team Packages
-                  </button>
-                );
-              })()}
-
-              {/* Admin: All Coach Evals tab — only for admins */}
-              {isAdmin && (() => {
-                const isActive = viewMode === 'admin-evals';
-                return (
-                  <>
-                    <div className="w-px my-2 flex-shrink-0" style={{ background: 'rgba(192,57,43,0.3)' }} />
+            <div className="batch-tabs border-t flex" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+              {/* Batch tabs — scrollable */}
+              <div className="flex overflow-x-auto flex-1" style={{ scrollbarWidth: 'none' }}>
+                {allBatchNames.map((name) => {
+                  const isActive = viewMode === 'board' && !isSearching && activeBatch === name;
+                  return (
                     <button
-                      onClick={() => { setViewMode('admin-evals'); setSearchQuery(''); }}
-                      className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5"
+                      key={name}
+                      onClick={() => { setViewMode('board'); setActiveBatch(name); setSearchQuery(''); }}
+                      className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
                       style={{
                         fontFamily: 'Barlow Condensed, sans-serif',
-                        color: isActive ? '#ef9a9a' : 'rgba(239,154,154,0.45)',
+                        color: isActive ? '#f5f0e8' : 'rgba(245,240,232,0.4)',
                         borderColor: isActive ? '#c0392b' : 'transparent',
                         background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
                       }}
-                      onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.75)'; }}
-                      onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.45)'; }}
+                      onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.75)'; }}
+                      onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.4)'; }}
                     >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                      </svg>
-                      All Coach Evals
+                      {name}
                     </button>
-                    <button
-                      onClick={() => { setViewMode('admin-skill-details'); setSearchQuery(''); }}
-                      className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5"
-                      style={{
-                        fontFamily: 'Barlow Condensed, sans-serif',
-                        color: viewMode === 'admin-skill-details' ? '#ef9a9a' : 'rgba(239,154,154,0.45)',
-                        borderColor: viewMode === 'admin-skill-details' ? '#c0392b' : 'transparent',
-                        background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
-                      }}
-                      onMouseEnter={(e) => { if (viewMode !== 'admin-skill-details') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.75)'; }}
-                      onMouseLeave={(e) => { if (viewMode !== 'admin-skill-details') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.45)'; }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                      </svg>
-                      All Skill Notes
-                    </button>
-                    <button
-                      onClick={() => { setViewMode('admin-agg-skills'); setSearchQuery(''); }}
-                      className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5"
-                      style={{
-                        fontFamily: 'Barlow Condensed, sans-serif',
-                        color: viewMode === 'admin-agg-skills' ? '#ef9a9a' : 'rgba(239,154,154,0.45)',
-                        borderColor: viewMode === 'admin-agg-skills' ? '#c0392b' : 'transparent',
-                        background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
-                      }}
-                      onMouseEnter={(e) => { if (viewMode !== 'admin-agg-skills') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.75)'; }}
-                      onMouseLeave={(e) => { if (viewMode !== 'admin-agg-skills') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.45)'; }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                      </svg>
-                      Skill Averages
-                    </button>
-                    <button
-                      onClick={() => { setViewMode('admin-team-packages'); setSearchQuery(''); }}
-                      className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5"
-                      style={{
-                        fontFamily: 'Barlow Condensed, sans-serif',
-                        color: viewMode === 'admin-team-packages' ? '#ef9a9a' : 'rgba(239,154,154,0.45)',
-                        borderColor: viewMode === 'admin-team-packages' ? '#c0392b' : 'transparent',
-                        background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
-                      }}
-                      onMouseEnter={(e) => { if (viewMode !== 'admin-team-packages') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.75)'; }}
-                      onMouseLeave={(e) => { if (viewMode !== 'admin-team-packages') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.45)'; }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                      </svg>
-                      All Packages
-                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Reports + Admin dropdowns — fixed, not scrolling */}
+              <div className="flex items-stretch flex-shrink-0">
+                <div className="w-px my-2 flex-shrink-0" style={{ background: 'rgba(245,240,232,0.1)' }} />
+                <NavDropdown
+                  label="Reports"
+                  items={[
+                    { label: 'My Evals', mode: 'my-evals', badge: players.filter((p) => p.myEval !== null).length },
+                    { label: 'My Eval Details', mode: 'my-eval-details' },
+                    { label: 'Skill Notes', mode: 'my-skill-details' },
+                    { label: 'All Fitness Scores', mode: 'all-fitness' },
+                    { label: 'Selection', mode: 'selection' },
+                    { label: 'Team Packages', mode: 'team-packages' },
+                  ]}
+                  activeMode={viewMode}
+                  onSelect={(mode) => { setViewMode(mode as typeof viewMode); setSearchQuery(''); }}
+                  align="right"
+                />
+                {isAdmin && (
+                  <>
+                    <div className="w-px my-2 flex-shrink-0" style={{ background: 'rgba(192,57,43,0.3)' }} />
+                    <NavDropdown
+                      label="Admin"
+                      items={[
+                        { label: 'All Coach Evals', mode: 'admin-evals' },
+                        { label: 'All Skill Notes', mode: 'admin-skill-details' },
+                        { label: 'Skill Averages', mode: 'admin-agg-skills' },
+                        { label: 'All Packages', mode: 'admin-team-packages' },
+                      ]}
+                      activeMode={viewMode}
+                      onSelect={(mode) => { setViewMode(mode as typeof viewMode); setSearchQuery(''); }}
+                      accentColor="#ef9a9a"
+                      lockIcon
+                      align="right"
+                    />
                   </>
-                );
-              })()}
+                )}
+              </div>
             </div>
           )}
         </header>
