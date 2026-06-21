@@ -2898,20 +2898,40 @@ function exportPivotToCSV(players: ScoutPlayer[], visibleSkillKeys: Set<string>)
     };
     for (const [schemaName, def] of schemaEntries) {
       const label = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
+      const isMatchingSchema = p.schema === schemaName;
+      const schemaSkillAvgs: number[] = [];
       for (const sec of def.sections) {
-        for (const sk of sec.skills) {
-          if (!visibleSkillKeys.has(`${schemaName}|${sec.letter}|${sk.name}`)) continue;
+        const visSkills = sec.skills.filter((sk) => visibleSkillKeys.has(`${schemaName}|${sec.letter}|${sk.name}`));
+        if (visSkills.length === 0) continue;
+        const secSkillAvgs: number[] = [];
+        for (const sk of visSkills) {
           const colKey = `${label} ${sec.letter}:${sec.name} - ${sk.name}`;
-          if (p.schema !== schemaName) {
+          if (!isMatchingSchema) {
             row[`${colKey} Avg`] = '';
             row[`${colKey} N`] = '';
           } else {
             const scores = p.coachEvals.map((e) => e.evaluation.skills?.[sk.name] || 0).filter((s) => s > 0);
-            row[`${colKey} Avg`] = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2) : '';
-            row[`${colKey} N`] = scores.length > 0 ? scores.length : '';
+            if (scores.length > 0) {
+              const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+              row[`${colKey} Avg`] = avg.toFixed(2);
+              row[`${colKey} N`] = scores.length;
+              secSkillAvgs.push(avg);
+              schemaSkillAvgs.push(avg);
+            } else {
+              row[`${colKey} Avg`] = '';
+              row[`${colKey} N`] = '';
+            }
           }
         }
+        const secAvgKey = `${label} ${sec.letter}:${sec.name} Sec Avg`;
+        row[secAvgKey] = isMatchingSchema && secSkillAvgs.length > 0
+          ? (secSkillAvgs.reduce((a, b) => a + b, 0) / secSkillAvgs.length).toFixed(2)
+          : '';
       }
+      const schemaAvgKey = `${label} Avg`;
+      row[schemaAvgKey] = isMatchingSchema && schemaSkillAvgs.length > 0
+        ? (schemaSkillAvgs.reduce((a, b) => a + b, 0) / schemaSkillAvgs.length).toFixed(2)
+        : '';
     }
     row['Remarks'] = p.coachEvals
       .filter((e) => (e.remarks || '').trim())
@@ -3202,18 +3222,38 @@ function AdminPivotTable({
   const [pivotSortCol, setPivotSortCol] = useState<string | null>(null);
   const [pivotSortDir, setPivotSortDir] = useState<'asc' | 'desc'>('desc');
 
-  function togglePivotSort(col: string) {
+  function togglePivotSort(col: string, defaultDir: 'asc' | 'desc' = 'desc') {
     if (pivotSortCol === col) {
       setPivotSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
     } else {
       setPivotSortCol(col);
-      setPivotSortDir('desc');
+      setPivotSortDir(defaultDir);
     }
+  }
+
+  function sortIndicator(col: string) {
+    if (pivotSortCol !== col) return null;
+    return <span style={{ marginLeft: 2, fontSize: 9, opacity: 0.8 }}>{pivotSortDir === 'desc' ? '↓' : '↑'}</span>;
   }
 
   const sortedPlayers = useMemo(() => {
     if (!pivotSortCol) return filteredPlayers;
     return [...filteredPlayers].sort((a, b) => {
+      // String sorts
+      const STR_SORTS: Record<string, (p: ScoutPlayer) => string> = {
+        'player':       (p) => p.name,
+        'category':     (p) => p.category || '',
+        'primary-skill':(p) => p.extraInfo?.['Primary Skill'] || '',
+        'batting-hand': (p) => p.extraInfo?.['Batting hand'] || '',
+        'bowler-arm':   (p) => p.extraInfo?.['Bowler arm'] || '',
+        'bowling-type': (p) => p.extraInfo?.['Bowling type'] || '',
+      };
+      if (STR_SORTS[pivotSortCol]) {
+        const sa = STR_SORTS[pivotSortCol](a).toLowerCase();
+        const sb = STR_SORTS[pivotSortCol](b).toLowerCase();
+        return pivotSortDir === 'asc' ? sa.localeCompare(sb) : sb.localeCompare(sa);
+      }
+      // Numeric sorts (schema/section averages)
       let va: number | null = null;
       let vb: number | null = null;
       if (pivotSortCol.startsWith('schema:')) {
@@ -3541,13 +3581,13 @@ function AdminPivotTable({
             <thead>
               {/* Row 1: Schema headers (colSpan = visibleSkills*2 + visSections + 1 for schema avg) */}
               <tr>
-                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(0, PLAYER_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Player</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('player', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(0, PLAYER_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'player' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Player{sortIndicator('player')}</th>
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W, YOYO_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Yo-Yo</th>
-                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Category</th>
-                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, PRIM_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)', display: showExtraCols ? undefined : 'none' }}>Skill</th>
-                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W, BAT_HAND_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)', display: showExtraCols ? undefined : 'none' }}>Bat</th>
-                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)', display: showExtraCols ? undefined : 'none' }}>Arm</th>
-                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)', display: showExtraCols ? undefined : 'none' }}>Bowl Type</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('category', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'category' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Category{sortIndicator('category')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('primary-skill', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, PRIM_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'primary-skill' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Skill{sortIndicator('primary-skill')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('batting-hand', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W, BAT_HAND_W, '#1a1010', 3), textAlign: 'center', color: pivotSortCol === 'batting-hand' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bat{sortIndicator('batting-hand')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('bowler-arm', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, '#1a1010', 3), textAlign: 'center', color: pivotSortCol === 'bowler-arm' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Arm{sortIndicator('bowler-arm')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('bowling-type', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, '#1a1010', 3), textAlign: 'left', color: pivotSortCol === 'bowling-type' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bowl Type{sortIndicator('bowling-type')}</th>
                 {visibleSchemas.map(([schemaName, def]) => {
                   const visSecs = getVisibleSections(schemaName, def);
                   const colSpan = visSecs.reduce((s, { visSkills }) => s + visSkills.length * 2 + 1, 0) + 1;
