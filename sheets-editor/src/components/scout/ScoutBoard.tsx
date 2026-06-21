@@ -280,16 +280,14 @@ function PlayerGrid({ players, pinnedIds, onCardClick, onTogglePin, showBatch, u
 
 function useSortSearch() {
   const [search, setSearch] = useState('');
-  const [sortCol, setSortCol] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [sort, setSort] = useState<{ col: string | null; dir: 'asc' | 'desc' }>({ col: null, dir: 'asc' });
   const toggleSort = useCallback((col: string) => {
-    setSortCol((prev) => {
-      if (prev === col) { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); return col; }
-      setSortDir('asc');
-      return col;
-    });
+    setSort((prev) => ({
+      col,
+      dir: prev.col === col ? (prev.dir === 'asc' ? 'desc' : 'asc') : 'asc',
+    }));
   }, []);
-  return { search, setSearch, sortCol, sortDir, toggleSort };
+  return { search, setSearch, sortCol: sort.col, sortDir: sort.dir, toggleSort };
 }
 
 function applySort<T>(rows: T[], col: string | null, dir: 'asc' | 'desc', val: (r: T, c: string) => string | number): T[] {
@@ -2112,6 +2110,14 @@ function AdminSkillDetailsTable({
     });
   }, [allRows, search, sortCol, sortDir, coachFilters]);
 
+  const allCoaches = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of allRows) {
+      if (!seen.has(r.coachEmail)) seen.set(r.coachEmail, r.coachName);
+    }
+    return Array.from(seen.entries()).map(([email, name]) => ({ email, name }));
+  }, [allRows]);
+
   if (allRows.length === 0) {
     return (
       <div className="rounded-lg border p-10 text-center mt-4"
@@ -2125,14 +2131,6 @@ function AdminSkillDetailsTable({
       </div>
     );
   }
-
-  const allCoaches = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const r of allRows) {
-      if (!seen.has(r.coachEmail)) seen.set(r.coachEmail, r.coachName);
-    }
-    return Array.from(seen.entries()).map(([email, name]) => ({ email, name }));
-  }, [allRows]);
 
   const uniqueCoaches = allCoaches.length;
   const cols = ['Player', 'Batch', 'Category', 'Academy', 'Coach', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes', 'Overall Comment'];
@@ -2294,6 +2292,354 @@ function AdminSkillDetailsTable({
   );
 }
 
+// ── Admin Aggregated Skill Averages ───────────────────────────────────
+
+type AggSkillRow = {
+  player: ScoutPlayer;
+  academy: string;
+  schemaName: SchemaType;
+  schemaLabel: string;
+  sectionLetter: string;
+  sectionName: string;
+  sectionPct: number;
+  sectionRatedSkills: number;
+  skillName: string;
+  skillDesc: string;
+  weight: number;
+  avgScore: number;
+  coachCount: number;
+  totalCoaches: number;
+  commentCount: number;
+  overallComments: string;
+};
+
+function pctColor(pct: number): { bg: string; color: string } {
+  if (pct >= 70) return { bg: 'rgba(27,94,32,0.35)', color: '#a5d6a7' };
+  if (pct >= 50) return { bg: 'rgba(127,63,0,0.35)', color: '#ffcc80' };
+  return { bg: 'rgba(127,31,31,0.35)', color: '#ef9a9a' };
+}
+
+function exportAggSkillsToCSV(rows: AggSkillRow[]) {
+  const data = rows.map((r) => ({
+    Player: r.player.name,
+    Batch: r.player.batch || '',
+    Category: r.player.category || '',
+    Academy: r.academy,
+    Schema: r.schemaName,
+    Section: `${r.schemaLabel}${r.sectionLetter}: ${r.sectionName}`,
+    'Sec %': r.sectionPct,
+    Skill: r.skillName,
+    Weight: r.weight,
+    'Avg Score': r.avgScore > 0 ? r.avgScore.toFixed(2) : '',
+    'Coaches Rated': r.coachCount > 0 ? `${r.coachCount}/${r.totalCoaches}` : '',
+    'Comments': r.commentCount > 0 ? `${r.commentCount} coach${r.commentCount !== 1 ? 'es' : ''}: ${r.overallComments}` : '',
+  }));
+  const csv = Papa.unparse(data);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `skill-averages-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function AdminAggSkillTable({
+  players,
+  onRowClick,
+}: {
+  players: ScoutPlayer[];
+  onRowClick: (p: ScoutPlayer) => void;
+}) {
+  const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
+  const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
+
+  function toggleCoach(email: string) {
+    setCoachFilters((prev) => { const n = new Set(prev); n.has(email) ? n.delete(email) : n.add(email); return n; });
+  }
+
+  // All coaches (for filter chips — from all evals regardless of filter)
+  const allCoaches = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const p of players) {
+      for (const ev of p.coachEvals) {
+        if (!seen.has(ev.coachEmail)) seen.set(ev.coachEmail, ev.coachName || ev.coachEmail);
+      }
+    }
+    return Array.from(seen.entries()).map(([email, name]) => ({ email, name }));
+  }, [players]);
+
+  const allRows = useMemo((): AggSkillRow[] => {
+    const result: AggSkillRow[] = [];
+    for (const player of players) {
+      const evalsToUse = coachFilters.size > 0
+        ? player.coachEvals.filter((e) => coachFilters.has(e.coachEmail))
+        : player.coachEvals;
+      if (evalsToUse.length === 0) continue;
+
+      const academy = player.extraInfo?.['Academy'] || '';
+      const totalCoaches = evalsToUse.length;
+      const remarks = evalsToUse.map((e) => (e.remarks || '').trim()).filter(Boolean);
+      const commentCount = remarks.length;
+      const overallComments = remarks.join(' · ');
+
+      for (const [schemaName, def] of Object.entries(SCHEMAS) as [SchemaType, SectionDef extends never ? never : { sections: SectionDef[] }][]) {
+        const sd = def as { sections: SectionDef[] };
+        const schemaLabel = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
+
+        for (const sec of sd.sections) {
+          // per-skill averages (rated only)
+          const skillData = new Map<string, { avgScore: number; coachCount: number }>();
+          for (const sk of sec.skills) {
+            const scores = evalsToUse
+              .map((e) => e.evaluation.skills?.[sk.name] || 0)
+              .filter((s) => s > 0);
+            if (scores.length > 0) {
+              skillData.set(sk.name, {
+                avgScore: scores.reduce((a, b) => a + b, 0) / scores.length,
+                coachCount: scores.length,
+              });
+            }
+          }
+          if (skillData.size === 0) continue;
+
+          // section score — weighted by rated skills only
+          let wScore = 0, maxW = 0;
+          for (const sk of sec.skills) {
+            const d = skillData.get(sk.name);
+            if (d) { wScore += sk.weight * d.avgScore; maxW += sk.weight; }
+          }
+          const sectionPct = maxW > 0 ? Math.round((wScore / (maxW * 5)) * 100) : 0;
+
+          for (const sk of sec.skills) {
+            const d = skillData.get(sk.name);
+            if (!d) continue; // skip unrated skills
+            result.push({
+              player, academy, schemaName, schemaLabel,
+              sectionLetter: sec.letter, sectionName: sec.name,
+              sectionPct, sectionRatedSkills: skillData.size,
+              skillName: sk.name, skillDesc: sk.desc, weight: sk.weight,
+              avgScore: d.avgScore, coachCount: d.coachCount,
+              totalCoaches, commentCount, overallComments,
+            });
+          }
+        }
+      }
+    }
+    return result;
+  }, [players, coachFilters]);
+
+  const displayRows = useMemo(() => {
+    const q = search.toLowerCase();
+    const base = q
+      ? allRows.filter((r) =>
+          r.player.name.toLowerCase().includes(q) ||
+          (r.player.batch || '').toLowerCase().includes(q) ||
+          (r.player.category || '').toLowerCase().includes(q) ||
+          r.academy.toLowerCase().includes(q) ||
+          r.skillName.toLowerCase().includes(q) ||
+          r.sectionName.toLowerCase().includes(q) ||
+          r.overallComments.toLowerCase().includes(q)
+        )
+      : allRows;
+    return applySort(base, sortCol, sortDir, (r, col) => {
+      if (col === 'Player')    return r.player.name;
+      if (col === 'Batch')     return r.player.batch || '';
+      if (col === 'Category')  return r.player.category || '';
+      if (col === 'Academy')   return r.academy;
+      if (col === 'Schema')    return r.schemaName;
+      if (col === 'Section')   return `${r.schemaLabel}${r.sectionLetter}`;
+      if (col === 'Sec %')     return r.sectionPct;
+      if (col === 'Skill')     return r.skillName;
+      if (col === 'Wt')        return r.weight;
+      if (col === 'Avg Score') return r.avgScore;
+      if (col === 'Rated By')  return r.coachCount;
+      if (col === 'Comments')  return r.commentCount;
+      return '';
+    });
+  }, [allRows, search, sortCol, sortDir]);
+
+  if (allRows.length === 0) {
+    return (
+      <div className="rounded-lg border p-10 text-center mt-4"
+        style={{ background: '#2a1a1a', borderColor: 'rgba(192,57,43,0.2)' }}>
+        <p className="text-lg font-bold mb-1" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }}>No data yet</p>
+        <p className="text-sm" style={{ color: 'rgba(245,240,232,0.45)' }}>Skill averages will appear once coaches have rated players.</p>
+      </div>
+    );
+  }
+
+  const TH_BASE = 'px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer select-none';
+  const cols = ['Player', 'Batch', 'Category', 'Academy', 'Schema', 'Section', 'Sec %', 'Skill', 'Wt', 'Avg Score', 'Rated By', 'Comments'];
+
+  return (
+    <div>
+      {/* Coach filter */}
+      {allCoaches.length > 1 && (
+        <div className="flex flex-col gap-1.5 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(239,154,154,0.5)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+              Coaches included in averages
+            </span>
+            {coachFilters.size > 0 && (
+              <button onClick={() => setCoachFilters(new Set())} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                Clear ✕
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {allCoaches.map(({ email, name }) => {
+              const isActive = coachFilters.has(email);
+              return (
+                <button key={email} onClick={() => toggleCoach(email)}
+                  className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                  style={{
+                    fontFamily: 'Barlow Condensed, sans-serif',
+                    background: isActive ? 'rgba(192,57,43,0.45)' : 'rgba(192,57,43,0.12)',
+                    color: isActive ? '#f5f0e8' : '#ef9a9a',
+                    border: `1px solid ${isActive ? 'rgba(192,57,43,0.6)' : 'rgba(192,57,43,0.2)'}`,
+                    letterSpacing: '0.06em',
+                  }}>
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+          {coachFilters.size > 0 && (
+            <p className="text-[10px]" style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+              Averages computed from {coachFilters.size} selected coach{coachFilters.size !== 1 ? 'es' : ''} only
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <TableSearch value={search} onChange={setSearch} />
+        <span className="text-xs flex-1" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {displayRows.length} skill rows · {new Set(displayRows.map((r) => r.player.rowIndex)).size} players
+        </span>
+        <button onClick={() => exportAggSkillsToCSV(displayRows)} style={EXPORT_BTN_STYLE} className="transition-opacity hover:opacity-80">
+          {EXPORT_ICON} Export CSV
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#2a1818', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
+                {cols.map((h) => (
+                  <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                    className={TH_BASE}
+                    style={{
+                      ...TH_STYLE,
+                      textAlign: ['Wt', 'Avg Score', 'Rated By', 'Comments', 'Sec %'].includes(h) ? 'center' : 'left',
+                      color: h === 'Sec %' ? '#c8a84b' : 'rgba(245,240,232,0.55)',
+                    }} />
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {displayRows.map((r, i) => {
+                const schColor = SCHEMA_COLORS[r.schemaName];
+                const sp = pctColor(r.sectionPct);
+                return (
+                  <tr key={`${r.player.rowIndex}-${r.schemaName}-${r.sectionLetter}-${r.skillName}-${i}`}
+                    onClick={() => onRowClick(r.player)}
+                    className="cursor-pointer"
+                    style={{ background: i % 2 === 0 ? '#1e1212' : '#221515', borderBottom: '1px solid rgba(192,57,43,0.06)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(192,57,43,0.12)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? '#1e1212' : '#221515')}
+                  >
+                    {/* Player */}
+                    <td className="px-3 py-2">
+                      <span className="font-bold whitespace-nowrap" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>{r.player.name}</span>
+                    </td>
+                    {/* Batch */}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.batch || '—'}</span>
+                    </td>
+                    {/* Category */}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.6)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.player.category || '—'}</span>
+                    </td>
+                    {/* Academy */}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.academy || <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>}</span>
+                    </td>
+                    {/* Schema */}
+                    <td className="px-3 py-2">
+                      <span className="font-bold text-[10px] px-1.5 py-0.5 rounded" style={{ background: schColor, color: '#fff', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.schemaLabel}
+                      </span>
+                    </td>
+                    {/* Section */}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span className="font-bold" style={{ color: schColor, fontFamily: 'Barlow Condensed, sans-serif' }}>{r.schemaLabel}{r.sectionLetter}</span>
+                      <span className="ml-1.5" style={{ color: 'rgba(245,240,232,0.38)', fontFamily: 'Barlow Condensed, sans-serif' }}>{r.sectionName}</span>
+                    </td>
+                    {/* Sec % */}
+                    <td className="px-3 py-2 text-center">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: sp.bg, color: sp.color, fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.sectionPct}%
+                      </span>
+                    </td>
+                    {/* Skill */}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }} title={r.skillDesc}>{r.skillName}</span>
+                    </td>
+                    {/* Wt */}
+                    <td className="px-3 py-2 text-center">
+                      <span className="text-[10px] font-bold px-1 py-px rounded" style={{ background: 'rgba(200,168,75,0.1)', color: 'rgba(200,168,75,0.6)', fontFamily: 'Barlow Condensed, sans-serif' }}>×{r.weight}</span>
+                    </td>
+                    {/* Avg Score */}
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                      <span>
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <span key={n} style={{ color: n <= Math.round(r.avgScore) ? '#c8a84b' : 'rgba(245,240,232,0.12)', fontSize: '0.85rem', lineHeight: 1 }}>★</span>
+                        ))}
+                        <span className="ml-1" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: '0.68rem' }}>
+                          {r.avgScore.toFixed(1)}/5
+                        </span>
+                      </span>
+                    </td>
+                    {/* Rated By */}
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                      <span className="text-[11px] font-bold" style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.coachCount}
+                      </span>
+                      <span className="text-[10px]" style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        /{r.totalCoaches}
+                      </span>
+                    </td>
+                    {/* Overall Comments */}
+                    <td className="px-3 py-2" style={{ maxWidth: '280px' }}>
+                      {r.commentCount > 0 ? (
+                        <>
+                          <span className="text-[10px] font-bold mr-1.5" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                            {r.commentCount} coach{r.commentCount !== 1 ? 'es' : ''}:
+                          </span>
+                          <span style={{ color: 'rgba(245,240,232,0.65)', fontFamily: 'Barlow, sans-serif', fontStyle: 'italic' }}>
+                            {r.overallComments}
+                          </span>
+                        </>
+                      ) : (
+                        <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2600);
@@ -2328,7 +2674,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'admin-evals' | 'admin-skill-details'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills'>('board');
   const [isAdmin, setIsAdmin] = useState(false);
   const isDemo = sheetKey === 'demo';
 
@@ -2772,6 +3118,24 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                       </svg>
                       All Skill Notes
                     </button>
+                    <button
+                      onClick={() => { setViewMode('admin-agg-skills'); setSearchQuery(''); }}
+                      className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5"
+                      style={{
+                        fontFamily: 'Barlow Condensed, sans-serif',
+                        color: viewMode === 'admin-agg-skills' ? '#ef9a9a' : 'rgba(239,154,154,0.45)',
+                        borderColor: viewMode === 'admin-agg-skills' ? '#c0392b' : 'transparent',
+                        background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
+                      }}
+                      onMouseEnter={(e) => { if (viewMode !== 'admin-agg-skills') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.75)'; }}
+                      onMouseLeave={(e) => { if (viewMode !== 'admin-agg-skills') (e.currentTarget as HTMLElement).style.color = 'rgba(239,154,154,0.45)'; }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      Skill Averages
+                    </button>
                   </>
                 );
               })()}
@@ -2889,6 +3253,22 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {/* Selection Summary table */}
           {!loading && !error && viewMode === 'selection' && (
             <SelectionSummaryTable players={players} allBatchNames={allBatchNames} onRowClick={setActivePlayer} />
+          )}
+
+          {/* Admin: Skill Averages table */}
+          {!loading && !error && viewMode === 'admin-agg-skills' && isAdmin && (
+            <>
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef9a9a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.1em' }}>
+                  Admin Report — Aggregated Skill Averages across All Coaches
+                </span>
+              </div>
+              <AdminAggSkillTable players={players} onRowClick={setActivePlayer} />
+            </>
           )}
 
           {/* Admin: All Skill Notes table */}
