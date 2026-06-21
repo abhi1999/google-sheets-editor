@@ -2848,11 +2848,11 @@ type RemarksPopover = {
   y: number;
 };
 
-type SchemaCoverage = { category: string; yoyo: YoyoFilterKey; threshold: number };
+type SchemaCoverage = { category: string; yoyo: YoyoFilterKey; threshold: number; bowlTypes: string[] };
 const DEFAULT_SCHEMA_COVERAGE: Record<SchemaType, SchemaCoverage> = {
-  Batsman: { category: 'all', yoyo: 'all', threshold: 0 },
-  'Fast Bowler': { category: 'all', yoyo: 'all', threshold: 0 },
-  'Spin Bowler': { category: 'all', yoyo: 'all', threshold: 0 },
+  Batsman: { category: 'all', yoyo: 'all', threshold: 0, bowlTypes: [] },
+  'Fast Bowler': { category: 'all', yoyo: 'all', threshold: 0, bowlTypes: [] },
+  'Spin Bowler': { category: 'all', yoyo: 'all', threshold: 0, bowlTypes: [] },
 };
 
 type PivotSavedFilter = {
@@ -2864,7 +2864,7 @@ type PivotSavedFilter = {
   schemaCoverage: Record<SchemaType, SchemaCoverage>;
 };
 
-const PIVOT_FILTERS_LS_KEY = 'scout_pivot_filters_v2';
+const PIVOT_FILTERS_LS_KEY = 'scout_pivot_filters_v3';
 
 function loadPivotFilters(): PivotSavedFilter[] {
   try { return JSON.parse(localStorage.getItem(PIVOT_FILTERS_LS_KEY) || '[]'); } catch { return []; }
@@ -2887,6 +2887,10 @@ function exportPivotToCSV(players: ScoutPlayer[], visibleSkillKeys: Set<string>)
       Category: p.category || '',
       Schema: p.schema,
       'Yo-Yo': yoyoVals.length > 0 ? Math.min(...yoyoVals) : '',
+      'Primary Skill': p.extraInfo?.['Primary Skill'] || '',
+      'Batting Hand': p.extraInfo?.['Batting hand'] || '',
+      'Bowler Arm': p.extraInfo?.['Bowler arm'] || '',
+      'Bowling Type': p.extraInfo?.['Bowling type'] || '',
     };
     for (const [schemaName, def] of schemaEntries) {
       const label = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
@@ -2975,9 +2979,20 @@ function AdminPivotTable({
     for (const [schemaName, def] of schemaEntries) {
       const cov = schemaCoverage[schemaName];
       const coveragePlayers = players.filter((p) => {
-        if (p.schema !== schemaName || p.coachEvals.length === 0) return false;
+        if (p.coachEvals.length === 0) return false;
+        // include any player who has at least one coach eval rating on this schema's skills
+        const hasSchemaRating = p.coachEvals.some((e) =>
+          SCHEMAS[schemaName].sections.some((sec) =>
+            sec.skills.some((sk) => (e.evaluation.skills?.[sk.name] || 0) > 0)
+          )
+        );
+        if (!hasSchemaRating) return false;
         if (cov.category !== 'all' && p.category !== cov.category) return false;
         if (cov.yoyo !== 'all' && yoyoCategory(p.coachEvals) !== cov.yoyo) return false;
+        if (cov.bowlTypes.length > 0) {
+          const bt = (p.extraInfo?.['Bowling type'] || '').trim();
+          if (!cov.bowlTypes.includes(bt)) return false;
+        }
         return true;
       });
       const total = coveragePlayers.length;
@@ -3023,15 +3038,23 @@ function AdminPivotTable({
 
   // Avg over only the visible skills in a section/schema
   function getSectionAvgVis(player: ScoutPlayer, visSkills: SectionDef['skills']): number | null {
-    const avgs = visSkills.map((sk) => getSkillStat(player, sk.name)?.avg).filter((v): v is number => v !== undefined);
+    const avgs: number[] = [];
+    for (const sk of visSkills) {
+      const stat = getSkillStat(player, sk.name);
+      if (stat !== null) avgs.push(stat.avg);
+    }
     if (!avgs.length) return null;
     return avgs.reduce((a, b) => a + b, 0) / avgs.length;
   }
 
   function getSchemaAvgVis(player: ScoutPlayer, visSecs: VisSection[]): number | null {
-    const avgs = visSecs.flatMap(({ visSkills }) =>
-      visSkills.map((sk) => getSkillStat(player, sk.name)?.avg).filter((v): v is number => v !== undefined)
-    );
+    const avgs: number[] = [];
+    for (const { visSkills } of visSecs) {
+      for (const sk of visSkills) {
+        const stat = getSkillStat(player, sk.name);
+        if (stat !== null) avgs.push(stat.avg);
+      }
+    }
     if (!avgs.length) return null;
     return avgs.reduce((a, b) => a + b, 0) / avgs.length;
   }
@@ -3053,7 +3076,13 @@ function AdminPivotTable({
     setSchemaFilter(f.schemaFilter);
     setYoyoFilter(f.yoyoFilter);
     setCategoryFilter(f.categoryFilter ?? 'all');
-    setSchemaCoverage(f.schemaCoverage ?? { ...DEFAULT_SCHEMA_COVERAGE });
+    const loaded = f.schemaCoverage ?? DEFAULT_SCHEMA_COVERAGE;
+    setSchemaCoverage({
+      ...DEFAULT_SCHEMA_COVERAGE,
+      ...Object.fromEntries(
+        (Object.keys(loaded) as SchemaType[]).map((k) => [k, { bowlTypes: [], ...loaded[k] }])
+      ),
+    } as Record<SchemaType, SchemaCoverage>);
   }
   function handleDeleteFilter(id: string) {
     const updated = savedFilters.filter((f) => f.id !== id);
@@ -3094,8 +3123,8 @@ function AdminPivotTable({
         const schemaName = pivotSortCol.slice(7) as SchemaType;
         const def = SCHEMAS[schemaName];
         const visSecs = getVisibleSections(schemaName, def);
-        va = a.schema === schemaName ? getSchemaAvgVis(a, visSecs) : null;
-        vb = b.schema === schemaName ? getSchemaAvgVis(b, visSecs) : null;
+        va = getSchemaAvgVis(a, visSecs);
+        vb = getSchemaAvgVis(b, visSecs);
       } else if (pivotSortCol.startsWith('sec:')) {
         const rest = pivotSortCol.slice(4);
         const barIdx = rest.indexOf('|');
@@ -3105,8 +3134,8 @@ function AdminPivotTable({
         const visSecs = getVisibleSections(schemaName, def);
         const visSecData = visSecs.find(({ sec }) => sec.letter === secLetter);
         if (visSecData) {
-          va = a.schema === schemaName ? getSectionAvgVis(a, visSecData.visSkills) : null;
-          vb = b.schema === schemaName ? getSectionAvgVis(b, visSecData.visSkills) : null;
+          va = getSectionAvgVis(a, visSecData.visSkills);
+          vb = getSectionAvgVis(b, visSecData.visSkills);
         }
       }
       if (va === null && vb === null) return 0;
@@ -3133,6 +3162,10 @@ function AdminPivotTable({
   const PLAYER_W = 150;
   const YOYO_W = 65;
   const CAT_W = 115;
+  const PRIM_W = 75;
+  const BAT_HAND_W = 52;
+  const BOWL_ARM_W = 52;
+  const BOWL_TYPE_W = 80;
 
   const stickyCellStyle = (left: number, w: number, bg: string, zIndex = 2): React.CSSProperties => ({
     position: 'sticky',
@@ -3280,7 +3313,17 @@ function AdminPivotTable({
               const label = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
               const totalSkills = def.sections.reduce((s, sec) => s + sec.skills.length, 0);
               const visCount = def.sections.flatMap((sec) => sec.skills.map((sk) => `${schemaName}|${sec.letter}|${sk.name}`)).filter((k) => visibleSkillKeys.has(k)).length;
-              const isActive = cov.category !== 'all' || cov.yoyo !== 'all' || cov.threshold > 0;
+              const isActive = cov.category !== 'all' || cov.yoyo !== 'all' || cov.threshold > 0 || cov.bowlTypes.length > 0;
+              const availBowlTypes = schemaName !== 'Batsman'
+                ? [...new Set(players.filter((p) => {
+                    if (!(p.extraInfo?.['Bowling type'] || '').trim()) return false;
+                    return p.coachEvals.some((e) =>
+                      SCHEMAS[schemaName].sections.some((sec) =>
+                        sec.skills.some((sk) => (e.evaluation.skills?.[sk.name] || 0) > 0)
+                      )
+                    );
+                  }).map((p) => p.extraInfo!['Bowling type'].trim()))].sort()
+                : [];
               return (
                 <div key={schemaName} className="flex flex-wrap items-center gap-3"
                   style={{ padding: '5px 8px', borderRadius: 5, background: isActive ? `${color}0d` : 'transparent', border: `1px solid ${isActive ? color + '33' : 'transparent'}` }}>
@@ -3301,6 +3344,20 @@ function AdminPivotTable({
                       );
                     })}
                   </div>
+                  {availBowlTypes.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {availBowlTypes.map((bt) => {
+                        const active = cov.bowlTypes.includes(bt);
+                        return (
+                          <button key={bt}
+                            onClick={() => updateCov(schemaName, { bowlTypes: active ? cov.bowlTypes.filter((x) => x !== bt) : [...cov.bowlTypes, bt] })}
+                            style={{ padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: 'Barlow Condensed, sans-serif', background: active ? `${color}33` : 'rgba(255,255,255,0.04)', color: active ? color : 'rgba(245,240,232,0.35)', border: `1px solid ${active ? color + '66' : 'rgba(255,255,255,0.08)'}`, cursor: 'pointer' }}>
+                            {bt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                   <div className="flex items-center gap-1">
                     <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>min</span>
                     <input type="number" min={0} max={100} step={5} value={cov.threshold}
@@ -3312,7 +3369,7 @@ function AdminPivotTable({
                     {visCount}/{totalSkills} skills
                   </span>
                   {isActive && (
-                    <button onClick={() => updateCov(schemaName, { category: 'all', yoyo: 'all', threshold: 0 })}
+                    <button onClick={() => updateCov(schemaName, { category: 'all', yoyo: 'all', threshold: 0, bowlTypes: [] })}
                       style={{ fontSize: 10, color: 'rgba(192,57,43,0.7)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px' }}
                       title="Reset this schema's filter">
                       ✕ reset
@@ -3362,6 +3419,10 @@ function AdminPivotTable({
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(0, PLAYER_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Player</th>
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W, YOYO_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Yo-Yo</th>
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Category</th>
+                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, PRIM_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Skill</th>
+                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W, BAT_HAND_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Bat</th>
+                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Arm</th>
+                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Bowl Type</th>
                 {visibleSchemas.map(([schemaName, def]) => {
                   const visSecs = getVisibleSections(schemaName, def);
                   const colSpan = visSecs.reduce((s, { visSkills }) => s + visSkills.length * 2 + 1, 0) + 1;
@@ -3462,27 +3523,35 @@ function AdminPivotTable({
                         {player.category || player.schema}
                       </span>
                     </td>
+                    {/* Sticky: Primary Skill */}
+                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, PRIM_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {player.extraInfo?.['Primary Skill'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                    </td>
+                    {/* Sticky: Batting Hand */}
+                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W, BAT_HAND_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)' }}>
+                      {player.extraInfo?.['Batting hand'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                    </td>
+                    {/* Sticky: Bowler Arm */}
+                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)' }}>
+                      {player.extraInfo?.['Bowler arm'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                    </td>
+                    {/* Sticky: Bowling Type */}
+                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {player.extraInfo?.['Bowling type'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                    </td>
                     {/* Skill cells + section avg + schema avg (only visible skills/sections/schemas) */}
                     {visibleSchemas.map(([schemaName, def]) => {
                       const visSecs = getVisibleSections(schemaName, def);
-                      const schemaAvg = player.schema === schemaName ? getSchemaAvgVis(player, visSecs) : null;
+                      const schemaAvg = getSchemaAvgVis(player, visSecs);
                       const schemaAvgSc = schemaAvg !== null ? skillScoreColor(schemaAvg) : null;
                       return (
                         <Fragment key={`${player.rowIndex}-${schemaName}`}>
                           {visSecs.map(({ sec, visSkills }) => {
-                            const secAvg = player.schema === schemaName ? getSectionAvgVis(player, visSkills) : null;
+                            const secAvg = getSectionAvgVis(player, visSkills);
                             const secAvgSc = secAvg !== null ? skillScoreColor(secAvg) : null;
                             return (
                               <Fragment key={`${player.rowIndex}-${schemaName}-${sec.letter}`}>
                                 {visSkills.map((sk) => {
-                                  if (player.schema !== schemaName) {
-                                    return (
-                                      <Fragment key={`${player.rowIndex}-${schemaName}-${sec.letter}-${sk.name}`}>
-                                        <td style={{ background: rowBg, borderLeft: '1px solid rgba(255,255,255,0.03)' }} />
-                                        <td style={{ background: rowBg }} />
-                                      </Fragment>
-                                    );
-                                  }
                                   const stat = getSkillStat(player, sk.name);
                                   if (!stat) {
                                     return (
@@ -3778,7 +3847,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'team-packages' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'team-packages' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot'>('board');
   const [isAdmin, setIsAdmin] = useState(false);
   const isDemo = sheetKey === 'demo';
 
@@ -4076,6 +4145,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     { label: 'All Fitness Scores', mode: 'all-fitness' },
                     { label: 'Selection', mode: 'selection' },
                     { label: 'Team Packages', mode: 'team-packages' },
+                    { label: 'Skill Pivot', mode: 'skill-pivot' },
                   ]}
                   activeMode={viewMode}
                   onSelect={(mode) => { setViewMode(mode as typeof viewMode); setSearchQuery(''); }}
@@ -4269,6 +4339,11 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
               </div>
               <AdminSkillDetailsTable players={players} onRowClick={setActivePlayer} />
             </>
+          )}
+
+          {/* Reports: Skill Pivot (all coaches) */}
+          {!loading && !error && viewMode === 'skill-pivot' && (
+            <AdminPivotTable players={players} onRowClick={setActivePlayer} />
           )}
 
           {/* Admin: Skill Pivot table */}
