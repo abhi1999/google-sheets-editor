@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import type { ScoutPlayer, PlayerEvaluation, SchemaType } from '@/types/scout';
 import {
   SCHEMAS,
@@ -145,6 +145,14 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
   );
   const [openSections, setOpenSections] = useState<Set<string>>(() => new Set());
   const [fitnessOpen, setFitnessOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const schemaScores = useMemo(
     () => (Object.entries(SCHEMAS) as [SchemaType, typeof SCHEMAS[SchemaType]][]).map(([name, def]) => {
@@ -191,15 +199,24 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 md:p-6 overflow-y-auto"
-      style={{ background: 'rgba(8,18,8,0.88)', backdropFilter: 'blur(4px)' }}
+      className="fixed inset-0 z-50 flex md:items-start md:justify-center md:p-6 md:overflow-y-auto"
+      style={{
+        background: 'rgba(8,18,8,0.88)', backdropFilter: 'blur(4px)',
+        alignItems: isMobile ? 'flex-end' : undefined,
+      }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="bg-white rounded-xl w-full max-w-2xl my-auto shadow-2xl overflow-hidden"
+        className="bg-white rounded-t-2xl md:rounded-xl w-full md:max-w-2xl md:my-auto shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
-        style={{ fontFamily: 'Barlow, sans-serif', color: '#1a1a1a' }}
+        style={{ fontFamily: 'Barlow, sans-serif', color: '#1a1a1a', ...(isMobile ? { height: '92dvh' } : {}) }}
       >
+        {/* Drag handle — mobile only */}
+        {isMobile && (
+          <div className="flex-shrink-0 flex justify-center pt-3 pb-1">
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.25)' }} />
+          </div>
+        )}
         {/* Modal header */}
         <div
           className="flex items-center gap-4 px-5 py-4 border-b-2 border-[#c0392b]"
@@ -350,6 +367,9 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
           })}
         </div>
 
+        {/* Tab content — single scroll container on mobile, transparent wrapper on desktop */}
+        <div className="flex-1 min-h-0 overflow-y-auto md:flex-none md:overflow-visible">
+
         {/* My Evaluation tab */}
         {activeTab === 'mine' && (
           <>
@@ -385,7 +405,7 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
             </div>
 
             {/* Evaluation sections — all 3 schemas */}
-            <div className="overflow-y-auto" style={{ maxHeight: '55vh' }}>
+            <div className="overflow-y-auto" style={{ maxHeight: isMobile ? 'none' : '55vh' }}>
               {(Object.entries(SCHEMAS) as [SchemaType, (typeof SCHEMAS)[SchemaType]][]).map(([schemaName, schemaDef]) => (
                 <div key={schemaName}>
                   {/* Schema group header */}
@@ -591,7 +611,7 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
 
         {/* All Coaches tab */}
         {activeTab === 'all' && (
-          <div className="overflow-y-auto" style={{ maxHeight: '60vh' }}>
+          <div className="overflow-y-auto" style={{ maxHeight: isMobile ? 'none' : '60vh' }}>
             {player.coachEvals.length === 0 ? (
               <div className="px-5 py-10 text-center">
                 <p className="text-sm font-semibold" style={{ color: 'rgba(26,26,26,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -726,9 +746,11 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
           </div>
         )}
 
+        </div>{/* end tab content scroll wrapper */}
+
         {/* Footer */}
         <div
-          className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t"
+          className="flex-shrink-0 flex items-center justify-end gap-2.5 px-5 py-3.5 border-t"
           style={{ background: '#fafafa', borderColor: '#eee' }}
         >
           <button
