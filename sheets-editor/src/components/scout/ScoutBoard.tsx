@@ -2944,6 +2944,7 @@ function AdminPivotTable({
   const [popover, setPopover] = useState<PivotPopover | null>(null);
   const [remarksPopover, setRemarksPopover] = useState<RemarksPopover | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [selectedCoaches, setSelectedCoaches] = useState<Set<string> | null>(null); // null = all
   // Per-schema coverage filter — controls which skill columns are visible
   const [schemaCoverage, setSchemaCoverage] = useState<Record<SchemaType, SchemaCoverage>>(() => ({ ...DEFAULT_SCHEMA_COVERAGE }));
   const [showCoveragePanel, setShowCoveragePanel] = useState(false);
@@ -2978,12 +2979,47 @@ function AdminPivotTable({
     return Array.from(cats).sort();
   }, [players]);
 
+  const allCoaches = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of players) {
+      for (const e of p.coachEvals) {
+        if (e.coachEmail) map.set(e.coachEmail, e.coachName || e.coachEmail);
+      }
+    }
+    return Array.from(map.entries()).map(([email, name]) => ({ email, name }));
+  }, [players]);
+
+  function toggleCoach(email: string) {
+    const prev = selectedCoaches;
+    if (prev === null) {
+      const next = new Set(allCoaches.map((c) => c.email).filter((e) => e !== email));
+      setSelectedCoaches(next.size === 0 ? null : next);
+    } else {
+      const next = new Set(prev);
+      if (next.has(email)) {
+        next.delete(email);
+        setSelectedCoaches(next.size === 0 ? null : next);
+      } else {
+        next.add(email);
+        setSelectedCoaches(next.size === allCoaches.length ? null : next);
+      }
+    }
+  }
+
+  const effectivePlayers = useMemo(() => {
+    if (selectedCoaches === null) return players;
+    return players.map((p) => ({
+      ...p,
+      coachEvals: p.coachEvals.filter((e) => selectedCoaches.has(e.coachEmail)),
+    }));
+  }, [players, selectedCoaches]);
+
   // Which skill columns to show — evaluated per-schema using each schema's own coverage settings
   const visibleSkillKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const [schemaName, def] of schemaEntries) {
       const cov = schemaCoverage[schemaName];
-      const coveragePlayers = players.filter((p) => {
+      const coveragePlayers = effectivePlayers.filter((p) => {
         if (p.coachEvals.length === 0) return false;
         // include any player who has at least one coach eval rating on this schema's skills
         const hasSchemaRating = p.coachEvals.some((e) =>
@@ -3019,7 +3055,7 @@ function AdminPivotTable({
       }
     }
     return keys;
-  }, [players, schemaEntries, schemaCoverage]);
+  }, [effectivePlayers, schemaEntries, schemaCoverage]);
 
   // Visible sections per schema (only sections with ≥1 visible skill)
   type VisSection = { sec: SectionDef; visSkills: SectionDef['skills'] };
@@ -3110,21 +3146,19 @@ function AdminPivotTable({
 
   const filteredPlayers = useMemo(() => {
     const q = search.toLowerCase();
-    return players.filter((p) => {
+    return effectivePlayers.filter((p) => {
       if (p.coachEvals.length === 0) return false;
-      if (schemaFilter !== 'all' && p.schema !== schemaFilter) return false;
       if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals) !== yoyoFilter) return false;
       if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
       return true;
     });
-  }, [players, schemaFilter, yoyoFilter, categoryFilter, search]);
+  }, [effectivePlayers, yoyoFilter, categoryFilter, search]);
 
   const yoyoCounts = useMemo(() => {
     const q = search.toLowerCase();
-    const pool = players.filter((p) => {
+    const pool = effectivePlayers.filter((p) => {
       if (p.coachEvals.length === 0) return false;
-      if (schemaFilter !== 'all' && p.schema !== schemaFilter) return false;
       if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
       return true;
@@ -3132,14 +3166,13 @@ function AdminPivotTable({
     const counts: Record<YoyoFilterKey, number> = { all: pool.length, green: 0, amber: 0, red: 0, grey: 0 };
     pool.forEach((p) => { counts[yoyoCategory(p.coachEvals)]++; });
     return counts;
-  }, [players, schemaFilter, categoryFilter, search]);
+  }, [effectivePlayers, categoryFilter, search]);
 
   const categoryCounts = useMemo(() => {
     const q = search.toLowerCase();
     const counts: Record<string, number> = {};
-    players.filter((p) => {
+    effectivePlayers.filter((p) => {
       if (p.coachEvals.length === 0) return false;
-      if (schemaFilter !== 'all' && p.schema !== schemaFilter) return false;
       if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals) !== yoyoFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
       return true;
@@ -3147,7 +3180,7 @@ function AdminPivotTable({
       if (p.category) counts[p.category] = (counts[p.category] || 0) + 1;
     });
     return counts;
-  }, [players, schemaFilter, yoyoFilter, search]);
+  }, [effectivePlayers, yoyoFilter, search]);
 
   const [pivotSortCol, setPivotSortCol] = useState<string | null>(null);
   const [pivotSortDir, setPivotSortDir] = useState<'asc' | 'desc'>('desc');
@@ -3256,26 +3289,6 @@ function AdminPivotTable({
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <TableSearch value={search} onChange={setSearch} />
         <div className="flex items-center gap-1">
-          {(['all', ...Object.keys(SCHEMAS)] as (SchemaType | 'all')[]).map((s) => {
-            const label = s === 'all' ? 'All Schemas' : s === 'Batsman' ? 'BAT' : s === 'Fast Bowler' ? 'FB' : 'SB';
-            const color = s === 'all' ? '#c8a84b' : SCHEMA_COLORS[s as SchemaType];
-            const active = schemaFilter === s;
-            return (
-              <button key={s} onClick={() => setSchemaFilter(s)}
-                style={{
-                  padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700,
-                  fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.05em',
-                  background: active ? color + '33' : 'rgba(255,255,255,0.05)',
-                  color: active ? color : 'rgba(245,240,232,0.4)',
-                  border: `1px solid ${active ? color + '66' : 'rgba(255,255,255,0.08)'}`,
-                  cursor: 'pointer',
-                }}>
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex items-center gap-1">
           {YOYO_FILTERS.filter((f) => f.key !== 'all').map((f) => {
             const active = yoyoFilter === f.key;
             return (
@@ -3314,6 +3327,40 @@ function AdminPivotTable({
                 </button>
               );
             })}
+          </div>
+        )}
+        {allCoaches.length > 1 && (
+          <div className="flex items-center gap-1">
+            <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif', marginRight: 2 }}>Coaches:</span>
+            {allCoaches.map((coach) => {
+              const active = selectedCoaches === null || selectedCoaches.has(coach.email);
+              const initials = coach.name.split(/\s+/).map((w: string) => w[0] || '').join('').slice(0, 2).toUpperCase();
+              return (
+                <button key={coach.email} onClick={() => toggleCoach(coach.email)}
+                  title={coach.name}
+                  style={{
+                    padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+                    fontFamily: 'Barlow Condensed, sans-serif',
+                    background: active ? 'rgba(200,168,75,0.2)' : 'rgba(255,255,255,0.05)',
+                    color: active ? '#c8a84b' : 'rgba(245,240,232,0.25)',
+                    border: `1px solid ${active ? 'rgba(200,168,75,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                    cursor: 'pointer',
+                  }}>
+                  {initials}
+                </button>
+              );
+            })}
+            {selectedCoaches !== null && (
+              <button onClick={() => setSelectedCoaches(null)}
+                style={{
+                  padding: '3px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700,
+                  fontFamily: 'Barlow Condensed, sans-serif',
+                  background: 'rgba(192,57,43,0.12)', color: 'rgba(220,100,90,0.85)',
+                  border: '1px solid rgba(192,57,43,0.3)', cursor: 'pointer',
+                }}>
+                ✕
+              </button>
+            )}
           </div>
         )}
         <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif', marginLeft: 4 }}>
