@@ -18,6 +18,7 @@ interface ScoutBoardProps {
 export type YoyoThresholds = { greenMin: number; amberMin: number };
 export const DEFAULT_YOYO_THRESHOLDS: YoyoThresholds = { greenMin: 15.5, amberMin: 15.2 };
 const YoyoThresholdsCtx = createContext<YoyoThresholds>(DEFAULT_YOYO_THRESHOLDS);
+const PlayerSelectionsCtx = createContext<Record<number, boolean>>({});
 
 interface CategoryGroup {
   name: string;
@@ -112,8 +113,15 @@ function PlayerCard({
   userEmail: string;
 }) {
   const t = useContext(YoyoThresholdsCtx);
+  const playerSelections = useContext(PlayerSelectionsCtx);
   const catColor = getCategoryColor(player.category);
   const divStyle = getDivStyle(player.div);
+
+  const isSelected = (() => {
+    if (player.rowIndex in playerSelections) return playerSelections[player.rowIndex];
+    const vals = player.coachEvals.map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || '')).filter((v) => !isNaN(v) && v > 0);
+    return (player.category?.startsWith('Pre-') ?? false) && vals.length > 0 && Math.min(...vals) >= t.greenMin;
+  })();
 
   return (
     <button
@@ -121,7 +129,7 @@ function PlayerCard({
       className="relative overflow-hidden rounded-lg text-center cursor-pointer border-2 transition-all duration-150"
       style={{
         background: '#f5f0e8',
-        borderColor: isPinned ? '#c0392b' : 'transparent',
+        borderColor: isPinned ? '#c0392b' : isSelected ? 'rgba(46,125,50,0.5)' : 'transparent',
         padding: '16px 10px 12px',
         fontFamily: 'Barlow, sans-serif',
       }}
@@ -131,7 +139,7 @@ function PlayerCard({
         e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.3)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = isPinned ? '#c0392b' : 'transparent';
+        e.currentTarget.style.borderColor = isPinned ? '#c0392b' : isSelected ? 'rgba(46,125,50,0.5)' : 'transparent';
         e.currentTarget.style.transform = 'translateY(0)';
         e.currentTarget.style.boxShadow = 'none';
       }}
@@ -139,6 +147,14 @@ function PlayerCard({
       {/* Decorative circle */}
       <span className="absolute -top-4 -right-4 w-12 h-12 rounded-full pointer-events-none"
         style={{ background: 'rgba(192,57,43,0.06)' }} />
+
+      {/* Selected indicator */}
+      {isSelected && (
+        <span className="absolute top-1 right-1 text-[9px] font-bold px-1 py-px rounded pointer-events-none"
+          style={{ background: 'rgba(27,94,32,0.85)', color: '#a5d6a7', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.04em' }}>
+          ✓
+        </span>
+      )}
 
       {/* Pin button */}
       <span
@@ -3074,6 +3090,7 @@ function AdminPivotTable({
   allowCoachBreakdown?: boolean;
 }) {
   const t = useContext(YoyoThresholdsCtx);
+  const playerSelections = useContext(PlayerSelectionsCtx);
   const [schemaFilter, setSchemaFilter] = useState<SchemaType | 'all'>('all');
   const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
   const [search, setSearch] = useState('');
@@ -3081,6 +3098,7 @@ function AdminPivotTable({
   const [remarksPopover, setRemarksPopover] = useState<RemarksPopover | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [divFilter, setDivFilter] = useState<string>('all');
+  const [selectedOnlyFilter, setSelectedOnlyFilter] = useState(false);
   const [selectedCoaches, setSelectedCoaches] = useState<Set<string> | null>(null); // null = all
   const [showExtraCols, setShowExtraCols] = useState(true);
   // Per-schema coverage filter — controls which skill columns are visible
@@ -3308,11 +3326,20 @@ function AdminPivotTable({
         if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
         if (divFilter !== 'all' && p.div !== divFilter) return false;
         if (q && !matchesSearch(p, q)) return false;
+        if (selectedOnlyFilter) {
+          const isSel = p.rowIndex in playerSelections
+            ? playerSelections[p.rowIndex]
+            : (p.category?.startsWith('Pre-') ?? false) && (() => {
+                const vals = p.coachEvals.map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || '')).filter((v) => !isNaN(v) && v > 0);
+                return vals.length > 0 && Math.min(...vals) >= t.greenMin;
+              })();
+          if (!isSel) return false;
+        }
         return true;
       }).map((p) => p.rowIndex)
     );
     return effectivePlayers.filter((p) => visibleIndexes.has(p.rowIndex));
-  }, [players, effectivePlayers, yoyoFilter, categoryFilter, divFilter, search, t]);
+  }, [players, effectivePlayers, yoyoFilter, categoryFilter, divFilter, search, selectedOnlyFilter, playerSelections, t]);
 
   const yoyoCounts = useMemo(() => {
     const q = search.toLowerCase();
@@ -3576,6 +3603,18 @@ function AdminPivotTable({
             )}
           </div>
         )}
+        <button
+          onClick={() => setSelectedOnlyFilter((v) => !v)}
+          style={{
+            padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+            fontFamily: 'Barlow Condensed, sans-serif',
+            background: selectedOnlyFilter ? 'rgba(27,94,32,0.3)' : 'rgba(255,255,255,0.05)',
+            color: selectedOnlyFilter ? '#a5d6a7' : 'rgba(245,240,232,0.4)',
+            border: `1px solid ${selectedOnlyFilter ? 'rgba(46,125,50,0.5)' : 'rgba(255,255,255,0.08)'}`,
+            cursor: 'pointer',
+          }}>
+          ✓ Selected
+        </button>
         <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif', marginLeft: 4 }}>
           {filteredPlayers.length} player{filteredPlayers.length !== 1 ? 's' : ''} · {visibleSkillKeys.size} skill{visibleSkillKeys.size !== 1 ? 's' : ''} visible
         </span>
@@ -4154,6 +4193,250 @@ function NavDropdown({
   );
 }
 
+// ── Selected Players Report ───────────────────────────────────────────
+
+function exportSelectedPlayersToCSV(players: ScoutPlayer[]) {
+  const rows = players.map((p) => {
+    const yoyoVals = p.coachEvals.map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || '')).filter((v) => !isNaN(v) && v > 0);
+    return {
+      Player: p.name,
+      Batch: p.batch || '',
+      Div: p.div || '',
+      Category: p.category || '',
+      Schema: p.schema,
+      'Yo-Yo': yoyoVals.length > 0 ? Math.max(...yoyoVals) : '',
+      'Primary Skill': p.extraInfo?.['Primary Skill'] || '',
+      'Batting Hand': p.extraInfo?.['Batting hand'] || '',
+      'Bowler Arm': p.extraInfo?.['Bowler arm'] || '',
+      'Bowling Type': p.extraInfo?.['Bowling type'] || '',
+      'Avg %': p.aggregatePct > 0 ? p.aggregatePct.toFixed(1) : '',
+    };
+  });
+  const csv = Papa.unparse(rows);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `selected-players-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function SelectedPlayersTable({
+  players,
+  playerSelections,
+  onRowClick,
+}: {
+  players: ScoutPlayer[];
+  playerSelections: Record<number, boolean>;
+  onRowClick: (p: ScoutPlayer) => void;
+}) {
+  const t = useContext(YoyoThresholdsCtx);
+  const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [primarySkillFilter, setPrimarySkillFilter] = useState<string>('all');
+
+  const selectedPlayers = useMemo(() => {
+    return players.filter((p) => {
+      if (p.rowIndex in playerSelections) return playerSelections[p.rowIndex];
+      return (p.category?.startsWith('Pre-') ?? false) && yoyoCategory(p.coachEvals, t) === 'green';
+    });
+  }, [players, playerSelections, t]);
+
+  const allCategories = useMemo(() => {
+    const cats = new Set<string>();
+    for (const p of selectedPlayers) if (p.category) cats.add(p.category);
+    return Array.from(cats).sort();
+  }, [selectedPlayers]);
+
+  const allPrimarySkills = useMemo(() => {
+    const skills = new Set<string>();
+    for (const p of selectedPlayers) {
+      const s = p.extraInfo?.['Primary Skill']?.trim();
+      if (s) skills.add(s);
+    }
+    return Array.from(skills).sort();
+  }, [selectedPlayers]);
+
+  const selectionSource = (p: ScoutPlayer): 'auto' | 'manual' => {
+    return p.rowIndex in playerSelections ? 'manual' : 'auto';
+  };
+
+  const displayPlayers = useMemo(() => {
+    const q = search.toLowerCase();
+    const base = selectedPlayers.filter((p) => {
+      if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
+      if (primarySkillFilter !== 'all' && (p.extraInfo?.['Primary Skill']?.trim() || '') !== primarySkillFilter) return false;
+      if (q && !(
+        p.name.toLowerCase().includes(q) ||
+        (p.batch || '').toLowerCase().includes(q) ||
+        (p.div || '').toLowerCase().includes(q) ||
+        (p.category || '').toLowerCase().includes(q)
+      )) return false;
+      return true;
+    });
+    return applySort(base, sortCol, sortDir, (p, col) => {
+      if (col === 'Player') return p.name;
+      if (col === 'Batch') return p.batch || '';
+      if (col === 'Div') return p.div || '';
+      if (col === 'Category') return p.category || '';
+      if (col === 'Schema') return p.schema;
+      if (col === 'Yo-Yo') {
+        const vals = p.coachEvals.map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || '')).filter((v) => !isNaN(v) && v > 0);
+        return vals.length > 0 ? Math.max(...vals) : -1;
+      }
+      if (col === 'Avg %') return p.aggregatePct;
+      if (col === 'Primary Skill') return p.extraInfo?.['Primary Skill'] || '';
+      if (col === 'Bat Hand') return p.extraInfo?.['Batting hand'] || '';
+      if (col === 'Bowl Arm') return p.extraInfo?.['Bowler arm'] || '';
+      if (col === 'Bowl Type') return p.extraInfo?.['Bowling type'] || '';
+      return '';
+    });
+  }, [selectedPlayers, search, categoryFilter, primarySkillFilter, sortCol, sortDir]);
+
+  if (selectedPlayers.length === 0 && !search) {
+    return (
+      <div className="rounded-lg border p-10 text-center mt-4" style={{ background: '#1a1010', borderColor: 'rgba(200,168,75,0.15)' }}>
+        <p className="text-lg font-bold mb-1" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif' }}>No players selected yet</p>
+        <p className="text-sm" style={{ color: 'rgba(245,240,232,0.45)' }}>Pre-category players who pass Yo-Yo are auto-selected. Admins can manually select others via the player modal.</p>
+      </div>
+    );
+  }
+
+  const COLS = ['Player', 'Batch', 'Div', 'Category', 'Schema', 'Yo-Yo', 'Avg %', 'Primary Skill', 'Bat Hand', 'Bowl Arm', 'Bowl Type', 'Source'];
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <span className="text-sm font-bold" style={{ color: 'rgba(245,240,232,0.5)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {selectedPlayers.length} player{selectedPlayers.length !== 1 ? 's' : ''} selected
+        </span>
+        <div className="flex-1"><TableSearch value={search} onChange={setSearch} /></div>
+        <button onClick={() => exportSelectedPlayersToCSV(displayPlayers)} style={EXPORT_BTN_STYLE} className="transition-opacity hover:opacity-80">
+          {EXPORT_ICON} Export CSV
+        </button>
+      </div>
+
+      {/* Category filter chips */}
+      {allCategories.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Category:</span>
+          {allCategories.map((cat) => {
+            const active = categoryFilter === cat;
+            const cc = getCategoryColor(cat);
+            return (
+              <button key={cat} onClick={() => setCategoryFilter(active ? 'all' : cat)}
+                style={{
+                  padding: '2px 9px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  fontFamily: 'Barlow Condensed, sans-serif',
+                  background: active ? cc.bg : 'rgba(255,255,255,0.05)',
+                  color: active ? cc.text : 'rgba(245,240,232,0.4)',
+                  border: `1px solid ${active ? 'transparent' : 'rgba(255,255,255,0.08)'}`,
+                  cursor: 'pointer',
+                }}>
+                {cat}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Primary Skill filter chips */}
+      {allPrimarySkills.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Skill:</span>
+          {allPrimarySkills.map((skill) => {
+            const active = primarySkillFilter === skill;
+            return (
+              <button key={skill} onClick={() => setPrimarySkillFilter(active ? 'all' : skill)}
+                style={{
+                  padding: '2px 9px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+                  fontFamily: 'Barlow Condensed, sans-serif',
+                  background: active ? 'rgba(200,168,75,0.2)' : 'rgba(255,255,255,0.05)',
+                  color: active ? '#c8a84b' : 'rgba(245,240,232,0.4)',
+                  border: `1px solid ${active ? 'rgba(200,168,75,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                  cursor: 'pointer',
+                }}>
+                {skill}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(200,168,75,0.15)' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={TR_HEAD}>
+                {COLS.map((h) => (
+                  <SortTh key={h} label={h} col={h} sortCol={sortCol} sortDir={sortDir} onSort={toggleSort}
+                    className={TH_BASE} style={{ ...TH_STYLE }} />
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {displayPlayers.map((p, i) => {
+                const yoyoVals = p.coachEvals.map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || '')).filter((v) => !isNaN(v) && v > 0);
+                const yoyoBest = yoyoVals.length > 0 ? Math.max(...yoyoVals) : null;
+                const yoyo = getYoYoBadge(p.coachEvals, t);
+                const catColor = getCategoryColor(p.category);
+                const src = selectionSource(p);
+                const rowBg: React.CSSProperties = { background: i % 2 === 0 ? '#1a1010' : '#1e1212', borderBottom: '1px solid rgba(200,168,75,0.06)' };
+                return (
+                  <tr key={p.rowIndex} onClick={() => onRowClick(p)} className="cursor-pointer transition-colors"
+                    style={rowBg}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(200,168,75,0.07)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = rowBg.background as string)}>
+                    <td className="px-4 py-2.5">
+                      <span className="font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>{p.name}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{p.batch || '—'}</td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{p.div || '—'}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded" style={{ background: catColor.bg, color: catColor.text, fontFamily: 'Barlow Condensed, sans-serif' }}>{p.category || '—'}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>{p.schema}</td>
+                    <td className="px-4 py-2.5">
+                      {yoyo ? (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded" style={{ background: yoyo.bg, color: yoyo.text, fontFamily: 'Barlow Condensed, sans-serif' }}>{yoyoBest}</span>
+                      ) : <span style={{ color: 'rgba(245,240,232,0.2)', fontSize: 11 }}>—</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs font-bold" style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {p.aggregatePct > 0 ? `${p.aggregatePct.toFixed(1)}%` : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {p.extraInfo?.['Primary Skill'] || '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {p.extraInfo?.['Batting hand'] || '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {p.extraInfo?.['Bowler arm'] || '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                      {p.extraInfo?.['Bowling type'] || '—'}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{
+                        background: src === 'auto' ? 'rgba(21,101,192,0.2)' : 'rgba(200,168,75,0.15)',
+                        color: src === 'auto' ? '#90caf9' : '#c8a84b',
+                        fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em',
+                      }}>
+                        {src === 'auto' ? 'AUTO' : 'MANUAL'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Yo-Yo Config Panel (admin settings) ──────────────────────────────
 
 function YoyoConfigPanel({
@@ -4313,9 +4596,11 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'team-packages' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot' | 'admin-settings'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot' | 'admin-settings'>('board');
   const [isAdmin, setIsAdmin] = useState(false);
   const [yoyoThresholds, setYoyoThresholds] = useState<YoyoThresholds>(DEFAULT_YOYO_THRESHOLDS);
+  const [playerSelections, setPlayerSelections] = useState<Record<number, boolean>>({});
+  const [selectionSaving, setSelectionSaving] = useState(false);
   const isDemo = sheetKey === 'demo';
 
   const [pinnedIds, setPinnedIds] = useState<Set<number>>(() => {
@@ -4331,11 +4616,13 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
     Promise.all([
       fetch(`/api/scout?sheetKey=${encodeURIComponent(sheetKey)}`).then((r) => r.json()),
       fetch(`/api/scout/yoyo-config?sheetKey=${encodeURIComponent(sheetKey)}`).then((r) => r.json()).catch(() => DEFAULT_YOYO_THRESHOLDS),
-    ]).then(([data, cfg]) => {
+      fetch(`/api/scout/player-selection?sheetKey=${encodeURIComponent(sheetKey)}`).then((r) => r.json()).catch(() => ({ selections: {} })),
+    ]).then(([data, cfg, selData]) => {
       if (data.error === 'unauthorized' || data.status === 403) { setUnauthorized(true); return; }
       if (data.error) setError(data.error);
       else { setPlayers(data.players || []); setIsAdmin(!!data.isAdmin); }
       if (cfg && typeof cfg.greenMin === 'number') setYoyoThresholds(cfg);
+      if (selData?.selections) setPlayerSelections(selData.selections);
     }).catch(() => setError('Failed to load player data.'))
       .finally(() => setLoading(false));
   }, [sheetKey]);
@@ -4357,6 +4644,24 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
       setActiveBatch(allBatchNames[0]);
     }
   }, [allBatchNames, activeBatch]);
+
+  function isPlayerSelected(player: ScoutPlayer): boolean {
+    if (player.rowIndex in playerSelections) return playerSelections[player.rowIndex];
+    return (player.category?.startsWith('Pre-') ?? false) && yoyoCategory(player.coachEvals, yoyoThresholds) === 'green';
+  }
+
+  async function handleToggleSelection(player: ScoutPlayer, selected: boolean) {
+    setSelectionSaving(true);
+    try {
+      const res = await fetch(`/api/scout/player-selection?sheetKey=${encodeURIComponent(sheetKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerRowIndex: player.rowIndex, playerName: player.name, selected }),
+      });
+      if (res.ok) setPlayerSelections((prev) => ({ ...prev, [player.rowIndex]: selected }));
+    } catch {}
+    setSelectionSaving(false);
+  }
 
   const togglePin = useCallback((rowIndex: number) => {
     setPinnedIds((prev) => {
@@ -4452,6 +4757,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
 
   return (
     <YoyoThresholdsCtx.Provider value={yoyoThresholds}>
+    <PlayerSelectionsCtx.Provider value={playerSelections}>
     <>
       <style>{`
         @keyframes slideUp { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
@@ -4613,6 +4919,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     { label: 'Skill Notes', mode: 'my-skill-details' },
                     { label: 'All Fitness Scores', mode: 'all-fitness' },
                     { label: 'Selection', mode: 'selection' },
+                    { label: 'Selected Players', mode: 'selected-players' },
                     { label: 'Team Packages', mode: 'team-packages' },
                     { label: 'Skill Pivot', mode: 'skill-pivot' },
                   ]}
@@ -4758,9 +5065,13 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
             <SelectionSummaryTable players={players} allBatchNames={allBatchNames} onRowClick={setActivePlayer} />
           )}
 
+          {!loading && !error && viewMode === 'selected-players' && (
+            <SelectedPlayersTable players={players} playerSelections={playerSelections} onRowClick={setActivePlayer} />
+          )}
+
           {/* Team Packages */}
           {!loading && !error && viewMode === 'team-packages' && (
-            <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} onPlayerClick={setActivePlayer} />
+            <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} onPlayerClick={setActivePlayer} playerSelections={playerSelections} />
           )}
 
           {/* Admin: All Team Packages */}
@@ -4775,7 +5086,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                   Admin Report — All Coach Team Packages
                 </span>
               </div>
-              <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} initialSubView="admin" onPlayerClick={setActivePlayer} />
+              <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} initialSubView="admin" onPlayerClick={setActivePlayer} playerSelections={playerSelections} />
             </>
           )}
 
@@ -4937,11 +5248,16 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           onClose={() => setActivePlayer(null)}
           onSave={handleSave}
           saving={saving}
+          isAdmin={isAdmin}
+          isSelected={isPlayerSelected(activePlayer)}
+          selectionSaving={selectionSaving}
+          onToggleSelection={(selected) => handleToggleSelection(activePlayer, selected)}
         />
       )}
 
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
     </>
+    </PlayerSelectionsCtx.Provider>
     </YoyoThresholdsCtx.Provider>
   );
 }

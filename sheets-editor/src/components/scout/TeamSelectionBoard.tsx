@@ -26,7 +26,7 @@ const TEAM_SLOTS = [
   { slot: 9,  role: 'Bowler',          variant: 'Spin',  color: '#ff8a65' },
   { slot: 10, role: 'Bowler',          variant: 'Pace',  color: '#ff8a65' },
   { slot: 11, role: 'Bowler',          variant: 'Pace',  color: '#ff8a65' },
-  { slot: 12, role: 'All Rounder',     variant: null,    color: '#ce93d8' },
+  { slot: 12,  role: 'Bowler',         variant: 'Spin',  color: '#ff8a65' },
   { slot: 13, role: 'Wicket Keeper',   variant: null,    color: '#80cbc4' },
 ] as const;
 
@@ -213,12 +213,14 @@ export function TeamSelectionBoard({
   sheetKey,
   initialSubView = 'list',
   onPlayerClick,
+  playerSelections = {},
 }: {
   players: ScoutPlayer[];
   user: AppUser;
   sheetKey: string;
   initialSubView?: 'list' | 'admin';
   onPlayerClick?: (player: ScoutPlayer) => void;
+  playerSelections?: Record<number, boolean>;
 }) {
   // ── State (ALL hooks before any conditional return) ──
   const [packages, setPackages] = useState<TeamPackage[]>([]);
@@ -283,6 +285,12 @@ export function TeamSelectionBoard({
       return yy !== null && yy >= 15.5;
     }),
     [players]
+  );
+
+  // Players manually marked as selected (explicit overrides only — not auto-selected)
+  const manuallySelectedPlayers = useMemo(
+    () => players.filter((p) => playerSelections[p.rowIndex] === true),
+    [players, playerSelections]
   );
 
   const requiredIds = useMemo(
@@ -989,6 +997,55 @@ export function TeamSelectionBoard({
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Manually Selected Players Panel ── */}
+        {manuallySelectedPlayers.length > 0 && (
+          <div className="mt-4 rounded-lg border overflow-hidden" style={{
+            borderColor: 'rgba(46,125,50,0.3)',
+            background: 'rgba(27,94,32,0.06)',
+          }}>
+            <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(46,125,50,0.15)' }}>
+              <span style={{ fontSize: 13 }}>✓</span>
+              <span style={{ color: '#a5d6a7', fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                {manuallySelectedPlayers.length} manually selected player{manuallySelectedPlayers.length !== 1 ? 's' : ''}
+              </span>
+              <span style={{ color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 10, marginLeft: 4 }}>
+                selected via player modal by an admin
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 px-4 py-3">
+              {manuallySelectedPlayers.map((player) => {
+                const yy = playerYoyo(player);
+                return (
+                  <div
+                    key={player.rowIndex}
+                    draggable={isEditable}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('playerRowIndex', String(player.rowIndex));
+                      e.dataTransfer.setData('playerName', player.name);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    style={{
+                      background: 'rgba(46,125,50,0.12)', border: '1px solid rgba(46,125,50,0.25)',
+                      borderRadius: 6, padding: '5px 10px',
+                      cursor: isEditable ? 'grab' : 'default',
+                      userSelect: 'none',
+                    }}>
+                    <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>{player.name}</span>
+                    <span style={{ color: 'rgba(245,240,232,0.4)', fontFamily: FONT, fontSize: 10, marginLeft: 6 }}>
+                      {player.batch} · {player.category}
+                    </span>
+                    {yy !== null && (
+                      <span style={{ color: yoyoColor(yy), fontFamily: FONT, fontSize: 10, fontWeight: 700, marginLeft: 6 }}>
+                        {yy.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

@@ -80,6 +80,10 @@ interface PlayerModalProps {
   onClose: () => void;
   onSave: (evaluation: PlayerEvaluation, remarks: string) => void;
   saving: boolean;
+  isAdmin?: boolean;
+  isSelected?: boolean;
+  selectionSaving?: boolean;
+  onToggleSelection?: (selected: boolean) => void;
 }
 
 function SkillStars({
@@ -130,7 +134,7 @@ function RatingChip({ cls, label }: { cls: string; label: string }) {
   );
 }
 
-export function PlayerModal({ player, userEmail, onClose, onSave, saving }: PlayerModalProps) {
+export function PlayerModal({ player, userEmail, onClose, onSave, saving, isAdmin, isSelected, selectionSaving, onToggleSelection }: PlayerModalProps) {
   const [activeTab, setActiveTab] = useState<'mine' | 'all'>('mine');
 
   const [skills, setSkills] = useState<Record<string, number>>(
@@ -279,9 +283,31 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
               })()}
             </div>
           </div>
+          {isSelected !== undefined && (
+            <button
+              onClick={isAdmin && !selectionSaving ? () => onToggleSelection?.(!isSelected) : undefined}
+              title={isAdmin ? (isSelected ? 'Click to deselect' : 'Click to select') : (isSelected ? 'Selected' : 'Not selected')}
+              style={{
+                marginLeft: 'auto',
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '5px 11px', borderRadius: 6,
+                fontSize: 11, fontWeight: 800,
+                fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em',
+                background: isSelected ? 'rgba(27,94,32,0.5)' : 'rgba(255,255,255,0.06)',
+                color: isSelected ? '#a5d6a7' : 'rgba(245,240,232,0.3)',
+                border: `1px solid ${isSelected ? 'rgba(46,125,50,0.7)' : 'rgba(245,240,232,0.12)'}`,
+                cursor: isAdmin && !selectionSaving ? 'pointer' : 'default',
+                flexShrink: 0,
+                opacity: selectionSaving ? 0.5 : 1,
+                transition: 'all 0.15s',
+              }}
+            >
+              {isSelected ? '✓ Selected' : '○ Not Selected'}
+            </button>
+          )}
           <button
-            className="ml-auto text-2xl leading-none cursor-pointer transition-colors"
-            style={{ color: 'rgba(245,240,232,0.4)', background: 'none', border: 'none' }}
+            className="text-2xl leading-none cursor-pointer transition-colors"
+            style={{ color: 'rgba(245,240,232,0.4)', background: 'none', border: 'none', marginLeft: isSelected !== undefined ? 8 : 'auto' }}
             onClick={onClose}
             onMouseEnter={(e) => (e.currentTarget.style.color = '#f5f0e8')}
             onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(245,240,232,0.4)')}
