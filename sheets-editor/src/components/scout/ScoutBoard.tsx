@@ -2955,6 +2955,7 @@ function AdminPivotTable({
   const [remarksPopover, setRemarksPopover] = useState<RemarksPopover | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [selectedCoaches, setSelectedCoaches] = useState<Set<string> | null>(null); // null = all
+  const [showExtraCols, setShowExtraCols] = useState(true);
   // Per-schema coverage filter — controls which skill columns are visible
   const [schemaCoverage, setSchemaCoverage] = useState<Record<SchemaType, SchemaCoverage>>(() => ({ ...DEFAULT_SCHEMA_COVERAGE }));
   const [showCoveragePanel, setShowCoveragePanel] = useState(false);
@@ -2962,6 +2963,12 @@ function AdminPivotTable({
   function updateCov(schema: SchemaType, patch: Partial<SchemaCoverage>) {
     setSchemaCoverage((prev) => ({ ...prev, [schema]: { ...prev[schema], ...patch } }));
   }
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+      setShowExtraCols(false);
+    }
+  }, []);
+
   // Saved filters — persisted in the Sheet (shared across all coaches)
   const [savedFilters, setSavedFilters] = useState<PivotSavedFilter[]>([]);
   const [filterName, setFilterName] = useState('');
@@ -3407,6 +3414,18 @@ function AdminPivotTable({
             ✕ reset skills
           </button>
         )}
+        <button
+          onClick={() => setShowExtraCols((v) => !v)}
+          title={showExtraCols ? 'Hide Skill/Hand/Arm/Bowl Type columns' : 'Show Skill/Hand/Arm/Bowl Type columns'}
+          style={{
+            padding: '3px 9px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+            fontFamily: 'Barlow Condensed, sans-serif',
+            background: showExtraCols ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
+            color: showExtraCols ? 'rgba(245,240,232,0.55)' : 'rgba(245,240,232,0.3)',
+            border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer',
+          }}>
+          {showExtraCols ? '⊟' : '⊞'} Info cols
+        </button>
       </div>
 
       {/* Coverage filter panel — one row per schema */}
@@ -3525,10 +3544,12 @@ function AdminPivotTable({
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(0, PLAYER_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Player</th>
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W, YOYO_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Yo-Yo</th>
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Category</th>
-                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, PRIM_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Skill</th>
-                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W, BAT_HAND_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Bat</th>
-                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Arm</th>
-                <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Bowl Type</th>
+                {showExtraCols && <>
+                  <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, PRIM_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Skill</th>
+                  <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W, BAT_HAND_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Bat</th>
+                  <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Arm</th>
+                  <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Bowl Type</th>
+                </>}
                 {visibleSchemas.map(([schemaName, def]) => {
                   const visSecs = getVisibleSections(schemaName, def);
                   const colSpan = visSecs.reduce((s, { visSkills }) => s + visSkills.length * 2 + 1, 0) + 1;
@@ -3629,22 +3650,21 @@ function AdminPivotTable({
                         {player.category || player.schema}
                       </span>
                     </td>
-                    {/* Sticky: Primary Skill */}
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, PRIM_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {player.extraInfo?.['Primary Skill'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
-                    </td>
-                    {/* Sticky: Batting Hand */}
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W, BAT_HAND_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)' }}>
-                      {player.extraInfo?.['Batting hand'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
-                    </td>
-                    {/* Sticky: Bowler Arm */}
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)' }}>
-                      {player.extraInfo?.['Bowler arm'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
-                    </td>
-                    {/* Sticky: Bowling Type */}
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {player.extraInfo?.['Bowling type'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
-                    </td>
+                    {/* Sticky: Primary Skill, Batting Hand, Bowler Arm, Bowling Type — collapsible */}
+                    {showExtraCols && <>
+                      <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, PRIM_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {player.extraInfo?.['Primary Skill'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                      </td>
+                      <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W, BAT_HAND_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)' }}>
+                        {player.extraInfo?.['Batting hand'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                      </td>
+                      <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)' }}>
+                        {player.extraInfo?.['Bowler arm'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                      </td>
+                      <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {player.extraInfo?.['Bowling type'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                      </td>
+                    </>}
                     {/* Skill cells + section avg + schema avg (only visible skills/sections/schemas) */}
                     {visibleSchemas.map(([schemaName, def]) => {
                       const visSecs = getVisibleSections(schemaName, def);
