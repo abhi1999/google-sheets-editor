@@ -2848,7 +2848,32 @@ type RemarksPopover = {
   y: number;
 };
 
-function exportPivotToCSV(players: ScoutPlayer[]) {
+type SchemaCoverage = { category: string; yoyo: YoyoFilterKey; threshold: number };
+const DEFAULT_SCHEMA_COVERAGE: Record<SchemaType, SchemaCoverage> = {
+  Batsman: { category: 'all', yoyo: 'all', threshold: 0 },
+  'Fast Bowler': { category: 'all', yoyo: 'all', threshold: 0 },
+  'Spin Bowler': { category: 'all', yoyo: 'all', threshold: 0 },
+};
+
+type PivotSavedFilter = {
+  id: string;
+  name: string;
+  schemaFilter: SchemaType | 'all';
+  yoyoFilter: YoyoFilterKey;
+  categoryFilter: string;
+  schemaCoverage: Record<SchemaType, SchemaCoverage>;
+};
+
+const PIVOT_FILTERS_LS_KEY = 'scout_pivot_filters_v2';
+
+function loadPivotFilters(): PivotSavedFilter[] {
+  try { return JSON.parse(localStorage.getItem(PIVOT_FILTERS_LS_KEY) || '[]'); } catch { return []; }
+}
+function savePivotFiltersLS(filters: PivotSavedFilter[]) {
+  try { localStorage.setItem(PIVOT_FILTERS_LS_KEY, JSON.stringify(filters)); } catch {}
+}
+
+function exportPivotToCSV(players: ScoutPlayer[], visibleSkillKeys: Set<string>) {
   const schemaEntries = Object.entries(SCHEMAS) as [SchemaType, SchemaDef][];
   type CsvRow = Record<string, string | number>;
   const rows: CsvRow[] = players.map((p) => {
@@ -2867,6 +2892,7 @@ function exportPivotToCSV(players: ScoutPlayer[]) {
       const label = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
       for (const sec of def.sections) {
         for (const sk of sec.skills) {
+          if (!visibleSkillKeys.has(`${schemaName}|${sec.letter}|${sk.name}`)) continue;
           const colKey = `${label} ${sec.letter}:${sec.name} - ${sk.name}`;
           if (p.schema !== schemaName) {
             row[`${colKey} Avg`] = '';
@@ -2914,6 +2940,19 @@ function AdminPivotTable({
   const [search, setSearch] = useState('');
   const [popover, setPopover] = useState<PivotPopover | null>(null);
   const [remarksPopover, setRemarksPopover] = useState<RemarksPopover | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  // Per-schema coverage filter — controls which skill columns are visible
+  const [schemaCoverage, setSchemaCoverage] = useState<Record<SchemaType, SchemaCoverage>>(() => ({ ...DEFAULT_SCHEMA_COVERAGE }));
+  const [showCoveragePanel, setShowCoveragePanel] = useState(false);
+
+  function updateCov(schema: SchemaType, patch: Partial<SchemaCoverage>) {
+    setSchemaCoverage((prev) => ({ ...prev, [schema]: { ...prev[schema], ...patch } }));
+  }
+  // Saved filters
+  const [savedFilters, setSavedFilters] = useState<PivotSavedFilter[]>(() =>
+    typeof window !== 'undefined' ? loadPivotFilters() : []
+  );
+  const [filterName, setFilterName] = useState('');
 
   const schemaEntries = useMemo(
     () => Object.entries(SCHEMAS) as [SchemaType, SchemaDef][],
@@ -2924,6 +2963,60 @@ function AdminPivotTable({
     ? schemaEntries
     : schemaEntries.filter(([name]) => name === schemaFilter);
 
+  const allCategories = useMemo(() => {
+    const cats = new Set<string>();
+    for (const p of players) if (p.category) cats.add(p.category);
+    return Array.from(cats).sort();
+  }, [players]);
+
+  // Which skill columns to show — evaluated per-schema using each schema's own coverage settings
+  const visibleSkillKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const [schemaName, def] of schemaEntries) {
+      const cov = schemaCoverage[schemaName];
+      const coveragePlayers = players.filter((p) => {
+        if (p.schema !== schemaName || p.coachEvals.length === 0) return false;
+        if (cov.category !== 'all' && p.category !== cov.category) return false;
+        if (cov.yoyo !== 'all' && yoyoCategory(p.coachEvals) !== cov.yoyo) return false;
+        return true;
+      });
+      const total = coveragePlayers.length;
+      for (const sec of def.sections) {
+        for (const sk of sec.skills) {
+          const key = `${schemaName}|${sec.letter}|${sk.name}`;
+          if (total === 0) {
+            if (cov.threshold === 0) keys.add(key);
+          } else {
+            const ratedCount = coveragePlayers.filter((p) =>
+              p.coachEvals.some((e) => (e.evaluation.skills?.[sk.name] || 0) > 0)
+            ).length;
+            const pct = (ratedCount / total) * 100;
+            if (cov.threshold === 0 ? ratedCount > 0 : pct >= cov.threshold) {
+              keys.add(key);
+            }
+          }
+        }
+      }
+    }
+    return keys;
+  }, [players, schemaEntries, schemaCoverage]);
+
+  // Visible sections per schema (only sections with ≥1 visible skill)
+  type VisSection = { sec: SectionDef; visSkills: SectionDef['skills'] };
+  function getVisibleSections(schemaName: SchemaType, def: SchemaDef): VisSection[] {
+    return def.sections
+      .map((sec) => ({
+        sec,
+        visSkills: sec.skills.filter((sk) => visibleSkillKeys.has(`${schemaName}|${sec.letter}|${sk.name}`)),
+      }))
+      .filter(({ visSkills }) => visSkills.length > 0);
+  }
+
+  // Visible schemas (schemas with ≥1 visible skill, within schemaFilter)
+  const visibleSchemasWithData = visibleSchemas.filter(([schemaName, def]) =>
+    def.sections.some((sec) => sec.skills.some((sk) => visibleSkillKeys.has(`${schemaName}|${sec.letter}|${sk.name}`)))
+  );
+
   function getSkillStat(player: ScoutPlayer, skillName: string) {
     const entries = player.coachEvals
       .map((e) => ({ coachName: e.coachName || e.coachEmail, score: e.evaluation.skills?.[skillName] || 0 }))
@@ -2933,20 +3026,44 @@ function AdminPivotTable({
     return { avg, count: entries.length, entries };
   }
 
-  function getSectionAvg(player: ScoutPlayer, sec: SectionDef): number | null {
-    const avgs = sec.skills
-      .map((sk) => getSkillStat(player, sk.name)?.avg)
-      .filter((v): v is number => v !== undefined);
+  // Avg over only the visible skills in a section/schema
+  function getSectionAvgVis(player: ScoutPlayer, visSkills: SectionDef['skills']): number | null {
+    const avgs = visSkills.map((sk) => getSkillStat(player, sk.name)?.avg).filter((v): v is number => v !== undefined);
     if (!avgs.length) return null;
     return avgs.reduce((a, b) => a + b, 0) / avgs.length;
   }
 
-  function getSchemaAvg(player: ScoutPlayer, def: SchemaDef): number | null {
-    const avgs = def.sections.flatMap((sec) =>
-      sec.skills.map((sk) => getSkillStat(player, sk.name)?.avg).filter((v): v is number => v !== undefined)
+  function getSchemaAvgVis(player: ScoutPlayer, visSecs: VisSection[]): number | null {
+    const avgs = visSecs.flatMap(({ visSkills }) =>
+      visSkills.map((sk) => getSkillStat(player, sk.name)?.avg).filter((v): v is number => v !== undefined)
     );
     if (!avgs.length) return null;
     return avgs.reduce((a, b) => a + b, 0) / avgs.length;
+  }
+
+  // Save / load / delete filter helpers
+  function handleSaveFilter() {
+    if (!filterName.trim()) return;
+    const next: PivotSavedFilter = {
+      id: Date.now().toString(),
+      name: filterName.trim(),
+      schemaFilter, yoyoFilter, categoryFilter, schemaCoverage,
+    };
+    const updated = [...savedFilters, next];
+    setSavedFilters(updated);
+    savePivotFiltersLS(updated);
+    setFilterName('');
+  }
+  function handleLoadFilter(f: PivotSavedFilter) {
+    setSchemaFilter(f.schemaFilter);
+    setYoyoFilter(f.yoyoFilter);
+    setCategoryFilter(f.categoryFilter ?? 'all');
+    setSchemaCoverage(f.schemaCoverage ?? { ...DEFAULT_SCHEMA_COVERAGE });
+  }
+  function handleDeleteFilter(id: string) {
+    const updated = savedFilters.filter((f) => f.id !== id);
+    setSavedFilters(updated);
+    savePivotFiltersLS(updated);
   }
 
   const filteredPlayers = useMemo(() => {
@@ -2955,10 +3072,54 @@ function AdminPivotTable({
       if (p.coachEvals.length === 0) return false;
       if (schemaFilter !== 'all' && p.schema !== schemaFilter) return false;
       if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals) !== yoyoFilter) return false;
+      if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
       return true;
     });
-  }, [players, schemaFilter, yoyoFilter, search]);
+  }, [players, schemaFilter, yoyoFilter, categoryFilter, search]);
+
+  const [pivotSortCol, setPivotSortCol] = useState<string | null>(null);
+  const [pivotSortDir, setPivotSortDir] = useState<'asc' | 'desc'>('desc');
+
+  function togglePivotSort(col: string) {
+    if (pivotSortCol === col) {
+      setPivotSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setPivotSortCol(col);
+      setPivotSortDir('desc');
+    }
+  }
+
+  const sortedPlayers = useMemo(() => {
+    if (!pivotSortCol) return filteredPlayers;
+    return [...filteredPlayers].sort((a, b) => {
+      let va: number | null = null;
+      let vb: number | null = null;
+      if (pivotSortCol.startsWith('schema:')) {
+        const schemaName = pivotSortCol.slice(7) as SchemaType;
+        const def = SCHEMAS[schemaName];
+        const visSecs = getVisibleSections(schemaName, def);
+        va = a.schema === schemaName ? getSchemaAvgVis(a, visSecs) : null;
+        vb = b.schema === schemaName ? getSchemaAvgVis(b, visSecs) : null;
+      } else if (pivotSortCol.startsWith('sec:')) {
+        const rest = pivotSortCol.slice(4);
+        const barIdx = rest.indexOf('|');
+        const schemaName = rest.slice(0, barIdx) as SchemaType;
+        const secLetter = rest.slice(barIdx + 1);
+        const def = SCHEMAS[schemaName];
+        const visSecs = getVisibleSections(schemaName, def);
+        const visSecData = visSecs.find(({ sec }) => sec.letter === secLetter);
+        if (visSecData) {
+          va = a.schema === schemaName ? getSectionAvgVis(a, visSecData.visSkills) : null;
+          vb = b.schema === schemaName ? getSectionAvgVis(b, visSecData.visSkills) : null;
+        }
+      }
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      return pivotSortDir === 'desc' ? vb - va : va - vb;
+    });
+  }, [filteredPlayers, pivotSortCol, pivotSortDir, visibleSkillKeys]);
 
   useEffect(() => {
     if (!popover) return;
@@ -3057,17 +3218,131 @@ function AdminPivotTable({
             );
           })}
         </div>
+        {allCategories.length > 0 && (
+          <div className="flex items-center gap-1">
+            {allCategories.map((cat) => {
+              const active = categoryFilter === cat;
+              const cc = getCategoryColor(cat);
+              return (
+                <button key={cat} onClick={() => setCategoryFilter(active ? 'all' : cat)}
+                  style={{
+                    padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+                    fontFamily: 'Barlow Condensed, sans-serif',
+                    background: active ? cc.bg : 'rgba(255,255,255,0.05)',
+                    color: active ? cc.text : 'rgba(245,240,232,0.4)',
+                    border: `1px solid ${active ? 'transparent' : 'rgba(255,255,255,0.08)'}`,
+                    cursor: 'pointer',
+                  }}>
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif', marginLeft: 4 }}>
-          {filteredPlayers.length} player{filteredPlayers.length !== 1 ? 's' : ''} · click avg or remarks for detail
+          {filteredPlayers.length} player{filteredPlayers.length !== 1 ? 's' : ''} · {visibleSkillKeys.size} skill{visibleSkillKeys.size !== 1 ? 's' : ''} visible
         </span>
         <button
-          onClick={() => exportPivotToCSV(filteredPlayers)}
+          onClick={() => exportPivotToCSV(filteredPlayers, visibleSkillKeys)}
           style={EXPORT_BTN_STYLE}
           className="transition-opacity hover:opacity-80"
-          title="Export to CSV (includes full remarks)">
+          title="Export to CSV (visible skills only)">
           ↓ Export CSV
         </button>
+        <button
+          onClick={() => setShowCoveragePanel((v) => !v)}
+          style={{
+            padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+            fontFamily: 'Barlow Condensed, sans-serif',
+            background: showCoveragePanel ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.05)',
+            color: showCoveragePanel ? '#c8a84b' : 'rgba(245,240,232,0.5)',
+            border: `1px solid ${showCoveragePanel ? 'rgba(200,168,75,0.4)' : 'rgba(255,255,255,0.1)'}`,
+            cursor: 'pointer',
+          }}>
+          ⚙ Skill Filter {showCoveragePanel ? '▲' : '▼'}
+        </button>
       </div>
+
+      {/* Coverage filter panel — one row per schema */}
+      {showCoveragePanel && (
+        <div style={{ background: 'rgba(200,168,75,0.05)', border: '1px solid rgba(200,168,75,0.2)', borderRadius: 6, padding: '10px 12px', marginBottom: 10 }}>
+          <div className="flex flex-col gap-2">
+            {schemaEntries.map(([schemaName, def]) => {
+              const cov = schemaCoverage[schemaName];
+              const color = SCHEMA_COLORS[schemaName];
+              const label = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
+              const totalSkills = def.sections.reduce((s, sec) => s + sec.skills.length, 0);
+              const visCount = def.sections.flatMap((sec) => sec.skills.map((sk) => `${schemaName}|${sec.letter}|${sk.name}`)).filter((k) => visibleSkillKeys.has(k)).length;
+              const isActive = cov.category !== 'all' || cov.yoyo !== 'all' || cov.threshold > 0;
+              return (
+                <div key={schemaName} className="flex flex-wrap items-center gap-3"
+                  style={{ padding: '5px 8px', borderRadius: 5, background: isActive ? `${color}0d` : 'transparent', border: `1px solid ${isActive ? color + '33' : 'transparent'}` }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, fontFamily: 'Barlow Condensed, sans-serif', color, letterSpacing: '0.08em', minWidth: 26 }}>{label}</span>
+                  <select value={cov.category} onChange={(e) => updateCov(schemaName, { category: e.target.value })}
+                    style={{ padding: '2px 6px', borderRadius: 4, fontSize: 11, fontFamily: 'Barlow Condensed, sans-serif', background: '#2a1a1a', color: '#f5f0e8', border: '1px solid rgba(255,255,255,0.12)', cursor: 'pointer' }}>
+                    <option value="all">All categories</option>
+                    {allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <div className="flex items-center gap-1">
+                    {YOYO_FILTERS.map((f) => {
+                      const active = cov.yoyo === f.key;
+                      return (
+                        <button key={f.key} onClick={() => updateCov(schemaName, { yoyo: active && f.key !== 'all' ? 'all' : f.key })}
+                          style={{ padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: 'Barlow Condensed, sans-serif', background: active ? f.activeBg : 'rgba(255,255,255,0.04)', color: active ? f.text : 'rgba(245,240,232,0.35)', border: `1px solid ${active ? 'transparent' : 'rgba(255,255,255,0.08)'}`, cursor: 'pointer' }}>
+                          {f.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>min</span>
+                    <input type="number" min={0} max={100} step={5} value={cov.threshold}
+                      onChange={(e) => updateCov(schemaName, { threshold: Math.max(0, Math.min(100, Number(e.target.value))) })}
+                      style={{ width: 46, padding: '2px 4px', borderRadius: 4, fontSize: 12, fontWeight: 700, fontFamily: 'Barlow Condensed, sans-serif', background: '#2a1a1a', color: '#c8a84b', border: `1px solid ${cov.threshold > 0 ? 'rgba(200,168,75,0.4)' : 'rgba(255,255,255,0.1)'}`, textAlign: 'center' }} />
+                    <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>%</span>
+                  </div>
+                  <span style={{ fontSize: 10, color, fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, marginLeft: 2 }}>
+                    {visCount}/{totalSkills} skills
+                  </span>
+                  {isActive && (
+                    <button onClick={() => updateCov(schemaName, { category: 'all', yoyo: 'all', threshold: 0 })}
+                      style={{ fontSize: 10, color: 'rgba(192,57,43,0.7)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px' }}
+                      title="Reset this schema's filter">
+                      ✕ reset
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {/* Save / load */}
+          <div className="flex items-center gap-2 mt-3 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+            <input type="text" placeholder="Save filter as…" value={filterName}
+              onChange={(e) => setFilterName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSaveFilter(); }}
+              style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontFamily: 'Barlow Condensed, sans-serif', background: '#2a1a1a', color: '#f5f0e8', border: '1px solid rgba(255,255,255,0.12)', width: 140 }} />
+            <button onClick={handleSaveFilter} disabled={!filterName.trim()}
+              style={{ padding: '2px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700, fontFamily: 'Barlow Condensed, sans-serif', background: filterName.trim() ? 'rgba(200,168,75,0.2)' : 'rgba(255,255,255,0.04)', color: filterName.trim() ? '#c8a84b' : 'rgba(245,240,232,0.2)', border: '1px solid rgba(200,168,75,0.25)', cursor: filterName.trim() ? 'pointer' : 'not-allowed' }}>
+              💾 Save
+            </button>
+            {savedFilters.length > 0 && (
+              <div className="flex items-center gap-1 flex-wrap">
+                {savedFilters.map((f) => (
+                  <div key={f.id} className="flex items-center" style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <button onClick={() => handleLoadFilter(f)}
+                      style={{ padding: '2px 8px', fontSize: 10, fontWeight: 700, fontFamily: 'Barlow Condensed, sans-serif', color: 'rgba(245,240,232,0.7)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                      {f.name}
+                    </button>
+                    <button onClick={() => handleDeleteFilter(f.id)}
+                      style={{ padding: '2px 5px', fontSize: 10, color: 'rgba(192,57,43,0.6)', background: 'none', border: 'none', cursor: 'pointer', borderLeft: '1px solid rgba(255,255,255,0.08)' }}
+                      title="Delete">×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {filteredPlayers.length === 0 ? (
         <div className="py-8 text-center" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>No matching players</div>
@@ -3075,14 +3350,14 @@ function AdminPivotTable({
         <div style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              {/* Row 1: Schema headers (colSpan includes section-avg + schema-avg cols) */}
+              {/* Row 1: Schema headers (colSpan = visibleSkills*2 + visSections + 1 for schema avg) */}
               <tr>
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(0, PLAYER_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Player</th>
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W, YOYO_W, '#1a1010', 3), textAlign: 'center', color: 'rgba(245,240,232,0.6)' }}>Yo-Yo</th>
                 <th rowSpan={4} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, '#1a1010', 3), textAlign: 'left', color: 'rgba(245,240,232,0.6)' }}>Category</th>
-                {visibleSchemas.map(([schemaName, def]) => {
-                  const totalSkills = def.sections.reduce((s, sec) => s + sec.skills.length, 0);
-                  const colSpan = totalSkills * 2 + def.sections.length + 1; // skill pairs + 1 sec-avg per section + 1 schema-avg
+                {visibleSchemasWithData.map(([schemaName, def]) => {
+                  const visSecs = getVisibleSections(schemaName, def);
+                  const colSpan = visSecs.reduce((s, { visSkills }) => s + visSkills.length * 2 + 1, 0) + 1;
                   const color = SCHEMA_COLORS[schemaName];
                   return (
                     <th key={schemaName} colSpan={colSpan}
@@ -3093,45 +3368,49 @@ function AdminPivotTable({
                 })}
                 <th rowSpan={4} style={{ ...TH_BASE, textAlign: 'left', minWidth: 200, color: 'rgba(245,240,232,0.6)', paddingLeft: 10 }}>Remarks</th>
               </tr>
-              {/* Row 2: Section headers + Schema Avg (rowSpan=3 to cover rows 2-4) */}
+              {/* Row 2: Section headers + Schema Avg (rowSpan=3) */}
               <tr>
-                {visibleSchemas.map(([schemaName, def]) => (
+                {visibleSchemasWithData.map(([schemaName, def]) => (
                   <Fragment key={`hdr2-${schemaName}`}>
-                    {def.sections.map((sec) => (
-                      <th key={`${schemaName}-${sec.letter}`} colSpan={sec.skills.length * 2 + 1}
+                    {getVisibleSections(schemaName, def).map(({ sec, visSkills }) => (
+                      <th key={`${schemaName}-${sec.letter}`} colSpan={visSkills.length * 2 + 1}
                         style={{ ...TH_BASE, textAlign: 'center', fontSize: 10, color: 'rgba(245,240,232,0.45)', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
                         {sec.letter}: {sec.name}
                       </th>
                     ))}
-                    <th rowSpan={3} style={{ ...TH_BASE, textAlign: 'center', width: 46, minWidth: 46, fontSize: 9, fontWeight: 800, color: SCHEMA_COLORS[schemaName], borderLeft: `2px solid ${SCHEMA_COLORS[schemaName]}44`, background: `${SCHEMA_COLORS[schemaName]}0d`, letterSpacing: '0.04em', verticalAlign: 'middle' }}>
-                      Avg
+                    <th rowSpan={3}
+                      onClick={() => togglePivotSort(`schema:${schemaName}`)}
+                      style={{ ...TH_BASE, textAlign: 'center', width: 46, minWidth: 46, fontSize: 9, fontWeight: 800, color: SCHEMA_COLORS[schemaName], borderLeft: `2px solid ${SCHEMA_COLORS[schemaName]}44`, background: `${SCHEMA_COLORS[schemaName]}0d`, letterSpacing: '0.04em', verticalAlign: 'middle', cursor: 'pointer', userSelect: 'none' }}>
+                      Avg{pivotSortCol === `schema:${schemaName}` ? (pivotSortDir === 'desc' ? ' ↓' : ' ↑') : ''}
                     </th>
                   </Fragment>
                 ))}
               </tr>
-              {/* Row 3: Skill headers + Section Avg (rowSpan=2 to cover rows 3-4) */}
+              {/* Row 3: Skill headers + Section Avg (rowSpan=2) */}
               <tr>
-                {visibleSchemas.map(([schemaName, def]) =>
-                  def.sections.map((sec) => (
+                {visibleSchemasWithData.map(([schemaName, def]) =>
+                  getVisibleSections(schemaName, def).map(({ sec, visSkills }) => (
                     <Fragment key={`hdr3-${schemaName}-${sec.letter}`}>
-                      {sec.skills.map((sk) => (
+                      {visSkills.map((sk) => (
                         <th key={`${schemaName}-${sec.letter}-${sk.name}`} colSpan={2}
                           style={{ ...TH_BASE, textAlign: 'center', fontSize: 9, color: 'rgba(245,240,232,0.45)', borderLeft: '1px solid rgba(255,255,255,0.07)', whiteSpace: 'normal', wordBreak: 'break-word', minWidth: 62, maxWidth: 80, padding: '4px 3px' }}>
                           {sk.name}
                         </th>
                       ))}
-                      <th rowSpan={2} style={{ ...TH_BASE, textAlign: 'center', width: 40, minWidth: 40, fontSize: 9, fontWeight: 800, color: 'rgba(245,240,232,0.5)', borderLeft: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.04)', letterSpacing: '0.04em', verticalAlign: 'middle' }}>
-                        Sec<br />Avg
+                      <th rowSpan={2}
+                        onClick={() => togglePivotSort(`sec:${schemaName}|${sec.letter}`)}
+                        style={{ ...TH_BASE, textAlign: 'center', width: 40, minWidth: 40, fontSize: 9, fontWeight: 800, color: pivotSortCol === `sec:${schemaName}|${sec.letter}` ? '#c8a84b' : 'rgba(245,240,232,0.5)', borderLeft: '1px solid rgba(255,255,255,0.12)', background: pivotSortCol === `sec:${schemaName}|${sec.letter}` ? 'rgba(200,168,75,0.1)' : 'rgba(255,255,255,0.04)', letterSpacing: '0.04em', verticalAlign: 'middle', cursor: 'pointer', userSelect: 'none' }}>
+                        {pivotSortCol === `sec:${schemaName}|${sec.letter}` ? (pivotSortDir === 'desc' ? '↓' : '↑') : 'Sec'}<br />{pivotSortCol === `sec:${schemaName}|${sec.letter}` ? 'Avg' : 'Avg'}
                       </th>
                     </Fragment>
                   ))
                 )}
               </tr>
-              {/* Row 4: Avg | N sub-headers (only skill sub-cols; sec/schema avg covered by rowSpan) */}
+              {/* Row 4: Avg | N (only skill sub-cols; sec/schema avg covered by rowSpan) */}
               <tr>
-                {visibleSchemas.map(([schemaName, def]) =>
-                  def.sections.map((sec) =>
-                    sec.skills.map((sk) => (
+                {visibleSchemasWithData.map(([schemaName, def]) =>
+                  getVisibleSections(schemaName, def).flatMap(({ sec, visSkills }) =>
+                    visSkills.map((sk) => (
                       <Fragment key={`${schemaName}-${sec.letter}-${sk.name}-sub`}>
                         <th style={{ ...TH_BASE, textAlign: 'center', width: 36, minWidth: 36, borderLeft: '1px solid rgba(255,255,255,0.07)', fontSize: 9, color: 'rgba(245,240,232,0.35)', padding: '3px 2px' }}>Avg</th>
                         <th style={{ ...TH_BASE, textAlign: 'center', width: 24, minWidth: 24, fontSize: 9, color: 'rgba(245,240,232,0.2)', padding: '3px 2px' }}>N</th>
@@ -3142,7 +3421,7 @@ function AdminPivotTable({
               </tr>
             </thead>
             <tbody>
-              {filteredPlayers.map((player, pi) => {
+              {sortedPlayers.map((player, pi) => {
                 const yoyo = getYoYoBadge(player.coachEvals);
                 const catColor = getCategoryColor(player.category);
                 const remarkItems = player.coachEvals
@@ -3176,18 +3455,19 @@ function AdminPivotTable({
                         {player.category || player.schema}
                       </span>
                     </td>
-                    {/* Skill cells + section avg + schema avg */}
-                    {visibleSchemas.map(([schemaName, def]) => {
-                      const schemaAvg = player.schema === schemaName ? getSchemaAvg(player, def) : null;
+                    {/* Skill cells + section avg + schema avg (only visible skills/sections/schemas) */}
+                    {visibleSchemasWithData.map(([schemaName, def]) => {
+                      const visSecs = getVisibleSections(schemaName, def);
+                      const schemaAvg = player.schema === schemaName ? getSchemaAvgVis(player, visSecs) : null;
                       const schemaAvgSc = schemaAvg !== null ? skillScoreColor(schemaAvg) : null;
                       return (
                         <Fragment key={`${player.rowIndex}-${schemaName}`}>
-                          {def.sections.map((sec) => {
-                            const secAvg = player.schema === schemaName ? getSectionAvg(player, sec) : null;
+                          {visSecs.map(({ sec, visSkills }) => {
+                            const secAvg = player.schema === schemaName ? getSectionAvgVis(player, visSkills) : null;
                             const secAvgSc = secAvg !== null ? skillScoreColor(secAvg) : null;
                             return (
                               <Fragment key={`${player.rowIndex}-${schemaName}-${sec.letter}`}>
-                                {sec.skills.map((sk) => {
+                                {visSkills.map((sk) => {
                                   if (player.schema !== schemaName) {
                                     return (
                                       <Fragment key={`${player.rowIndex}-${schemaName}-${sec.letter}-${sk.name}`}>
@@ -3235,7 +3515,7 @@ function AdminPivotTable({
                                     </Fragment>
                                   );
                                 })}
-                                {/* Section Avg */}
+                                {/* Section Avg (visible skills only) */}
                                 <td style={{
                                   textAlign: 'center', padding: '4px 4px', fontSize: 11, fontWeight: 800,
                                   fontFamily: 'Barlow Condensed, sans-serif',
@@ -3248,7 +3528,7 @@ function AdminPivotTable({
                               </Fragment>
                             );
                           })}
-                          {/* Schema Avg */}
+                          {/* Schema Avg (visible skills only) */}
                           <td style={{
                             textAlign: 'center', padding: '4px 5px', fontSize: 12, fontWeight: 800,
                             fontFamily: 'Barlow Condensed, sans-serif',
