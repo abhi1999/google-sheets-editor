@@ -210,6 +210,15 @@ html {
 }
 .spin { animation: spin 0.8s linear infinite; }
 
+@keyframes slideUp {
+  from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+
+.search-input::placeholder { color: rgba(245,240,232,0.3); }
+.search-input:focus { outline: none; border-color: rgba(192,57,43,0.6); }
+.batch-tabs::-webkit-scrollbar { display: none; }
+
 /* Toast */
 .toast-enter {
   animation: slideIn 0.25s ease-out;
