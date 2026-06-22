@@ -287,11 +287,19 @@ export function TeamSelectionBoard({
     [players]
   );
 
-  // Players manually marked as selected (explicit overrides only — not auto-selected)
-  const manuallySelectedPlayers = useMemo(
+  const allManuallySelected = useMemo(
     () => players.filter((p) => playerSelections[p.rowIndex] === true),
     [players, playerSelections]
   );
+
+  // Manually selected players not yet assigned to any slot in the package being edited
+  const missingManuallySelected = useMemo(() => {
+    if (!editPkg) return allManuallySelected;
+    const pickedIds = new Set(
+      editPkg.teams.flatMap((t) => t.slots.map((s) => s.playerRowIndex)).filter(Boolean) as number[]
+    );
+    return allManuallySelected.filter((p) => !pickedIds.has(p.rowIndex));
+  }, [allManuallySelected, editPkg]);
 
   const requiredIds = useMemo(
     () => new Set(requiredPlayers.map((p) => p.rowIndex)),
@@ -937,26 +945,26 @@ export function TeamSelectionBoard({
 
         {/* ── Required players panel ── */}
         {requiredPlayers.length > 0 && (
+          () => {
+            const assignedCount = requiredPlayers.length - missingRequired.length;
+            const allDone = missingRequired.length === 0;
+            return (
           <div className="mt-4 rounded-lg border overflow-hidden" style={{
-            borderColor: missingRequired.length > 0 ? 'rgba(255,183,77,0.3)' : 'rgba(129,199,132,0.25)',
-            background: missingRequired.length > 0 ? 'rgba(255,183,77,0.06)' : 'rgba(129,199,132,0.06)',
+            borderColor: allDone ? 'rgba(129,199,132,0.25)' : 'rgba(255,183,77,0.3)',
+            background: allDone ? 'rgba(129,199,132,0.06)' : 'rgba(255,183,77,0.06)',
           }}>
             <div className="flex items-center gap-2 px-4 py-2.5" style={{
-              borderBottom: missingRequired.length > 0
-                ? '1px solid rgba(255,183,77,0.2)'
-                : '1px solid rgba(129,199,132,0.15)',
+              borderBottom: allDone ? '1px solid rgba(129,199,132,0.15)' : '1px solid rgba(255,183,77,0.2)',
             }}>
-              <span style={{ fontSize: 13 }}>{missingRequired.length > 0 ? '⚠' : '✓'}</span>
+              <span style={{ fontSize: 13 }}>{allDone ? '✓' : '⚠'}</span>
               <span style={{
-                color: missingRequired.length > 0 ? '#ffb74d' : '#81c784',
+                color: allDone ? '#81c784' : '#ffb74d',
                 fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
               }}>
-                {missingRequired.length > 0
-                  ? `${missingRequired.length} required player${missingRequired.length !== 1 ? 's' : ''} who passed yo-yo not yet included`
-                  : 'All required players included'}
+                Pre- players · {assignedCount}/{requiredPlayers.length} added to teams
               </span>
               <span style={{ color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 10, marginLeft: 4 }}>
-                Pre- category · green Yo-Yo · must appear in at least one team
+                green Yo-Yo · must appear in at least one team
               </span>
               {isEditable && missingRequired.length > 0 && (
                 <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 10, marginLeft: 'auto' }}>
@@ -998,56 +1006,71 @@ export function TeamSelectionBoard({
               </div>
             )}
           </div>
-        )}
+            );
+          }
+        )()}
 
         {/* ── Manually Selected Players Panel ── */}
-        {manuallySelectedPlayers.length > 0 && (
+        {allManuallySelected.length > 0 && (
+          () => {
+            const assignedCount = allManuallySelected.length - missingManuallySelected.length;
+            const allDone = missingManuallySelected.length === 0;
+            return (
           <div className="mt-4 rounded-lg border overflow-hidden" style={{
-            borderColor: 'rgba(46,125,50,0.3)',
+            borderColor: allDone ? 'rgba(46,125,50,0.4)' : 'rgba(46,125,50,0.25)',
             background: 'rgba(27,94,32,0.06)',
           }}>
             <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(46,125,50,0.15)' }}>
-              <span style={{ fontSize: 13 }}>✓</span>
+              <span style={{ fontSize: 13 }}>{allDone ? '✓' : '○'}</span>
               <span style={{ color: '#a5d6a7', fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                {manuallySelectedPlayers.length} manually selected player{manuallySelectedPlayers.length !== 1 ? 's' : ''}
+                Selected players · {assignedCount}/{allManuallySelected.length} added to teams
               </span>
               <span style={{ color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 10, marginLeft: 4 }}>
-                selected via player modal by an admin
+                manually selected by an admin
               </span>
+              {isEditable && missingManuallySelected.length > 0 && (
+                <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 10, marginLeft: 'auto' }}>
+                  drag to slot ↑
+                </span>
+              )}
             </div>
-            <div className="flex flex-wrap gap-2 px-4 py-3">
-              {manuallySelectedPlayers.map((player) => {
-                const yy = playerYoyo(player);
-                return (
-                  <div
-                    key={player.rowIndex}
-                    draggable={isEditable}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('playerRowIndex', String(player.rowIndex));
-                      e.dataTransfer.setData('playerName', player.name);
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    style={{
-                      background: 'rgba(46,125,50,0.12)', border: '1px solid rgba(46,125,50,0.25)',
-                      borderRadius: 6, padding: '5px 10px',
-                      cursor: isEditable ? 'grab' : 'default',
-                      userSelect: 'none',
-                    }}>
-                    <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>{player.name}</span>
-                    <span style={{ color: 'rgba(245,240,232,0.4)', fontFamily: FONT, fontSize: 10, marginLeft: 6 }}>
-                      {player.batch} · {player.category}
-                    </span>
-                    {yy !== null && (
-                      <span style={{ color: yoyoColor(yy), fontFamily: FONT, fontSize: 10, fontWeight: 700, marginLeft: 6 }}>
-                        {yy.toFixed(1)}
+            {missingManuallySelected.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-4 py-3">
+                {missingManuallySelected.map((player) => {
+                  const yy = playerYoyo(player);
+                  return (
+                    <div
+                      key={player.rowIndex}
+                      draggable={isEditable}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('playerRowIndex', String(player.rowIndex));
+                        e.dataTransfer.setData('playerName', player.name);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      style={{
+                        background: 'rgba(46,125,50,0.12)', border: '1px solid rgba(46,125,50,0.25)',
+                        borderRadius: 6, padding: '5px 10px',
+                        cursor: isEditable ? 'grab' : 'default',
+                        userSelect: 'none',
+                      }}>
+                      <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>{player.name}</span>
+                      <span style={{ color: 'rgba(245,240,232,0.4)', fontFamily: FONT, fontSize: 10, marginLeft: 6 }}>
+                        {player.batch} · {player.category}
                       </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      {yy !== null && (
+                        <span style={{ color: yoyoColor(yy), fontFamily: FONT, fontSize: 10, fontWeight: 700, marginLeft: 6 }}>
+                          {yy.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+            );
+          }
+        )()}
 
         {/* ── Player Picker Drawer ── */}
         {picker && isEditable && (

@@ -3773,7 +3773,7 @@ function AdminPivotTable({
       ) : (
         <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 300px)' }}>
           <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 4 }}>
               {/* Row 1: Schema headers (colSpan = visibleSkills*2 + visSections + 1 for schema avg) */}
               <tr>
                 <th rowSpan={4} onClick={() => togglePivotSort('player', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(0, PLAYER_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'player' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Player{sortIndicator('player')}</th>
