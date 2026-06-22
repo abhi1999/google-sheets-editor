@@ -4210,16 +4210,14 @@ function exportSelectedPlayersToCSV(players: ScoutPlayer[]) {
     const yoyoVals = p.coachEvals.map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || '')).filter((v) => !isNaN(v) && v > 0);
     return {
       Player: p.name,
-      Batch: p.batch || '',
+      Academy: p.extraInfo?.['Academy'] || '',
       Div: p.div || '',
       Category: p.category || '',
-      Schema: p.schema,
       'Yo-Yo': yoyoVals.length > 0 ? Math.max(...yoyoVals) : '',
       'Primary Skill': p.extraInfo?.['Primary Skill'] || '',
       'Batting Hand': p.extraInfo?.['Batting hand'] || '',
       'Bowler Arm': p.extraInfo?.['Bowler arm'] || '',
       'Bowling Type': p.extraInfo?.['Bowling type'] || '',
-      'Avg %': p.aggregatePct > 0 ? p.aggregatePct.toFixed(1) : '',
     };
   });
   const csv = Papa.unparse(rows);
@@ -4236,15 +4234,18 @@ function SelectedPlayersTable({
   players,
   playerSelections,
   onRowClick,
+  onRefresh,
 }: {
   players: ScoutPlayer[];
   playerSelections: Record<number, boolean>;
   onRowClick: (p: ScoutPlayer) => void;
+  onRefresh?: () => void;
 }) {
   const t = useContext(YoyoThresholdsCtx);
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [primarySkillFilter, setPrimarySkillFilter] = useState<string>('all');
+  const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
+  const [primarySkillFilters, setPrimarySkillFilters] = useState<string[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   const selectedPlayers = useMemo(() => {
     return players.filter((p) => {
@@ -4259,6 +4260,12 @@ function SelectedPlayersTable({
     return Array.from(cats).sort();
   }, [selectedPlayers]);
 
+  const categoryCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of selectedPlayers) if (p.category) m.set(p.category, (m.get(p.category) ?? 0) + 1);
+    return m;
+  }, [selectedPlayers]);
+
   const allPrimarySkills = useMemo(() => {
     const skills = new Set<string>();
     for (const p of selectedPlayers) {
@@ -4268,6 +4275,15 @@ function SelectedPlayersTable({
     return Array.from(skills).sort();
   }, [selectedPlayers]);
 
+  const skillCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of selectedPlayers) {
+      const s = p.extraInfo?.['Primary Skill']?.trim();
+      if (s) m.set(s, (m.get(s) ?? 0) + 1);
+    }
+    return m;
+  }, [selectedPlayers]);
+
   const selectionSource = (p: ScoutPlayer): 'auto' | 'manual' => {
     return p.rowIndex in playerSelections ? 'manual' : 'auto';
   };
@@ -4275,19 +4291,19 @@ function SelectedPlayersTable({
   const displayPlayers = useMemo(() => {
     const q = search.toLowerCase();
     const base = selectedPlayers.filter((p) => {
-      if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
-      if (primarySkillFilter !== 'all' && (p.extraInfo?.['Primary Skill']?.trim() || '') !== primarySkillFilter) return false;
+      if (categoryFilters.length > 0 && !categoryFilters.includes(p.category)) return false;
+      if (primarySkillFilters.length > 0 && !primarySkillFilters.includes(p.extraInfo?.['Primary Skill']?.trim() || '')) return false;
       if (q && !(
         p.name.toLowerCase().includes(q) ||
-        (p.batch || '').toLowerCase().includes(q) ||
         (p.div || '').toLowerCase().includes(q) ||
-        (p.category || '').toLowerCase().includes(q)
+        (p.category || '').toLowerCase().includes(q) ||
+        (p.extraInfo?.['Academy'] || '').toLowerCase().includes(q)
       )) return false;
       return true;
     });
     return applySort(base, sortCol, sortDir, (p, col) => {
       if (col === 'Player') return p.name;
-      if (col === 'Batch') return p.batch || '';
+      if (col === 'Academy') return p.extraInfo?.['Academy'] || '';
       if (col === 'Div') return p.div || '';
       if (col === 'Category') return p.category || '';
       if (col === 'Schema') return p.schema;
@@ -4302,7 +4318,7 @@ function SelectedPlayersTable({
       if (col === 'Bowl Type') return p.extraInfo?.['Bowling type'] || '';
       return '';
     });
-  }, [selectedPlayers, search, categoryFilter, primarySkillFilter, sortCol, sortDir]);
+  }, [selectedPlayers, search, categoryFilters, primarySkillFilters, sortCol, sortDir]);
 
   if (selectedPlayers.length === 0 && !search) {
     return (
@@ -4313,7 +4329,13 @@ function SelectedPlayersTable({
     );
   }
 
-  const COLS = ['Player', 'Batch', 'Div', 'Category', 'Schema', 'Yo-Yo', 'Avg %', 'Primary Skill', 'Bat Hand', 'Bowl Arm', 'Bowl Type', 'Source'];
+  const COLS = ['Player', 'Academy', 'Div', 'Category', 'Yo-Yo', 'Primary Skill', 'Bat Hand', 'Bowl Arm', 'Bowl Type', 'Source'];
+
+  const toggleCategoryFilter = (cat: string) =>
+    setCategoryFilters((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
+
+  const toggleSkillFilter = (skill: string) =>
+    setPrimarySkillFilters((prev) => (prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill]));
 
   return (
     <div>
@@ -4322,55 +4344,84 @@ function SelectedPlayersTable({
           {selectedPlayers.length} player{selectedPlayers.length !== 1 ? 's' : ''} selected
         </span>
         <div className="flex-1"><TableSearch value={search} onChange={setSearch} /></div>
+        {onRefresh && (
+          <button
+            onClick={async () => { setRefreshing(true); await onRefresh(); setRefreshing(false); }}
+            disabled={refreshing}
+            style={{
+              background: 'none', border: '1px solid rgba(255,255,255,0.1)',
+              color: refreshing ? 'rgba(245,240,232,0.2)' : 'rgba(245,240,232,0.4)',
+              borderRadius: 6, padding: '5px 11px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 11,
+              cursor: refreshing ? 'default' : 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}>
+            <span style={{ display: 'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>↺</span>
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        )}
         <button onClick={() => exportSelectedPlayersToCSV(displayPlayers)} style={EXPORT_BTN_STYLE} className="transition-opacity hover:opacity-80">
           {EXPORT_ICON} Export CSV
         </button>
       </div>
 
-      {/* Category filter chips */}
+      {/* Category filter chips (multi-select) */}
       {allCategories.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5 mb-2">
           <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Category:</span>
           {allCategories.map((cat) => {
-            const active = categoryFilter === cat;
+            const active = categoryFilters.includes(cat);
             const cc = getCategoryColor(cat);
             return (
-              <button key={cat} onClick={() => setCategoryFilter(active ? 'all' : cat)}
+              <button key={cat} onClick={() => toggleCategoryFilter(cat)}
                 style={{
                   padding: '2px 9px', borderRadius: 4, fontSize: 11, fontWeight: 700,
                   fontFamily: 'Barlow Condensed, sans-serif',
                   background: active ? cc.bg : 'rgba(255,255,255,0.05)',
                   color: active ? cc.text : 'rgba(245,240,232,0.4)',
                   border: `1px solid ${active ? 'transparent' : 'rgba(255,255,255,0.08)'}`,
-                  cursor: 'pointer',
+                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
                 }}>
                 {cat}
+                <span style={{ opacity: active ? 0.75 : 0.5, fontWeight: 600, fontSize: 10 }}>{categoryCounts.get(cat) ?? 0}</span>
               </button>
             );
           })}
+          {categoryFilters.length > 0 && (
+            <button onClick={() => setCategoryFilters([])}
+              style={{ fontSize: 10, color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>
+              ✕ clear
+            </button>
+          )}
         </div>
       )}
 
-      {/* Primary Skill filter chips */}
+      {/* Primary Skill filter chips (multi-select) */}
       {allPrimarySkills.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
           <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>Skill:</span>
           {allPrimarySkills.map((skill) => {
-            const active = primarySkillFilter === skill;
+            const active = primarySkillFilters.includes(skill);
             return (
-              <button key={skill} onClick={() => setPrimarySkillFilter(active ? 'all' : skill)}
+              <button key={skill} onClick={() => toggleSkillFilter(skill)}
                 style={{
                   padding: '2px 9px', borderRadius: 4, fontSize: 11, fontWeight: 700,
                   fontFamily: 'Barlow Condensed, sans-serif',
                   background: active ? 'rgba(200,168,75,0.2)' : 'rgba(255,255,255,0.05)',
                   color: active ? '#c8a84b' : 'rgba(245,240,232,0.4)',
                   border: `1px solid ${active ? 'rgba(200,168,75,0.45)' : 'rgba(255,255,255,0.08)'}`,
-                  cursor: 'pointer',
+                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5,
                 }}>
                 {skill}
+                <span style={{ opacity: active ? 0.75 : 0.5, fontWeight: 600, fontSize: 10 }}>{skillCounts.get(skill) ?? 0}</span>
               </button>
             );
           })}
+          {primarySkillFilters.length > 0 && (
+            <button onClick={() => setPrimarySkillFilters([])}
+              style={{ fontSize: 10, color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}>
+              ✕ clear
+            </button>
+          )}
         </div>
       )}
 
@@ -4401,19 +4452,15 @@ function SelectedPlayersTable({
                     <td className="px-4 py-2.5">
                       <span className="font-bold" style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}>{p.name}</span>
                     </td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{p.batch || '—'}</td>
+                    <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{p.extraInfo?.['Academy'] || '—'}</td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: 'Barlow Condensed, sans-serif' }}>{p.div || '—'}</td>
                     <td className="px-4 py-2.5">
                       <span className="text-[11px] font-bold px-2 py-0.5 rounded" style={{ background: catColor.bg, color: catColor.text, fontFamily: 'Barlow Condensed, sans-serif' }}>{p.category || '—'}</span>
                     </td>
-                    <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>{p.schema}</td>
                     <td className="px-4 py-2.5">
                       {yoyo ? (
                         <span className="text-[11px] font-bold px-2 py-0.5 rounded" style={{ background: yoyo.bg, color: yoyo.text, fontFamily: 'Barlow Condensed, sans-serif' }}>{yoyoBest}</span>
                       ) : <span style={{ color: 'rgba(245,240,232,0.2)', fontSize: 11 }}>—</span>}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs font-bold" style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif' }}>
-                      {p.aggregatePct > 0 ? `${p.aggregatePct.toFixed(1)}%` : '—'}
                     </td>
                     <td className="px-4 py-2.5 text-xs" style={{ color: 'rgba(245,240,232,0.55)', fontFamily: 'Barlow Condensed, sans-serif' }}>
                       {p.extraInfo?.['Primary Skill'] || '—'}
@@ -4636,6 +4683,16 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
     }).catch(() => setError('Failed to load player data.'))
       .finally(() => setLoading(false));
   }, [sheetKey]);
+
+  const refreshPlayerData = useCallback(() =>
+    Promise.all([
+      fetch(`/api/scout?sheetKey=${encodeURIComponent(sheetKey)}`).then((r) => r.json()),
+      fetch(`/api/scout/player-selection?sheetKey=${encodeURIComponent(sheetKey)}`).then((r) => r.json()).catch(() => ({ selections: {} })),
+    ]).then(([data, selData]) => {
+      if (data.players) setPlayers(data.players);
+      if (selData?.selections) setPlayerSelections(selData.selections);
+    }).catch(() => {}),
+  [sheetKey]);
 
   // Ordered unique batch names (preserving sheet order)
   const allBatchNames = useMemo(() => {
@@ -5077,7 +5134,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           )}
 
           {!loading && !error && viewMode === 'selected-players' && (
-            <SelectedPlayersTable players={players} playerSelections={playerSelections} onRowClick={setActivePlayer} />
+            <SelectedPlayersTable players={players} playerSelections={playerSelections} onRowClick={setActivePlayer} onRefresh={refreshPlayerData} />
           )}
 
           {/* Team Packages */}
