@@ -23,14 +23,14 @@ const TEAM_SLOTS = [
   { slot: 6,  role: 'All Rounder',     variant: null,    color: '#81c784' },
   { slot: 7,  role: 'All Rounder',     variant: null,    color: '#ffb74d' },
   { slot: 8,  role: 'All Rounder',     variant: null,    color: '#ffb74d' },
-  { slot: 9,  role: 'Bowler',          variant: 'Spin',  color: '#ff8a65' },
-  { slot: 10, role: 'Bowler',          variant: 'Pace',  color: '#ff8a65' },
-  { slot: 11, role: 'Bowler',          variant: 'Pace',  color: '#ff8a65' },
-  { slot: 12,  role: 'Bowler',         variant: 'Spin',  color: '#ff8a65' },
+  { slot: 9,  role: 'Bowler',          variant: null,  color: '#ff8a65' },
+  { slot: 10, role: 'Bowler',          variant: null,  color: '#ff8a65' },
+  { slot: 11, role: 'Bowler',          variant: null,  color: '#ff8a65' },
+  { slot: 12,  role: 'Bowler',         variant: null,  color: '#ff8a65' },
   { slot: 13, role: 'Wicket Keeper',   variant: null,    color: '#80cbc4' },
 ] as const;
 
-const MAX_PACKAGES = 5;
+const MAX_PACKAGES = 10;
 const FONT = 'Barlow Condensed, sans-serif';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -43,10 +43,15 @@ function makeNewPackage(email: string, name: string): TeamPackage {
     packageName: 'Default',
     status: 'draft',
     shared: false,
+    locked: false,
+    comments: '',
     teams: TEAM_COLORS.map((tc, i) => ({
       teamIndex: i + 1,
       teamName: tc.name,
       slots: TEAM_SLOTS.map((s) => ({ slot: s.slot, playerRowIndex: null, playerName: '' })),
+      captain: null,
+      vc: null,
+      wks: [],
     })),
     savedAt: '',
   };
@@ -72,7 +77,8 @@ function yoyoColor(yy: number | null): string {
 
 function exportPackage(pkg: TeamPackage, players: ScoutPlayer[]) {
   const playerMap = new Map(players.map((p) => [p.rowIndex, p]));
-  const headers = ['Slot', 'Role', 'Type', ...pkg.teams.map((t) => t.teamName)];
+  const teamCols = pkg.teams.map((t) => t.teamName);
+  const headers = ['Slot', 'Role', 'Type', ...teamCols];
   const rows = TEAM_SLOTS.map((comp) => {
     const row: string[] = [
       String(comp.slot),
@@ -82,14 +88,40 @@ function exportPackage(pkg: TeamPackage, players: ScoutPlayer[]) {
         const s = team.slots.find((sl) => sl.slot === comp.slot);
         if (!s?.playerRowIndex) return '';
         const p = playerMap.get(s.playerRowIndex);
-        return p ? p.name : s.playerName;
+        const name = p ? p.name : s.playerName;
+        // Append role badges inline
+        const pid = s.playerRowIndex;
+        const badges: string[] = [];
+        if (team.captain === pid) badges.push('C');
+        if (team.vc === pid) badges.push('VC');
+        if ((team.wks ?? []).includes(pid)) badges.push('WK');
+        return badges.length > 0 ? `${name} [${badges.join('/')}]` : name;
       }),
     ];
     return row;
   });
 
   const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
-  const csv = [headers, ...rows].map((r) => r.map(escape).join(',')).join('\n');
+  const blankRow = Array(headers.length).fill('');
+  const exportDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const sections: string[][] = [
+    headers,
+    ...rows,
+    blankRow,
+    ['Exported', exportDate, ...Array(headers.length - 2).fill('')],
+  ];
+
+  if (pkg.comments?.trim()) {
+    sections.push(blankRow);
+    sections.push(['Comments', ...Array(headers.length - 1).fill('')]);
+    // Split multi-line comments into separate rows under the Comments column
+    pkg.comments.trim().split('\n').forEach((line) => {
+      sections.push(['', line, ...Array(headers.length - 2).fill('')]);
+    });
+  }
+
+  const csv = sections.map((r) => r.map(escape).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -106,11 +138,13 @@ function PackageCard({
   editable,
   requiredIds,
   onOpen,
+  onClone,
 }: {
   pkg: TeamPackage;
   editable: boolean;
   requiredIds: Set<number>;
   onOpen: () => void;
+  onClone?: () => void;
 }) {
   const totalFilled = pkg.teams.reduce((s, t) => s + teamFillCount(t), 0);
   const totalPossible = pkg.teams.length * 13;
@@ -126,23 +160,26 @@ function PackageCard({
       onClick={onOpen}
       style={{
         background: '#221515',
-        border: '1px solid rgba(192,57,43,0.15)',
+        border: `1px solid ${pkg.locked ? 'rgba(200,168,75,0.2)' : 'rgba(192,57,43,0.15)'}`,
         borderRadius: 10,
         padding: '16px 20px',
         cursor: 'pointer',
         transition: 'border-color 0.15s',
       }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(192,57,43,0.4)'; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(192,57,43,0.15)'; }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = pkg.locked ? 'rgba(200,168,75,0.45)' : 'rgba(192,57,43,0.4)'; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = pkg.locked ? 'rgba(200,168,75,0.2)' : 'rgba(192,57,43,0.15)'; }}
     >
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 14 }}>{pkg.packageName}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          {pkg.locked && (
+            <span title="Locked" style={{ color: '#c8a84b', fontSize: 11, flexShrink: 0 }}>🔒</span>
+          )}
+          <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pkg.packageName}</span>
           {!editable && (
-            <span style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT, fontSize: 11, marginLeft: 8 }}>{pkg.coachName}</span>
+            <span style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT, fontSize: 11, flexShrink: 0 }}>{pkg.coachName}</span>
           )}
         </div>
-        <span style={{ color: totalFilled === totalPossible ? '#81c784' : 'rgba(245,240,232,0.3)', fontFamily: FONT, fontSize: 10, whiteSpace: 'nowrap' }}>
+        <span style={{ color: totalFilled === totalPossible ? '#81c784' : 'rgba(245,240,232,0.3)', fontFamily: FONT, fontSize: 10, whiteSpace: 'nowrap', flexShrink: 0 }}>
           {totalFilled}/{totalPossible} filled
         </span>
       </div>
@@ -193,13 +230,29 @@ function PackageCard({
             {pkg.shared ? '◉ Shared' : '◎ Private'}
           </span>
         </div>
-        <span style={{
-          background: editable ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.06)',
-          color: editable ? '#c8a84b' : 'rgba(245,240,232,0.4)',
-          borderRadius: 4, padding: '2px 10px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
-        }}>
-          {editable ? 'Edit →' : 'View →'}
-        </span>
+        <div className="flex items-center gap-2">
+          {onClone && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onClone(); }}
+              title="Clone this package"
+              style={{
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                color: 'rgba(245,240,232,0.35)', borderRadius: 4, padding: '2px 8px',
+                fontFamily: FONT, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#c8a84b'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.35)'; }}>
+              ⎘ Clone
+            </button>
+          )}
+          <span style={{
+            background: editable && !pkg.locked ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.06)',
+            color: editable && !pkg.locked ? '#c8a84b' : 'rgba(245,240,232,0.4)',
+            borderRadius: 4, padding: '2px 10px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+          }}>
+            {pkg.locked ? 'View →' : editable ? 'Edit →' : 'View →'}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -225,6 +278,7 @@ export function TeamSelectionBoard({
   // ── State (ALL hooks before any conditional return) ──
   const [packages, setPackages] = useState<TeamPackage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [subView, setSubView] = useState<'list' | 'edit' | 'compare' | 'admin'>(initialSubView);
   const [editPkg, setEditPkg] = useState<TeamPackage | null>(null);
   const [isEditable, setIsEditable] = useState(false);
@@ -347,24 +401,27 @@ export function TeamSelectionBoard({
   }, [packages, players]);
 
   // ── Fetch ──
-  const fetchPackages = useCallback(async () => {
-    setLoading(true);
+  const fetchPackages = useCallback(async (silent = false) => {
+    if (silent) setRefreshing(true); else setLoading(true);
     try {
       const res = await fetch(`/api/scout/team-packages?sheetKey=${encodeURIComponent(sheetKey)}`);
       const data = await res.json();
       if (data.packages) setPackages(data.packages);
       if (data.isAdmin !== undefined) setIsAdmin(!!data.isAdmin);
     } catch {}
-    setLoading(false);
+    if (silent) setRefreshing(false); else setLoading(false);
   }, [sheetKey]);
 
   useEffect(() => { fetchPackages(); }, [fetchPackages]);
+
+  const handleRefresh = useCallback(() => fetchPackages(true), [fetchPackages]);
 
   // ── Actions ──
   const openEdit = useCallback((pkg: TeamPackage | null, editable: boolean) => {
     const p = pkg ?? makeNewPackage(user.email, user.name);
     setEditPkg(JSON.parse(JSON.stringify(p)));
-    setIsEditable(editable);
+    // Locked packages are always view-only, even for the owner
+    setIsEditable(editable && !p.locked);
     setDirty(!pkg);
     setSubView('edit');
     setPicker(null);
@@ -422,7 +479,7 @@ export function TeamSelectionBoard({
       const res = await fetch(`/api/scout/team-packages?sheetKey=${encodeURIComponent(sheetKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packageId: editPkg.packageId, packageName: editPkg.packageName, shared: editPkg.shared, teams: editPkg.teams }),
+        body: JSON.stringify({ packageId: editPkg.packageId, packageName: editPkg.packageName, shared: editPkg.shared, locked: editPkg.locked ?? false, comments: editPkg.comments ?? '', teams: editPkg.teams }),
       });
       const data = await res.json();
       if (!res.ok) { setSaveError(data.error || 'Failed to save'); return; }
@@ -433,6 +490,50 @@ export function TeamSelectionBoard({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleClone(pkg: TeamPackage) {
+    if (myPackages.length >= MAX_PACKAGES) return;
+    setSaving(true);
+    try {
+      const cloned: TeamPackage = {
+        ...JSON.parse(JSON.stringify(pkg)),
+        packageId: `${user.email}_${Date.now()}`,
+        coachEmail: user.email,
+        coachName: user.name,
+        packageName: `${pkg.packageName} (Copy)`,
+        shared: false,
+        locked: false,
+        savedAt: '',
+      };
+      const res = await fetch(`/api/scout/team-packages?sheetKey=${encodeURIComponent(sheetKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageId: cloned.packageId, packageName: cloned.packageName, shared: cloned.shared, locked: cloned.locked, teams: cloned.teams }),
+      });
+      if (res.ok) await fetchPackages();
+    } catch {}
+    setSaving(false);
+  }
+
+  function setRole(teamIndex: number, playerRowIndex: number, role: 'captain' | 'vc' | 'wk') {
+    updatePkg((pkg) => ({
+      ...pkg,
+      teams: pkg.teams.map((t) => {
+        if (t.teamIndex !== teamIndex) return t;
+        if (role === 'captain') {
+          return { ...t, captain: t.captain === playerRowIndex ? null : playerRowIndex };
+        }
+        if (role === 'vc') {
+          return { ...t, vc: t.vc === playerRowIndex ? null : playerRowIndex };
+        }
+        // wk: toggle in list, max 3
+        const wks = t.wks ?? [];
+        if (wks.includes(playerRowIndex)) return { ...t, wks: wks.filter((id) => id !== playerRowIndex) };
+        if (wks.length >= 3) return t;
+        return { ...t, wks: [...wks, playerRowIndex] };
+      }),
+    }));
   }
 
   async function handleDelete() {
@@ -703,6 +804,20 @@ export function TeamSelectionBoard({
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(245,240,232,0.5)', fontFamily: FONT, fontSize: 13, padding: 0 }}>
             ← Back
           </button>
+          <button
+            onClick={async () => { await fetchPackages(true); }}
+            disabled={refreshing}
+            title="Refresh package data"
+            style={{
+              background: 'none', border: '1px solid rgba(255,255,255,0.1)',
+              color: refreshing ? 'rgba(245,240,232,0.2)' : 'rgba(245,240,232,0.35)',
+              borderRadius: 6, padding: '4px 10px', fontFamily: FONT, fontSize: 11,
+              cursor: refreshing ? 'default' : 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}>
+            <span style={{ display: 'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>↺</span>
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
 
           {isEditable ? (
             <input
@@ -731,6 +846,33 @@ export function TeamSelectionBoard({
                 textTransform: 'uppercase' as const, cursor: 'pointer', marginLeft: 'auto',
               }}>
               ↓ Export CSV
+            </button>
+          )}
+
+          {/* Lock toggle always visible for own packages */}
+          {editPkg.coachEmail === user.email && (
+            <button
+              onClick={async () => {
+                const next = { ...editPkg, locked: !editPkg.locked };
+                setEditPkg(next);
+                setIsEditable(!next.locked);
+                // Save lock state immediately
+                await fetch(`/api/scout/team-packages?sheetKey=${encodeURIComponent(sheetKey)}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ packageId: next.packageId, packageName: next.packageName, shared: next.shared, locked: next.locked, comments: next.comments ?? '', teams: next.teams }),
+                });
+                await fetchPackages();
+              }}
+              title={editPkg.locked ? 'Unlock package to allow edits' : 'Lock package to prevent accidental changes'}
+              style={{
+                background: editPkg.locked ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${editPkg.locked ? 'rgba(200,168,75,0.4)' : 'rgba(255,255,255,0.12)'}`,
+                color: editPkg.locked ? '#c8a84b' : 'rgba(245,240,232,0.4)',
+                borderRadius: 6, padding: '6px 14px', fontFamily: FONT, fontSize: 11,
+                fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer',
+              }}>
+              {editPkg.locked ? '🔒 Locked' : '🔓 Unlocked'}
             </button>
           )}
 
@@ -896,33 +1038,93 @@ export function TeamSelectionBoard({
                           }}
                           onMouseEnter={(e) => { if (isEditable && !isDragTarget) (e.currentTarget as HTMLElement).style.background = 'rgba(192,57,43,0.08)'; }}
                           onMouseLeave={(e) => { if (!isDragTarget) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                             {hasPlayer ? (
                               <>
-                                <span style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 11, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {slotData!.playerName}
-                                </span>
-                                {onPlayerClick && (() => {
-                                  const p = players.find((pl) => pl.rowIndex === slotData!.playerRowIndex);
-                                  return p ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  {/* Role badges — shown in both view and edit mode */}
+                                  {(() => {
+                                    const pid = slotData!.playerRowIndex!;
+                                    const isCap = team.captain === pid;
+                                    const isVC = team.vc === pid;
+                                    const isWK = (team.wks ?? []).includes(pid);
+                                    return (
+                                      <>
+                                        {(isCap || isEditable) && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); if (isEditable) setRole(team.teamIndex, pid, 'captain'); }}
+                                            title={isCap ? 'Remove Captain' : 'Set as Captain'}
+                                            style={{
+                                              flexShrink: 0, fontFamily: FONT, fontWeight: 800, fontSize: 9,
+                                              padding: '1px 4px', borderRadius: 3, lineHeight: 1.4,
+                                              background: isCap ? 'rgba(200,168,75,0.35)' : 'rgba(255,255,255,0.06)',
+                                              color: isCap ? '#c8a84b' : 'rgba(245,240,232,0.2)',
+                                              border: `1px solid ${isCap ? 'rgba(200,168,75,0.6)' : 'rgba(255,255,255,0.08)'}`,
+                                              cursor: isEditable ? 'pointer' : 'default',
+                                            }}>
+                                            C
+                                          </button>
+                                        )}
+                                        {(isVC || isEditable) && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); if (isEditable) setRole(team.teamIndex, pid, 'vc'); }}
+                                            title={isVC ? 'Remove Vice Captain' : 'Set as Vice Captain'}
+                                            style={{
+                                              flexShrink: 0, fontFamily: FONT, fontWeight: 800, fontSize: 9,
+                                              padding: '1px 4px', borderRadius: 3, lineHeight: 1.4,
+                                              background: isVC ? 'rgba(144,202,249,0.2)' : 'rgba(255,255,255,0.06)',
+                                              color: isVC ? '#90caf9' : 'rgba(245,240,232,0.2)',
+                                              border: `1px solid ${isVC ? 'rgba(144,202,249,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                                              cursor: isEditable ? 'pointer' : 'default',
+                                            }}>
+                                            VC
+                                          </button>
+                                        )}
+                                        {(isWK || isEditable) && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); if (isEditable) setRole(team.teamIndex, pid, 'wk'); }}
+                                            title={isWK ? 'Remove Wicket Keeper' : `Set as Wicket Keeper${(team.wks ?? []).length >= 3 ? ' (max 3 reached)' : ''}`}
+                                            disabled={isEditable && !isWK && (team.wks ?? []).length >= 3}
+                                            style={{
+                                              flexShrink: 0, fontFamily: FONT, fontWeight: 800, fontSize: 9,
+                                              padding: '1px 4px', borderRadius: 3, lineHeight: 1.4,
+                                              background: isWK ? 'rgba(128,203,196,0.2)' : 'rgba(255,255,255,0.06)',
+                                              color: isWK ? '#80cbc4' : 'rgba(245,240,232,0.2)',
+                                              border: `1px solid ${isWK ? 'rgba(128,203,196,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                                              cursor: isEditable && !((!isWK) && (team.wks ?? []).length >= 3) ? 'pointer' : 'default',
+                                              opacity: isEditable && !isWK && (team.wks ?? []).length >= 3 ? 0.3 : 1,
+                                            }}>
+                                            WK
+                                          </button>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                  <span style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 11, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                    {slotData!.playerName}
+                                  </span>
+                                  {onPlayerClick && (() => {
+                                    const p = players.find((pl) => pl.rowIndex === slotData!.playerRowIndex);
+                                    return p ? (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); onPlayerClick(p); }}
+                                        title="View player details"
+                                        style={{ background: 'none', border: 'none', color: 'rgba(245,240,232,0.2)', cursor: 'pointer', fontSize: 10, padding: '0 1px', lineHeight: 1, flexShrink: 0 }}
+                                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.7)'; }}
+                                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.2)'; }}>
+                                        ↗
+                                      </button>
+                                    ) : null;
+                                  })()}
+                                  {isEditable && (
                                     <button
-                                      onClick={(e) => { e.stopPropagation(); onPlayerClick(p); }}
-                                      title="View player details"
-                                      style={{ background: 'none', border: 'none', color: 'rgba(245,240,232,0.2)', cursor: 'pointer', fontSize: 10, padding: '0 1px', lineHeight: 1, flexShrink: 0 }}
-                                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.7)'; }}
-                                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.2)'; }}>
-                                      ↗
+                                      onClick={(e) => { e.stopPropagation(); clearSlot(team.teamIndex, comp.slot); }}
+                                      title="Remove player"
+                                      style={{ background: 'none', border: 'none', color: 'rgba(245,240,232,0.2)', cursor: 'pointer', fontSize: 11, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>
+                                      ✕
                                     </button>
-                                  ) : null;
-                                })()}
-                                {isEditable && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); clearSlot(team.teamIndex, comp.slot); }}
-                                    title="Remove player"
-                                    style={{ background: 'none', border: 'none', color: 'rgba(245,240,232,0.2)', cursor: 'pointer', fontSize: 11, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>
-                                    ✕
-                                  </button>
-                                )}
+                                  )}
+                                </div>
                               </>
                             ) : (
                               <span style={{
@@ -1072,6 +1274,47 @@ export function TeamSelectionBoard({
           }
         )()}
 
+        {/* ── Comments ── */}
+        <div className="mt-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span style={{ color: 'rgba(245,240,232,0.45)', fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              Comments
+            </span>
+          </div>
+          {isEditable ? (
+            <textarea
+              value={editPkg.comments ?? ''}
+              onChange={(e) => updatePkg((p) => ({ ...p, comments: e.target.value }))}
+              placeholder="Add general comments about this package…"
+              rows={4}
+              style={{
+                width: '100%', background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(192,57,43,0.2)', borderRadius: 8,
+                color: '#f5f0e8', fontFamily: FONT, fontSize: 12,
+                padding: '10px 14px', outline: 'none', resize: 'vertical',
+                boxSizing: 'border-box', lineHeight: 1.6,
+              }}
+              onFocus={(e) => { (e.currentTarget as HTMLTextAreaElement).style.borderColor = 'rgba(192,57,43,0.45)'; }}
+              onBlur={(e) => { (e.currentTarget as HTMLTextAreaElement).style.borderColor = 'rgba(192,57,43,0.2)'; }}
+            />
+          ) : editPkg.comments?.trim() ? (
+            <div style={{
+              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+              borderRadius: 8, padding: '10px 14px',
+            }}>
+              {editPkg.comments.trim().split('\n').map((line, i) => (
+                <p key={i} style={{ color: 'rgba(245,240,232,0.6)', fontFamily: FONT, fontSize: 12, margin: 0, lineHeight: 1.6 }}>
+                  {line || ' '}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: 'rgba(245,240,232,0.18)', fontFamily: FONT, fontSize: 12, fontStyle: 'italic', margin: 0 }}>
+              No comments.
+            </p>
+          )}
+        </div>
+
         {/* ── Player Picker Drawer ── */}
         {picker && isEditable && (
           <>
@@ -1182,6 +1425,20 @@ export function TeamSelectionBoard({
         <h2 style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 20, fontWeight: 700, margin: 0, flex: 1 }}>
           Team Packages
         </h2>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          title="Refresh packages"
+          style={{
+            background: 'none', border: '1px solid rgba(255,255,255,0.1)',
+            color: refreshing ? 'rgba(245,240,232,0.25)' : 'rgba(245,240,232,0.4)',
+            borderRadius: 6, padding: '7px 12px', fontFamily: FONT, fontSize: 12,
+            cursor: refreshing ? 'default' : 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+          }}>
+          <span style={{ display: 'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>↺</span>
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
         {packages.length >= 2 && (
           <button
             onClick={() => { setSubView('compare'); setCompareFilter('all'); }}
@@ -1240,7 +1497,9 @@ export function TeamSelectionBoard({
         ) : (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {myPackages.map((pkg) => (
-              <PackageCard key={pkg.packageId} pkg={pkg} editable requiredIds={requiredIds} onOpen={() => openEdit(pkg, true)} />
+              <PackageCard key={pkg.packageId} pkg={pkg} editable requiredIds={requiredIds}
+                onOpen={() => openEdit(pkg, true)}
+                onClone={myPackages.length < MAX_PACKAGES ? () => handleClone(pkg) : undefined} />
             ))}
           </div>
         )}
@@ -1264,7 +1523,9 @@ export function TeamSelectionBoard({
               </div>
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                 {pkgs.map((pkg) => (
-                  <PackageCard key={pkg.packageId} pkg={pkg} editable={false} requiredIds={requiredIds} onOpen={() => openEdit(pkg, false)} />
+                  <PackageCard key={pkg.packageId} pkg={pkg} editable={false} requiredIds={requiredIds}
+                    onOpen={() => openEdit(pkg, false)}
+                    onClone={myPackages.length < MAX_PACKAGES ? () => handleClone(pkg) : undefined} />
                 ))}
               </div>
             </div>

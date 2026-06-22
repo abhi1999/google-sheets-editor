@@ -4771,6 +4771,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
     <>
       <style>{`
         @keyframes slideUp { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .search-input::placeholder { color: rgba(245,240,232,0.3); }
         .search-input:focus { outline: none; border-color: rgba(192,57,43,0.6); }
         .batch-tabs::-webkit-scrollbar { display: none; }

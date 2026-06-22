@@ -69,6 +69,9 @@ export interface PackageTeam {
   teamIndex: number;
   teamName: string;
   slots: TeamSlot[];
+  captain?: number | null;
+  vc?: number | null;
+  wks?: number[];
 }
 
 export interface TeamPackage {
@@ -78,6 +81,8 @@ export interface TeamPackage {
   packageName: string;
   status: 'draft' | 'submitted';
   shared: boolean;
+  locked?: boolean;
+  comments?: string;
   teams: PackageTeam[];
   savedAt: string;
 }
