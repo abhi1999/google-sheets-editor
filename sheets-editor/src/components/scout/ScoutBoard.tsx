@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, Fragment, createContext, useContext } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import type { ScoutPlayer, PlayerEvaluation, SchemaType, CoachEval } from '@/types/scout';
 import type { AppUser } from '@/types';
@@ -4640,8 +4640,28 @@ function YoyoConfigPanel({
 
 // ── Main component ────────────────────────────────────────────────────
 
+const VIEW_LABELS: Record<string, string> = {
+  'my-evals':           'My Evals',
+  'my-eval-details':    'My Eval Details',
+  'my-skill-details':   'Skill Notes',
+  'all-fitness':        'All Fitness Scores',
+  'selection':          'Selection',
+  'selected-players':   'Selected Players',
+  'team-packages':      'Team Packages',
+  'skill-pivot':        'Skill Pivot',
+  'admin-evals':        'All Coach Evals',
+  'admin-skill-details':'All Skill Notes',
+  'admin-agg-skills':   'Skill Averages',
+  'admin-pivot':        'Admin Skill Pivot',
+  'admin-team-packages':'All Packages',
+  'admin-settings':     'Settings',
+};
+
+type ViewMode = 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot' | 'admin-settings';
+
 export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const PINNED_KEY = `scout_pinned_${sheetKey}`;
 
   const [players, setPlayers] = useState<ScoutPlayer[]>([]);
@@ -4653,7 +4673,24 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot' | 'admin-settings'>('board');
+  const [viewMode, setViewModeRaw] = useState<ViewMode>(() => {
+    const v = searchParams.get('view');
+    return (v && v in VIEW_LABELS ? v : 'board') as ViewMode;
+  });
+
+  const setViewMode = useCallback((mode: ViewMode) => {
+    setViewModeRaw(mode);
+    const params = new URLSearchParams(window.location.search);
+    if (mode === 'board') params.delete('view'); else params.set('view', mode);
+    const qs = params.toString();
+    router.replace(`${window.location.pathname}${qs ? `?${qs}` : ''}`, { scroll: false });
+  }, [router]);
+
+  useEffect(() => {
+    const label = VIEW_LABELS[viewMode];
+    document.title = label ? `${label} — ScoutBoard` : 'ScoutBoard';
+  }, [viewMode]);
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [yoyoThresholds, setYoyoThresholds] = useState<YoyoThresholds>(DEFAULT_YOYO_THRESHOLDS);
   const [playerSelections, setPlayerSelections] = useState<Record<number, boolean>>({});
@@ -5023,6 +5060,23 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
 
         {/* ── Main content ── */}
         <main className="px-5 md:px-7 py-7 pb-16 mx-auto" style={{ maxWidth: '1200px' }}>
+
+          {/* Report title bar */}
+          {viewMode !== 'board' && VIEW_LABELS[viewMode] && (
+            <div className="flex items-center gap-3 mb-6">
+              <button
+                onClick={() => setViewMode('board')}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 13, padding: 0, lineHeight: 1 }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.7)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.35)'; }}>
+                ← Board
+              </button>
+              <span style={{ color: 'rgba(245,240,232,0.15)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 13 }}>/</span>
+              <h2 style={{ margin: 0, color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 20, fontWeight: 700, letterSpacing: '0.03em' }}>
+                {VIEW_LABELS[viewMode]}
+              </h2>
+            </div>
+          )}
 
           {/* Unauthorized */}
           {unauthorized && !loading && (
