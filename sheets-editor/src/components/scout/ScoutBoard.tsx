@@ -3858,17 +3858,27 @@ function AdminPivotTable({
                   .map((e) => ({ coachName: e.coachName || e.coachEmail, remark: e.remarks }));
                 const remarks = remarkItems.map((r) => `${r.coachName}: ${r.remark}`).join(' · ');
                 const rowBg = pi % 2 === 0 ? '#1a1010' : '#1e1212';
+                const isSelected = (() => {
+                  if (player.rowIndex in playerSelections) return playerSelections[player.rowIndex];
+                  const vals = player.coachEvals.map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || '')).filter((v) => !isNaN(v) && v > 0);
+                  return (player.category?.startsWith('Pre-') ?? false) && vals.length > 0 && Math.min(...vals) >= t.greenMin;
+                })();
 
                 return (
                   <tr key={player.rowIndex} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                     {/* Sticky: Player */}
                     <td style={{ ...stickyCellStyle(0, PLAYER_W, rowBg), padding: '5px 8px' }}>
-                      <button onClick={() => onRowClick(player)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: 12, color: '#f5f0e8', padding: 0, width: '100%' }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#c8a84b'; }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#f5f0e8'; }}>
-                        {player.name}
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {isSelected && (
+                          <span style={{ flexShrink: 0, fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: 9, color: '#a5d6a7', background: 'rgba(27,94,32,0.7)', borderRadius: 3, padding: '1px 4px', letterSpacing: '0.04em', lineHeight: 1.4 }}>✓</span>
+                        )}
+                        <button onClick={() => onRowClick(player)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: 12, color: '#f5f0e8', padding: 0, minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#c8a84b'; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#f5f0e8'; }}>
+                          {player.name}
+                        </button>
+                      </div>
                     </td>
                     {/* Sticky: Yo-Yo */}
                     <td style={{ ...stickyCellStyle(PLAYER_W, YOYO_W, rowBg), textAlign: 'center', padding: '5px 4px' }}>
