@@ -137,12 +137,14 @@ function PackageCard({
   pkg,
   editable,
   requiredIds,
+  manuallySelectedIds,
   onOpen,
   onClone,
 }: {
   pkg: TeamPackage;
   editable: boolean;
   requiredIds: Set<number>;
+  manuallySelectedIds: Set<number>;
   onOpen: () => void;
   onClone?: () => void;
 }) {
@@ -153,6 +155,9 @@ function PackageCard({
   );
   const missingCount = requiredIds.size > 0
     ? [...requiredIds].filter((id) => !pickedIds.has(id)).length
+    : 0;
+  const manualAddedCount = manuallySelectedIds.size > 0
+    ? [...manuallySelectedIds].filter((id) => pickedIds.has(id)).length
     : 0;
 
   return (
@@ -200,16 +205,29 @@ function PackageCard({
         })}
       </div>
 
-      {requiredIds.size > 0 && (
-        <div className="mt-2">
-          {missingCount > 0 ? (
-            <span style={{ color: '#ffb74d', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
-              ⚠ {missingCount} required player{missingCount !== 1 ? 's' : ''} missing
-            </span>
-          ) : (
-            <span style={{ color: '#81c784', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
-              ✓ All required players included
-            </span>
+      {(requiredIds.size > 0 || manuallySelectedIds.size > 0) && (
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          {requiredIds.size > 0 && (
+            missingCount > 0 ? (
+              <span style={{ color: '#ffb74d', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                ⚠ {requiredIds.size - missingCount}/{requiredIds.size} pre-selected
+              </span>
+            ) : (
+              <span style={{ color: '#81c784', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                ✓ {requiredIds.size}/{requiredIds.size} pre-selected
+              </span>
+            )
+          )}
+          {manuallySelectedIds.size > 0 && (
+            manualAddedCount < manuallySelectedIds.size ? (
+              <span style={{ color: 'rgba(165,214,167,0.6)', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                ○ {manualAddedCount}/{manuallySelectedIds.size} selected
+              </span>
+            ) : (
+              <span style={{ color: '#a5d6a7', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                ✓ {manualAddedCount}/{manuallySelectedIds.size} selected
+              </span>
+            )
           )}
         </div>
       )}
@@ -358,6 +376,11 @@ export function TeamSelectionBoard({
   const requiredIds = useMemo(
     () => new Set(requiredPlayers.map((p) => p.rowIndex)),
     [requiredPlayers]
+  );
+
+  const manuallySelectedIds = useMemo(
+    () => new Set(allManuallySelected.map((p) => p.rowIndex)),
+    [allManuallySelected]
   );
 
   // Required players not present in any slot of the package being edited
@@ -1497,7 +1520,7 @@ export function TeamSelectionBoard({
         ) : (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {myPackages.map((pkg) => (
-              <PackageCard key={pkg.packageId} pkg={pkg} editable requiredIds={requiredIds}
+              <PackageCard key={pkg.packageId} pkg={pkg} editable requiredIds={requiredIds} manuallySelectedIds={manuallySelectedIds}
                 onOpen={() => openEdit(pkg, true)}
                 onClone={myPackages.length < MAX_PACKAGES ? () => handleClone(pkg) : undefined} />
             ))}
@@ -1523,7 +1546,7 @@ export function TeamSelectionBoard({
               </div>
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                 {pkgs.map((pkg) => (
-                  <PackageCard key={pkg.packageId} pkg={pkg} editable={false} requiredIds={requiredIds}
+                  <PackageCard key={pkg.packageId} pkg={pkg} editable={false} requiredIds={requiredIds} manuallySelectedIds={manuallySelectedIds}
                     onOpen={() => openEdit(pkg, false)}
                     onClone={myPackages.length < MAX_PACKAGES ? () => handleClone(pkg) : undefined} />
                 ))}
