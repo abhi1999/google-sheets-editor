@@ -1570,12 +1570,6 @@ function SelectionSummaryTable({
       });
   }, [players, allBatchNames]);
 
-  const ragCounts = useMemo(() => {
-    const c: Record<RagKey, number> = { all: baseRows.length, green: 0, amber: 0, red: 0, grey: 0 };
-    baseRows.forEach((p) => { c[ragCategory(p, t)]++; });
-    return c;
-  }, [baseRows, t]);
-
   const filtered = useMemo(() => {
     return baseRows.filter((p) => {
       if (ragFilters.size > 0 && !ragFilters.has(ragCategory(p, t))) return false;
@@ -1584,6 +1578,39 @@ function SelectionSummaryTable({
       return true;
     });
   }, [baseRows, ragFilters, catFilters, divFilter, t]);
+
+  // Cross-filter counts: each group is counted against the OTHER active filters only
+  const ragCounts = useMemo(() => {
+    const c: Record<RagKey, number> = { all: 0, green: 0, amber: 0, red: 0, grey: 0 };
+    baseRows.forEach((p) => {
+      if (catFilters.size > 0 && !catFilters.has(p.category)) return;
+      if (divFilter !== 'all' && p.div !== divFilter) return;
+      const key = ragCategory(p, t);
+      c[key]++;
+      c.all++;
+    });
+    return c;
+  }, [baseRows, catFilters, divFilter, t]);
+
+  const catCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    baseRows.forEach((p) => {
+      if (ragFilters.size > 0 && !ragFilters.has(ragCategory(p, t))) return;
+      if (divFilter !== 'all' && p.div !== divFilter) return;
+      m.set(p.category, (m.get(p.category) ?? 0) + 1);
+    });
+    return m;
+  }, [baseRows, ragFilters, divFilter, t]);
+
+  const divCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    baseRows.forEach((p) => {
+      if (ragFilters.size > 0 && !ragFilters.has(ragCategory(p, t))) return;
+      if (catFilters.size > 0 && !catFilters.has(p.category)) return;
+      if (p.div) m.set(p.div, (m.get(p.div) ?? 0) + 1);
+    });
+    return m;
+  }, [baseRows, ragFilters, catFilters, t]);
 
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
 
@@ -1668,11 +1695,12 @@ function SelectionSummaryTable({
               {allCategories.map((cat) => {
                 const col = getCategoryColor(cat);
                 const isActive = catFilters.has(cat);
+                const count = catCounts.get(cat) ?? 0;
                 return (
                   <button
                     key={cat}
                     onClick={() => toggleCat(cat)}
-                    className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                    className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5"
                     style={{
                       fontFamily: 'Barlow Condensed, sans-serif',
                       background: isActive ? col.bg : `${col.bg}55`,
@@ -1681,6 +1709,7 @@ function SelectionSummaryTable({
                     }}
                   >
                     {cat}
+                    <span className="opacity-70 text-[10px]">({count})</span>
                   </button>
                 );
               })}
@@ -1702,9 +1731,10 @@ function SelectionSummaryTable({
             <div className="flex items-center gap-1.5 flex-wrap">
               {allDivs.map((div) => {
                 const isActive = divFilter === div;
+                const count = divCounts.get(div) ?? 0;
                 return (
                   <button key={div} onClick={() => setDivFilter(isActive ? 'all' : div)}
-                    className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                    className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5"
                     style={{
                       fontFamily: 'Barlow Condensed, sans-serif',
                       background: isActive ? 'rgba(200,168,75,0.2)' : 'rgba(255,255,255,0.05)',
@@ -1712,6 +1742,7 @@ function SelectionSummaryTable({
                       border: `1px solid ${isActive ? 'rgba(200,168,75,0.45)' : 'rgba(245,240,232,0.08)'}`,
                     }}>
                     {div}
+                    <span className="opacity-70 text-[10px]">({count})</span>
                   </button>
                 );
               })}
