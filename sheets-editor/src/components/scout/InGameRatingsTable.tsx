@@ -10,7 +10,7 @@ const FONT = 'Barlow Condensed, sans-serif';
 
 function sectionsRated(r: InGameRating): string[] {
   const out: string[] = [];
-  if (Object.values(r.battingSkills).some((v) => v > 0) || r.battingCatchesDropped.length > 0 || r.battingNotes.trim()) out.push('BAT');
+  if (r.battedThisGame && (Object.values(r.battingSkills).some((v) => v > 0) || r.battingCatchesDropped.length > 0 || r.battingNotes.trim())) out.push('BAT');
   if (r.bowledFast) out.push('FB');
   if (r.bowledSpin) out.push('SB');
   if (r.keptWicket) out.push('WK');

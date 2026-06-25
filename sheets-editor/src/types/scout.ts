@@ -118,6 +118,7 @@ export interface CatchDroppedEntry {
 }
 
 export interface InGameRating {
+  battedThisGame: boolean;
   battingSkills: Record<string, number>;
   battingCatchesDropped: CatchDroppedEntry[];
   battingNotes: string;
@@ -153,4 +154,31 @@ export interface InGameRatingPayload {
   teamIndex: number;
   gameNumber: number;
   rating: InGameRating;
+  // Client-generated idempotency key — lets a queued offline retry safely
+  // no-op if the original request actually succeeded server-side.
+  clientId?: string;
+}
+
+export interface OpportunityEntry {
+  playerRowIndex: number;
+  battingOrder: number | null; // batting position, null = did not bat
+  bowlingOrder: number | null; // bowling sequence position, null = did not bowl
+  oversBowled: number; // whole overs, 0 if did not bowl
+}
+
+export interface OpportunityRecord {
+  teamIndex: number; // 1-6, matches PackageTeam.teamIndex
+  gameNumber: number; // 1-6
+  coachName: string; // coach who ran this team for this game — free text
+  entries: OpportunityEntry[];
+  updatedBy: string;
+  updatedByName: string;
+  updatedAt: string;
+}
+
+export interface OpportunitySheetPayload {
+  teamIndex: number;
+  gameNumber: number;
+  coachName: string;
+  entries: OpportunityEntry[];
 }

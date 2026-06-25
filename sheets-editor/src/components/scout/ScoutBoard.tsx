@@ -11,6 +11,7 @@ import { PlayerModal } from './PlayerModal';
 import { TeamSelectionBoard } from './TeamSelectionBoard';
 import { GameRatingBoard } from './GameRatingBoard';
 import { InGameRatingsTable } from './InGameRatingsTable';
+import { OpportunitySheetBoard } from './OpportunitySheetBoard';
 
 interface ScoutBoardProps {
   sheetKey: string;
@@ -4684,6 +4685,7 @@ const VIEW_LABELS: Record<string, string> = {
   'team-packages':      'Team Packages',
   'in-game-ratings':    'In-Game Ratings',
   'my-in-game-ratings': 'My In-Game Evaluations',
+  'opportunity-sheet':  'Opportunity Sheet',
   'skill-pivot':        'Skill Pivot',
   'admin-evals':        'All Coach Evals',
   'admin-skill-details':'All Skill Notes',
@@ -4694,10 +4696,10 @@ const VIEW_LABELS: Record<string, string> = {
   'admin-settings':     'Settings',
 };
 
-type ViewMode = 'home' | 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'in-game-ratings' | 'my-in-game-ratings' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-in-game-ratings' | 'admin-pivot' | 'admin-settings';
+type ViewMode = 'home' | 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'in-game-ratings' | 'my-in-game-ratings' | 'opportunity-sheet' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-in-game-ratings' | 'admin-pivot' | 'admin-settings';
 
 // Views reachable directly from the home picker — their breadcrumb "back" goes to Home.
-const TOP_LEVEL_VIEWS = new Set<ViewMode>(['board', 'in-game-ratings']);
+const TOP_LEVEL_VIEWS = new Set<ViewMode>(['board', 'in-game-ratings', 'opportunity-sheet']);
 // Views that report on in-game ratings nest under the In-Game Ratings board, not the tryout board.
 const IN_GAME_NESTED_VIEWS = new Set<ViewMode>(['my-in-game-ratings', 'admin-in-game-ratings']);
 
@@ -5084,6 +5086,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     { label: 'Team Packages', mode: 'team-packages' },
                     { label: 'In-Game Ratings', mode: 'in-game-ratings' },
                     { label: 'My In-Game Evaluations', mode: 'my-in-game-ratings' },
+                    { label: 'Opportunity Sheet', mode: 'opportunity-sheet' },
                     { label: 'Skill Pivot', mode: 'skill-pivot' },
                   ]}
                   activeMode={viewMode}
@@ -5148,10 +5151,10 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
               </h2>
               <p className="text-sm mb-10 text-center" style={{ color: 'rgba(245,240,232,0.45)', maxWidth: 380 }}>
                 {hasApprovedRoster
-                  ? 'Choose tryout evaluations or in-game performance ratings.'
+                  ? 'Choose tryout evaluations, in-game performance ratings, or the opportunity sheet.'
                   : 'Rate players against the tryout scoring rubric.'}
               </p>
-              <div className="flex flex-col md:flex-row gap-5 w-full" style={{ maxWidth: hasApprovedRoster ? 640 : 320 }}>
+              <div className="flex flex-col md:flex-row gap-5 w-full" style={{ maxWidth: hasApprovedRoster ? 960 : 320 }}>
                 <button
                   onClick={() => setViewMode('board')}
                   className="flex-1 text-left rounded-xl border p-6 transition-all hover:-translate-y-0.5 cursor-pointer"
@@ -5185,6 +5188,25 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     </div>
                     <p className="text-sm" style={{ color: 'rgba(245,240,232,0.55)' }}>
                       Rate a team&rsquo;s players game by game — batting, bowling, wicketkeeping, and fielding.
+                    </p>
+                  </button>
+                )}
+                {hasApprovedRoster && (
+                  <button
+                    onClick={() => setViewMode('opportunity-sheet')}
+                    className="flex-1 text-left rounded-xl border p-6 transition-all hover:-translate-y-0.5 cursor-pointer"
+                    style={{ background: '#1e1212', borderColor: 'rgba(192,57,43,0.25)' }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#c0392b'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(192,57,43,0.25)'; }}
+                  >
+                    <div
+                      className="text-xs font-bold uppercase tracking-widest mb-3"
+                      style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#c8a84b' }}
+                    >
+                      Opportunity Sheet
+                    </div>
+                    <p className="text-sm" style={{ color: 'rgba(245,240,232,0.55)' }}>
+                      Track batting order, bowling order, and overs given to each player, game by game.
                     </p>
                   </button>
                 )}
@@ -5318,6 +5340,11 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {/* My In-Game Evaluations */}
           {!loading && !error && viewMode === 'my-in-game-ratings' && (
             <InGameRatingsTable players={players} user={user} sheetKey={sheetKey} scope="mine" />
+          )}
+
+          {/* Opportunity Sheet */}
+          {!loading && !error && viewMode === 'opportunity-sheet' && (
+            <OpportunitySheetBoard players={players} sheetKey={sheetKey} />
           )}
 
           {/* Admin: All In-Game Ratings */}

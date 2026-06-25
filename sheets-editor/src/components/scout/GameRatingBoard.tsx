@@ -4,10 +4,20 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { ScoutPlayer, TeamPackage, InGameRatingRecord, InGameRatingPayload } from '@/types/scout';
 import { GAME_NUMBERS } from '@/lib/ingame-schemas';
 import { playerInitials } from '@/lib/scout-schemas';
+import { getQueue, enqueueRating, removeFromQueue, markQueueError } from '@/lib/offline-ratings-queue';
 import { TEAM_COLORS } from './TeamSelectionBoard';
 import { InGameRatingModal } from './InGameRatingModal';
 
 const FONT = 'Barlow Condensed, sans-serif';
+
+function newClientId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `cid_${Date.now()}_${Math.random()}`;
+}
+
+// Retrying won't fix a bad payload or an auth rejection — only queue transient failures.
+function isRetryable(status: number): boolean {
+  return status !== 400 && status !== 401 && status !== 403;
+}
 
 export function GameRatingBoard({
   players,
@@ -25,6 +35,7 @@ export function GameRatingBoard({
   const [activePlayer, setActivePlayer] = useState<ScoutPlayer | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -57,6 +68,55 @@ export function GameRatingBoard({
     }
   }, [toast]);
 
+  const refreshPendingCount = useCallback(() => {
+    setPendingCount(getQueue(sheetKey).length);
+  }, [sheetKey]);
+
+  useEffect(() => { refreshPendingCount(); }, [refreshPendingCount]);
+
+  // Flushes queued offline ratings sequentially, stopping early on the first
+  // transient failure (no point hammering the rest of the queue immediately).
+  const flushQueue = useCallback(async () => {
+    const queue = getQueue(sheetKey);
+    if (queue.length === 0) return;
+    for (const item of queue) {
+      try {
+        const res = await fetch(`/api/scout/in-game-ratings?sheetKey=${encodeURIComponent(sheetKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...item.payload, clientId: item.clientId }),
+        });
+        if (res.ok) {
+          removeFromQueue(sheetKey, item.clientId);
+        } else if (isRetryable(res.status)) {
+          markQueueError(sheetKey, item.clientId, `HTTP ${res.status}`);
+          break;
+        } else {
+          // Server will never accept this payload — drop it rather than retry forever.
+          removeFromQueue(sheetKey, item.clientId);
+          setToast('A queued rating could not be saved and was dropped — please re-enter it');
+        }
+      } catch {
+        markQueueError(sheetKey, item.clientId, 'Network error');
+        break;
+      }
+    }
+    refreshPendingCount();
+    fetchRatings();
+  }, [sheetKey, refreshPendingCount, fetchRatings]);
+
+  useEffect(() => {
+    flushQueue();
+    window.addEventListener('online', flushQueue);
+    return () => window.removeEventListener('online', flushQueue);
+  }, [flushQueue]);
+
+  useEffect(() => {
+    if (pendingCount === 0) return;
+    const interval = setInterval(flushQueue, 30000);
+    return () => clearInterval(interval);
+  }, [pendingCount, flushQueue]);
+
   const selectedTeam = useMemo(
     () => approved?.teams.find((t) => t.teamIndex === selectedTeamIndex) || null,
     [approved, selectedTeamIndex]
@@ -77,21 +137,32 @@ export function GameRatingBoard({
 
   const handleSaveRating = async (payload: InGameRatingPayload) => {
     setSaving(true);
+    const clientId = newClientId();
     try {
       const res = await fetch(`/api/scout/in-game-ratings?sheetKey=${encodeURIComponent(sheetKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, clientId }),
       });
       if (res.ok) {
         await fetchRatings();
         setActivePlayer(null);
         setToast('Rating saved');
+      } else if (isRetryable(res.status)) {
+        enqueueRating(sheetKey, payload, clientId);
+        refreshPendingCount();
+        setActivePlayer(null);
+        setToast('Saved offline — will sync automatically');
       } else {
-        setToast('Failed to save rating');
+        const data = await res.json().catch(() => ({}));
+        setToast(data.error || 'Failed to save rating');
       }
     } catch {
-      setToast('Failed to save rating');
+      // fetch threw — network unreachable; queue for retry rather than losing the rating.
+      enqueueRating(sheetKey, payload, clientId);
+      refreshPendingCount();
+      setActivePlayer(null);
+      setToast('Saved offline — will sync automatically');
     }
     setSaving(false);
   };
@@ -121,6 +192,25 @@ export function GameRatingBoard({
         <span style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT, fontSize: 12 }}>
           Roster: {approved.packageName}
         </span>
+        {pendingCount > 0 && (
+          <div className="flex items-center gap-2">
+            <span style={{
+              background: 'rgba(245,166,35,0.15)', color: '#ffb74d', borderRadius: 5,
+              padding: '3px 10px', fontFamily: FONT, fontSize: 11, fontWeight: 700,
+            }}>
+              ⏳ {pendingCount} pending sync
+            </span>
+            <button
+              onClick={() => flushQueue()}
+              style={{
+                fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 5,
+                background: 'none', color: '#ffb74d', border: '1px solid rgba(255,183,77,0.4)', cursor: 'pointer',
+              }}
+            >
+              Sync now
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Game tabs */}

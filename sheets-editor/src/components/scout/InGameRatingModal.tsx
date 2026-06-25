@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import type { ScoutPlayer, InGameRating, InGameRatingPayload, WkEvent, WkEventType, FieldingEntry, FieldingEntryType, CatchDroppedEntry } from '@/types/scout';
 import { playerInitials } from '@/lib/scout-schemas';
-import { BATTING_SKILLS, FAST_BOWLING_SKILLS, SPIN_BOWLING_SKILLS, emptyInGameRating } from '@/lib/ingame-schemas';
+import { BATTING_SKILL_SECTIONS, FAST_BOWLING_SKILL_SECTIONS, SPIN_BOWLING_SKILL_SECTIONS, emptyInGameRating } from '@/lib/ingame-schemas';
+import type { InGameSkillSection } from '@/lib/ingame-schemas';
 import { SkillStars } from './PlayerModal';
 
 const FONT = 'Barlow Condensed, sans-serif';
@@ -191,13 +192,40 @@ function NotesBox({ value, placeholder, onChange }: { value: string; placeholder
   );
 }
 
-function SkillRow({ name, value, onChange }: { name: string; value: number; onChange: (v: number) => void }) {
+function SkillRow({ name, desc, value, onChange }: { name: string; desc?: string; value: number; onChange: (v: number) => void }) {
   return (
     <div className="flex items-center justify-between gap-3 px-5 py-2 border-b last:border-b-0" style={{ borderColor: '#f0f0f0' }}>
-      <span className="text-sm font-bold uppercase tracking-wide" style={{ fontFamily: FONT, color: '#1a1a1a' }}>
+      <span className="text-sm font-bold uppercase tracking-wide" style={{ fontFamily: FONT, color: '#1a1a1a' }} title={desc}>
         {name}
       </span>
       <SkillStars skillName={name} value={value} onChange={onChange} />
+    </div>
+  );
+}
+
+function SkillSectionGroup({
+  section,
+  values,
+  onChange,
+}: {
+  section: InGameSkillSection;
+  values: Record<string, number>;
+  onChange: (name: string, value: number) => void;
+}) {
+  return (
+    <div>
+      <div className="px-5 py-1.5 text-xs font-bold uppercase tracking-widest" style={{ fontFamily: FONT, color: '#fff', background: '#2e4030' }}>
+        {section.letter}. {section.name}
+      </div>
+      {section.skills.map((sk) => (
+        <SkillRow
+          key={sk.name}
+          name={sk.name}
+          desc={sk.desc}
+          value={values[sk.name] || 0}
+          onChange={(v) => onChange(sk.name, v)}
+        />
+      ))}
     </div>
   );
 }
@@ -214,6 +242,7 @@ interface InGameRatingModalProps {
 export function InGameRatingModal({ player, gameNumber, teamIndex, onClose, onSave, saving }: InGameRatingModalProps) {
   const [rating, setRating] = useState<InGameRating>(() => ({
     ...emptyInGameRating(),
+    battedThisGame: player.schema === 'Batsman',
     bowledFast: player.schema === 'Fast Bowler',
     bowledSpin: player.schema === 'Spin Bowler',
   }));
@@ -265,7 +294,7 @@ export function InGameRatingModal({ player, gameNumber, teamIndex, onClose, onSa
               {player.name}
             </h2>
             <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#c8a84b', fontFamily: FONT }}>
-              {player.category}
+              {player.category} · Game {gameNumber}
             </p>
           </div>
           <button
@@ -282,26 +311,40 @@ export function InGameRatingModal({ player, gameNumber, teamIndex, onClose, onSa
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           <SectionHeader title="Batting" />
-          {BATTING_SKILLS.map((sk) => (
-            <SkillRow
-              key={sk.name}
-              name={sk.name}
-              value={rating.battingSkills[sk.name] || 0}
-              onChange={(v) => setSkill('battingSkills', sk.name, v)}
-            />
-          ))}
-          <div className="px-5 py-1.5 text-xs font-bold uppercase tracking-wide" style={{ fontFamily: FONT, color: '#4a4a4a' }}>
-            Catches Dropped (off this player&rsquo;s batting)
+          <div className="px-5 py-2.5">
+            <label className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide" style={{ fontFamily: FONT, color: '#1a1a1a' }}>
+              <input
+                type="checkbox"
+                checked={rating.battedThisGame}
+                onChange={(e) => setRating((prev) => ({ ...prev, battedThisGame: e.target.checked }))}
+              />
+              Batted this game
+            </label>
           </div>
-          <CatchDroppedEntryList
-            entries={rating.battingCatchesDropped}
-            onChange={(battingCatchesDropped) => setRating((prev) => ({ ...prev, battingCatchesDropped }))}
-          />
-          <NotesBox
-            value={rating.battingNotes}
-            placeholder="General comments on batting…"
-            onChange={(battingNotes) => setRating((prev) => ({ ...prev, battingNotes }))}
-          />
+          {rating.battedThisGame && (
+            <>
+              {BATTING_SKILL_SECTIONS.map((sec) => (
+                <SkillSectionGroup
+                  key={sec.letter}
+                  section={sec}
+                  values={rating.battingSkills}
+                  onChange={(name, v) => setSkill('battingSkills', name, v)}
+                />
+              ))}
+              <div className="px-5 py-1.5 text-xs font-bold uppercase tracking-wide" style={{ fontFamily: FONT, color: '#4a4a4a' }}>
+                Catches Dropped (off this player&rsquo;s batting)
+              </div>
+              <CatchDroppedEntryList
+                entries={rating.battingCatchesDropped}
+                onChange={(battingCatchesDropped) => setRating((prev) => ({ ...prev, battingCatchesDropped }))}
+              />
+              <NotesBox
+                value={rating.battingNotes}
+                placeholder="General comments on batting…"
+                onChange={(battingNotes) => setRating((prev) => ({ ...prev, battingNotes }))}
+              />
+            </>
+          )}
 
           <SectionHeader title="Fast Bowling" />
           <div className="px-5 py-2.5">
@@ -316,12 +359,12 @@ export function InGameRatingModal({ player, gameNumber, teamIndex, onClose, onSa
           </div>
           {rating.bowledFast && (
             <>
-              {FAST_BOWLING_SKILLS.map((sk) => (
-                <SkillRow
-                  key={sk.name}
-                  name={sk.name}
-                  value={rating.fastBowlingSkills[sk.name] || 0}
-                  onChange={(v) => setSkill('fastBowlingSkills', sk.name, v)}
+              {FAST_BOWLING_SKILL_SECTIONS.map((sec) => (
+                <SkillSectionGroup
+                  key={sec.letter}
+                  section={sec}
+                  values={rating.fastBowlingSkills}
+                  onChange={(name, v) => setSkill('fastBowlingSkills', name, v)}
                 />
               ))}
               <div className="px-5 py-1.5 text-xs font-bold uppercase tracking-wide" style={{ fontFamily: FONT, color: '#4a4a4a' }}>
@@ -352,12 +395,12 @@ export function InGameRatingModal({ player, gameNumber, teamIndex, onClose, onSa
           </div>
           {rating.bowledSpin && (
             <>
-              {SPIN_BOWLING_SKILLS.map((sk) => (
-                <SkillRow
-                  key={sk.name}
-                  name={sk.name}
-                  value={rating.spinBowlingSkills[sk.name] || 0}
-                  onChange={(v) => setSkill('spinBowlingSkills', sk.name, v)}
+              {SPIN_BOWLING_SKILL_SECTIONS.map((sec) => (
+                <SkillSectionGroup
+                  key={sec.letter}
+                  section={sec}
+                  values={rating.spinBowlingSkills}
+                  onChange={(name, v) => setSkill('spinBowlingSkills', name, v)}
                 />
               ))}
               <div className="px-5 py-1.5 text-xs font-bold uppercase tracking-wide" style={{ fontFamily: FONT, color: '#4a4a4a' }}>

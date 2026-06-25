@@ -97,7 +97,16 @@ export async function POST(request: NextRequest) {
 
     await ensureTabExists(TAB, HEADERS, sheetKey);
 
-    const id = `${user.email}_${Date.now()}`;
+    // A clientId lets a queued offline retry safely no-op if the original
+    // request actually succeeded server-side but the response was lost.
+    if (body.clientId) {
+      const { rows: existingRows } = await readTab(TAB, sheetKey);
+      if (existingRows.some((r) => String(r['Id']) === body.clientId)) {
+        return NextResponse.json({ success: true, id: body.clientId, duplicate: true });
+      }
+    }
+
+    const id = body.clientId || `${user.email}_${Date.now()}`;
     const rowValues = [
       id,
       user.email,

@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { ScoutPlayer, InGameRatingRecord, InGameRating, WkEvent, FieldingEntry, CatchDroppedEntry } from '@/types/scout';
 import { playerInitials } from '@/lib/scout-schemas';
-import { BATTING_SKILLS, FAST_BOWLING_SKILLS, SPIN_BOWLING_SKILLS } from '@/lib/ingame-schemas';
+import { BATTING_SKILL_SECTIONS, FAST_BOWLING_SKILL_SECTIONS, SPIN_BOWLING_SKILL_SECTIONS } from '@/lib/ingame-schemas';
+import type { InGameSkillSection } from '@/lib/ingame-schemas';
 
 const FONT = 'Barlow Condensed, sans-serif';
 
@@ -17,15 +18,26 @@ function StaticStars({ value }: { value: number }) {
   );
 }
 
-function SkillList({ skills, defs }: { skills: Record<string, number>; defs: { name: string }[] }) {
+function SkillList({ skills, sections }: { skills: Record<string, number>; sections: InGameSkillSection[] }) {
   return (
     <div className="px-5 py-2">
-      {defs.map((sk) => (
-        <div key={sk.name} className="flex items-center justify-between gap-3 py-1">
-          <span className="text-xs font-bold uppercase tracking-wide" style={{ fontFamily: FONT, color: '#1a1a1a' }}>{sk.name}</span>
-          <StaticStars value={skills[sk.name] || 0} />
-        </div>
-      ))}
+      {sections.map((sec) => {
+        const rated = sec.skills.filter((sk) => (skills[sk.name] || 0) > 0);
+        if (rated.length === 0) return null;
+        return (
+          <div key={sec.letter} className="mb-2 last:mb-0">
+            <div className="text-[0.65rem] font-bold uppercase tracking-widest mb-1" style={{ fontFamily: FONT, color: '#8a8a8a' }}>
+              {sec.letter}. {sec.name}
+            </div>
+            {rated.map((sk) => (
+              <div key={sk.name} className="flex items-center justify-between gap-3 py-1">
+                <span className="text-xs font-bold uppercase tracking-wide" style={{ fontFamily: FONT, color: '#1a1a1a' }}>{sk.name}</span>
+                <StaticStars value={skills[sk.name] || 0} />
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -117,9 +129,9 @@ function RatingRecordCard({ record, teamName, isMe, onDelete }: { record: InGame
         </div>
       </div>
 
-      {(hasSkillValue(r.battingSkills) || r.battingCatchesDropped.length > 0 || r.battingNotes.trim()) && (
+      {r.battedThisGame && (hasSkillValue(r.battingSkills) || r.battingCatchesDropped.length > 0 || r.battingNotes.trim()) && (
         <SectionBlock title="Batting">
-          <SkillList skills={r.battingSkills} defs={BATTING_SKILLS} />
+          <SkillList skills={r.battingSkills} sections={BATTING_SKILL_SECTIONS} />
           <CatchesDroppedLine entries={r.battingCatchesDropped} label="Catches dropped off batting" />
           <NotesLine value={r.battingNotes} />
         </SectionBlock>
@@ -127,7 +139,7 @@ function RatingRecordCard({ record, teamName, isMe, onDelete }: { record: InGame
 
       {r.bowledFast && (
         <SectionBlock title="Fast Bowling">
-          <SkillList skills={r.fastBowlingSkills} defs={FAST_BOWLING_SKILLS} />
+          <SkillList skills={r.fastBowlingSkills} sections={FAST_BOWLING_SKILL_SECTIONS} />
           <CatchesDroppedLine entries={r.fastBowlingCatchesDropped} label="Catches dropped off bowling" />
           <NotesLine value={r.fastBowlingNotes} />
         </SectionBlock>
@@ -135,7 +147,7 @@ function RatingRecordCard({ record, teamName, isMe, onDelete }: { record: InGame
 
       {r.bowledSpin && (
         <SectionBlock title="Spin Bowling">
-          <SkillList skills={r.spinBowlingSkills} defs={SPIN_BOWLING_SKILLS} />
+          <SkillList skills={r.spinBowlingSkills} sections={SPIN_BOWLING_SKILL_SECTIONS} />
           <CatchesDroppedLine entries={r.spinBowlingCatchesDropped} label="Catches dropped off bowling" />
           <NotesLine value={r.spinBowlingNotes} />
         </SectionBlock>
