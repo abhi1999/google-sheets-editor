@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { ensureTabExists, readTab, appendRowsToTab } from '@/lib/sheets';
+import { ensureTabExists, readTab, appendRowsToTab, updateRowInTab } from '@/lib/sheets';
 import { parseInGameRating } from '@/lib/ingame-schemas';
 import type { InGameRatingPayload, InGameRatingRecord } from '@/types/scout';
 
@@ -118,5 +118,41 @@ export async function POST(request: NextRequest) {
     if (error.name === 'AuthError') return NextResponse.json({ error: error.message }, { status: error.statusCode });
     console.error('[POST /api/scout/in-game-ratings]', error);
     return NextResponse.json({ error: error.message || 'Failed to save rating' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const url = new URL(request.url);
+    const sheetKey = url.searchParams.get('sheetKey') || 'tryout';
+    const id = url.searchParams.get('id');
+
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+    const user = await requireAuth();
+    const isDemo = sheetKey === 'demo';
+
+    if (!isDemo && !(await checkAuthorized(user.email, sheetKey))) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 403 });
+    }
+
+    await ensureTabExists(TAB, HEADERS, sheetKey);
+    const { rows } = await readTab(TAB, sheetKey);
+
+    const row = rows.find((r) => String(r['Id']) === id);
+    if (!row) return NextResponse.json({ error: 'Rating not found' }, { status: 404 });
+
+    if (String(row['CoachEmail'] || '').toLowerCase() !== user.email.toLowerCase()) {
+      return NextResponse.json({ error: 'You can only delete your own ratings' }, { status: 403 });
+    }
+
+    // Clear the row — blank Id means it will be filtered out on future reads
+    await updateRowInTab(row.__rowIndex as number, ['', '', '', '', '', '', '', ''], TAB, sheetKey);
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    if (error.name === 'AuthError') return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    console.error('[DELETE /api/scout/in-game-ratings]', error);
+    return NextResponse.json({ error: error.message || 'Failed to delete rating' }, { status: 500 });
   }
 }

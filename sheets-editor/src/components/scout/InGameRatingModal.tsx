@@ -265,7 +265,7 @@ export function InGameRatingModal({ player, gameNumber, teamIndex, onClose, onSa
               {player.name}
             </h2>
             <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#c8a84b', fontFamily: FONT }}>
-              Game {gameNumber} · {player.schema}
+              {player.category}
             </p>
           </div>
           <button

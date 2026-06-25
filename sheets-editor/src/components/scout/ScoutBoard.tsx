@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, Fragment, createContext, useContext } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment, createContext, useContext } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import type { ScoutPlayer, PlayerEvaluation, SchemaType, CoachEval } from '@/types/scout';
@@ -10,6 +10,7 @@ import Papa from 'papaparse';
 import { PlayerModal } from './PlayerModal';
 import { TeamSelectionBoard } from './TeamSelectionBoard';
 import { GameRatingBoard } from './GameRatingBoard';
+import { InGameRatingsTable } from './InGameRatingsTable';
 
 interface ScoutBoardProps {
   sheetKey: string;
@@ -4682,20 +4683,29 @@ const VIEW_LABELS: Record<string, string> = {
   'selected-players':   'Selected Players',
   'team-packages':      'Team Packages',
   'in-game-ratings':    'In-Game Ratings',
+  'my-in-game-ratings': 'My In-Game Evaluations',
   'skill-pivot':        'Skill Pivot',
   'admin-evals':        'All Coach Evals',
   'admin-skill-details':'All Skill Notes',
   'admin-agg-skills':   'Skill Averages',
   'admin-pivot':        'Admin Skill Pivot',
   'admin-team-packages':'All Packages',
+  'admin-in-game-ratings': 'All In-Game Ratings',
   'admin-settings':     'Settings',
 };
 
-type ViewMode = 'home' | 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'in-game-ratings' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot' | 'admin-settings';
+type ViewMode = 'home' | 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'in-game-ratings' | 'my-in-game-ratings' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-in-game-ratings' | 'admin-pivot' | 'admin-settings';
 
 // Views reachable directly from the home picker — their breadcrumb "back" goes to Home.
-// Everything else nests under the Tryout board, so its "back" goes to 'board'.
 const TOP_LEVEL_VIEWS = new Set<ViewMode>(['board', 'in-game-ratings']);
+// Views that report on in-game ratings nest under the In-Game Ratings board, not the tryout board.
+const IN_GAME_NESTED_VIEWS = new Set<ViewMode>(['my-in-game-ratings', 'admin-in-game-ratings']);
+
+function getBackTarget(viewMode: ViewMode): { target: ViewMode; label: string } {
+  if (TOP_LEVEL_VIEWS.has(viewMode)) return { target: 'home', label: '← Home' };
+  if (IN_GAME_NESTED_VIEWS.has(viewMode)) return { target: 'in-game-ratings', label: '← In-Game Ratings' };
+  return { target: 'board', label: '← Board' };
+}
 
 export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const router = useRouter();
@@ -4729,19 +4739,45 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
     document.title = label ? `${label} — ScoutBoard` : 'ScoutBoard';
   }, [viewMode]);
 
+  // Whether an admin has finalized a Team Package — the In-Game Ratings option only
+  // makes sense once a roster exists, so Home hides it (and skips straight to the
+  // tryout board on first load) until one is approved.
+  const [hasApprovedRoster, setHasApprovedRoster] = useState<boolean | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/scout/approved-roster?sheetKey=${encodeURIComponent(sheetKey)}`);
+        const data = await res.json();
+        setHasApprovedRoster(!!data.approved);
+      } catch {
+        setHasApprovedRoster(false);
+      }
+    })();
+  }, [sheetKey]);
+
+  const autoRedirectedHomeRef = useRef(false);
+  useEffect(() => {
+    if (hasApprovedRoster === false && viewMode === 'home' && !autoRedirectedHomeRef.current) {
+      autoRedirectedHomeRef.current = true;
+      setViewMode('board');
+    }
+  }, [hasApprovedRoster, viewMode, setViewMode]);
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [yoyoThresholds, setYoyoThresholds] = useState<YoyoThresholds>(DEFAULT_YOYO_THRESHOLDS);
   const [playerSelections, setPlayerSelections] = useState<Record<number, boolean>>({});
   const [selectionSaving, setSelectionSaving] = useState(false);
   const isDemo = sheetKey === 'demo';
 
-  const [pinnedIds, setPinnedIds] = useState<Set<number>>(() => {
-    if (typeof window === 'undefined') return new Set();
+  // Starts empty on both server and client's first render to avoid a hydration
+  // mismatch, then loads the real value from localStorage post-mount.
+  const [pinnedIds, setPinnedIds] = useState<Set<number>>(() => new Set());
+  useEffect(() => {
     try {
-      const stored = localStorage.getItem(`scout_pinned_${sheetKey}`);
-      return stored ? new Set<number>(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
-  });
+      const stored = localStorage.getItem(PINNED_KEY);
+      setPinnedIds(stored ? new Set<number>(JSON.parse(stored)) : new Set());
+    } catch { setPinnedIds(new Set()); }
+  }, [PINNED_KEY]);
 
   useEffect(() => {
     setLoading(true);
@@ -5047,6 +5083,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     { label: 'Selected Players', mode: 'selected-players' },
                     { label: 'Team Packages', mode: 'team-packages' },
                     { label: 'In-Game Ratings', mode: 'in-game-ratings' },
+                    { label: 'My In-Game Evaluations', mode: 'my-in-game-ratings' },
                     { label: 'Skill Pivot', mode: 'skill-pivot' },
                   ]}
                   activeMode={viewMode}
@@ -5064,6 +5101,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                         { label: 'Skill Averages', mode: 'admin-agg-skills' },
                         { label: 'Skill Pivot', mode: 'admin-pivot' },
                         { label: 'All Packages', mode: 'admin-team-packages' },
+                        { label: 'All In-Game Ratings', mode: 'admin-in-game-ratings' },
                         { label: 'Settings', mode: 'admin-settings' },
                       ]}
                       activeMode={viewMode}
@@ -5086,11 +5124,11 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {viewMode !== 'home' && VIEW_LABELS[viewMode] && (
             <div className="flex items-center gap-3 mb-6">
               <button
-                onClick={() => setViewMode(TOP_LEVEL_VIEWS.has(viewMode) ? 'home' : 'board')}
+                onClick={() => setViewMode(getBackTarget(viewMode).target)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 13, padding: 0, lineHeight: 1 }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.7)'; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.35)'; }}>
-                {TOP_LEVEL_VIEWS.has(viewMode) ? '← Home' : '← Board'}
+                {getBackTarget(viewMode).label}
               </button>
               <span style={{ color: 'rgba(245,240,232,0.15)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 13 }}>/</span>
               <h2 style={{ margin: 0, color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 20, fontWeight: 700, letterSpacing: '0.03em' }}>
@@ -5109,9 +5147,11 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                 What would you like to rate?
               </h2>
               <p className="text-sm mb-10 text-center" style={{ color: 'rgba(245,240,232,0.45)', maxWidth: 380 }}>
-                Choose tryout evaluations or in-game performance ratings.
+                {hasApprovedRoster
+                  ? 'Choose tryout evaluations or in-game performance ratings.'
+                  : 'Rate players against the tryout scoring rubric.'}
               </p>
-              <div className="flex flex-col md:flex-row gap-5 w-full" style={{ maxWidth: 640 }}>
+              <div className="flex flex-col md:flex-row gap-5 w-full" style={{ maxWidth: hasApprovedRoster ? 640 : 320 }}>
                 <button
                   onClick={() => setViewMode('board')}
                   className="flex-1 text-left rounded-xl border p-6 transition-all hover:-translate-y-0.5 cursor-pointer"
@@ -5129,23 +5169,25 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     Rate players by batch against the tryout scoring rubric — batting, bowling, fielding, and fitness.
                   </p>
                 </button>
-                <button
-                  onClick={() => setViewMode('in-game-ratings')}
-                  className="flex-1 text-left rounded-xl border p-6 transition-all hover:-translate-y-0.5 cursor-pointer"
-                  style={{ background: '#1e1212', borderColor: 'rgba(192,57,43,0.25)' }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#c0392b'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(192,57,43,0.25)'; }}
-                >
-                  <div
-                    className="text-xs font-bold uppercase tracking-widest mb-3"
-                    style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#c8a84b' }}
+                {hasApprovedRoster && (
+                  <button
+                    onClick={() => setViewMode('in-game-ratings')}
+                    className="flex-1 text-left rounded-xl border p-6 transition-all hover:-translate-y-0.5 cursor-pointer"
+                    style={{ background: '#1e1212', borderColor: 'rgba(192,57,43,0.25)' }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#c0392b'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(192,57,43,0.25)'; }}
                   >
-                    In-Game Ratings
-                  </div>
-                  <p className="text-sm" style={{ color: 'rgba(245,240,232,0.55)' }}>
-                    Rate a team&rsquo;s players game by game — batting, bowling, wicketkeeping, and fielding.
-                  </p>
-                </button>
+                    <div
+                      className="text-xs font-bold uppercase tracking-widest mb-3"
+                      style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#c8a84b' }}
+                    >
+                      In-Game Ratings
+                    </div>
+                    <p className="text-sm" style={{ color: 'rgba(245,240,232,0.55)' }}>
+                      Rate a team&rsquo;s players game by game — batting, bowling, wicketkeeping, and fielding.
+                    </p>
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -5271,6 +5313,16 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {/* In-Game Ratings */}
           {!loading && !error && viewMode === 'in-game-ratings' && (
             <GameRatingBoard players={players} sheetKey={sheetKey} />
+          )}
+
+          {/* My In-Game Evaluations */}
+          {!loading && !error && viewMode === 'my-in-game-ratings' && (
+            <InGameRatingsTable players={players} user={user} sheetKey={sheetKey} scope="mine" />
+          )}
+
+          {/* Admin: All In-Game Ratings */}
+          {!loading && !error && viewMode === 'admin-in-game-ratings' && isAdmin && (
+            <InGameRatingsTable players={players} user={user} sheetKey={sheetKey} scope="all" />
           )}
 
           {/* Admin: All Team Packages */}

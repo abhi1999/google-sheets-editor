@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { ScoutPlayer, TeamPackage, PackageTeam } from '@/types/scout';
+import type { ScoutPlayer, TeamPackage, PackageTeam, TeamSlot } from '@/types/scout';
 import type { AppUser } from '@/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -15,20 +15,30 @@ export const TEAM_COLORS = [
 ] as const;
 
 const TEAM_SLOTS = [
-  { slot: 1,  role: 'Top Order',       variant: null,    color: '#64b5f6' },
-  { slot: 2,  role: 'Top Order',       variant: null,    color: '#64b5f6' },
-  { slot: 3,  role: 'Top Order',       variant: null,    color: '#64b5f6' },
-  { slot: 4,  role: 'Top Order',       variant: null,    color: '#64b5f6' },
-  { slot: 5,  role: 'All Rounder',     variant: null,    color: '#81c784' },
-  { slot: 6,  role: 'All Rounder',     variant: null,    color: '#81c784' },
-  { slot: 7,  role: 'All Rounder',     variant: null,    color: '#ffb74d' },
-  { slot: 8,  role: 'All Rounder',     variant: null,    color: '#ffb74d' },
-  { slot: 9,  role: 'Bowler',          variant: null,  color: '#ff8a65' },
-  { slot: 10, role: 'Bowler',          variant: null,  color: '#ff8a65' },
-  { slot: 11, role: 'Bowler',          variant: null,  color: '#ff8a65' },
-  { slot: 12,  role: 'Bowler',         variant: null,  color: '#ff8a65' },
-  { slot: 13, role: 'Wicket Keeper',   variant: null,    color: '#80cbc4' },
+  { slot: 1,  role: 'Top Order',       color: '#64b5f6' },
+  { slot: 2,  role: 'Top Order',       color: '#64b5f6' },
+  { slot: 3,  role: 'Top Order',       color: '#64b5f6' },
+  { slot: 4,  role: 'Top Order',       color: '#64b5f6' },
+  { slot: 5,  role: 'All Rounder',     color: '#81c784' },
+  { slot: 6,  role: 'All Rounder',     color: '#81c784' },
+  { slot: 7,  role: 'All Rounder',     color: '#ffb74d' },
+  { slot: 8,  role: 'All Rounder',     color: '#ffb74d' },
+  { slot: 9,  role: 'Bowler',          color: '#ff8a65' },
+  { slot: 10, role: 'Bowler',          color: '#ff8a65' },
+  { slot: 11, role: 'Bowler',          color: '#ff8a65' },
+  { slot: 12, role: 'Bowler',          color: '#ff8a65' },
+  { slot: 13, role: 'Wicket Keeper',   color: '#80cbc4' },
 ] as const;
+
+// Up to 3 optional reserve/bench slots — not required to be filled.
+const RESERVE_SLOTS = [
+  { slot: 14, role: 'Reserve', color: '#b0bec5' },
+  { slot: 15, role: 'Reserve', color: '#b0bec5' },
+  { slot: 16, role: 'Reserve', color: '#b0bec5' },
+] as const;
+
+const ALL_SLOTS = [...TEAM_SLOTS, ...RESERVE_SLOTS];
+const REQUIRED_SLOT_NUMBERS = new Set<number>(TEAM_SLOTS.map((s) => s.slot));
 
 const MAX_PACKAGES = 10;
 const FONT = 'Barlow Condensed, sans-serif';
@@ -48,7 +58,7 @@ function makeNewPackage(email: string, name: string): TeamPackage {
     teams: TEAM_COLORS.map((tc, i) => ({
       teamIndex: i + 1,
       teamName: tc.name,
-      slots: TEAM_SLOTS.map((s) => ({ slot: s.slot, playerRowIndex: null, playerName: '' })),
+      slots: ALL_SLOTS.map((s) => ({ slot: s.slot, playerRowIndex: null, playerName: '' })),
       captain: null,
       vc: null,
       wks: [],
@@ -58,7 +68,16 @@ function makeNewPackage(email: string, name: string): TeamPackage {
 }
 
 function teamFillCount(team: PackageTeam): number {
-  return team.slots.filter((s) => !!s.playerRowIndex).length;
+  // Only counts the 13 required starting slots — reserve slots are optional and excluded.
+  return team.slots.filter((s) => !!s.playerRowIndex && REQUIRED_SLOT_NUMBERS.has(s.slot)).length;
+}
+
+// Updates a slot by number, adding it if the package was saved before reserve slots existed.
+function upsertSlot(slots: TeamSlot[], slot: number, data: Partial<TeamSlot>): TeamSlot[] {
+  if (slots.some((s) => s.slot === slot)) {
+    return slots.map((s) => (s.slot !== slot ? s : { ...s, ...data }));
+  }
+  return [...slots, { slot, playerRowIndex: null, playerName: '', ...data }].sort((a, b) => a.slot - b.slot);
 }
 
 function playerYoyo(player: ScoutPlayer): number | null {
@@ -78,12 +97,11 @@ function yoyoColor(yy: number | null): string {
 function exportPackage(pkg: TeamPackage, players: ScoutPlayer[]) {
   const playerMap = new Map(players.map((p) => [p.rowIndex, p]));
   const teamCols = pkg.teams.map((t) => t.teamName);
-  const headers = ['Slot', 'Role', 'Type', ...teamCols];
-  const rows = TEAM_SLOTS.map((comp) => {
+  const headers = ['Slot', 'Role', ...teamCols];
+  const rows = ALL_SLOTS.map((comp) => {
     const row: string[] = [
       String(comp.slot),
       comp.role,
-      comp.variant ?? '',
       ...pkg.teams.map((team) => {
         const s = team.slots.find((sl) => sl.slot === comp.slot);
         if (!s?.playerRowIndex) return '';
@@ -489,7 +507,7 @@ export function TeamSelectionBoard({
       teams: pkg.teams.map((t) =>
         t.teamIndex !== teamIndex ? t : {
           ...t,
-          slots: t.slots.map((s) => s.slot !== slot ? s : { ...s, playerRowIndex: player.rowIndex, playerName: player.name }),
+          slots: upsertSlot(t.slots, slot, { playerRowIndex: player.rowIndex, playerName: player.name }),
         }
       ),
     }));
@@ -856,7 +874,7 @@ export function TeamSelectionBoard({
 
   // ── Edit / View ──
   if (subView === 'edit' && editPkg) {
-    const pickerComp = picker ? TEAM_SLOTS.find((s) => s.slot === picker.slot) : null;
+    const pickerComp = picker ? ALL_SLOTS.find((s) => s.slot === picker.slot) : null;
     const pickerTeamIdx = picker ? editPkg.teams.findIndex((t) => t.teamIndex === picker.teamIndex) : -1;
 
     return (
@@ -1009,7 +1027,6 @@ export function TeamSelectionBoard({
                 <tr style={{ background: '#2a1818', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
                   <th style={{ width: 30, padding: '8px 10px', color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 11, fontWeight: 700, textAlign: 'center' }}>#</th>
                   <th style={{ padding: '8px 12px', color: 'rgba(245,240,232,0.55)', fontFamily: FONT, fontSize: 11, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', minWidth: 90 }}>Role</th>
-                  <th style={{ padding: '8px 8px', color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 10, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', minWidth: 42 }}>Type</th>
                   {editPkg.teams.map((team, ti) => {
                     const tc = TEAM_COLORS[ti];
                     const filled = teamFillCount(team);
@@ -1043,7 +1060,7 @@ export function TeamSelectionBoard({
                 </tr>
               </thead>
               <tbody>
-                {TEAM_SLOTS.map((comp, ri) => (
+                {ALL_SLOTS.map((comp, ri) => (
                   <tr key={comp.slot}
                     style={{ background: ri % 2 === 0 ? '#1e1212' : '#1a1010', borderBottom: '1px solid rgba(192,57,43,0.06)' }}>
                     <td style={{ padding: '7px 10px', textAlign: 'center', color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 11 }}>
@@ -1051,16 +1068,8 @@ export function TeamSelectionBoard({
                     </td>
                     <td style={{ padding: '7px 12px', whiteSpace: 'nowrap', color: comp.color, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>
                       {comp.role}
-                    </td>
-                    <td style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>
-                      {comp.variant && (
-                        <span style={{
-                          background: 'rgba(255,255,255,0.05)', color: 'rgba(245,240,232,0.35)',
-                          fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.04em',
-                          padding: '2px 5px', borderRadius: 3,
-                        }}>
-                          {comp.variant}
-                        </span>
+                      {comp.role === 'Reserve' && (
+                        <span style={{ color: 'rgba(245,240,232,0.25)', fontWeight: 600, fontSize: 9, marginLeft: 5 }}>optional</span>
                       )}
                     </td>
                     {editPkg.teams.map((team, ti) => {
@@ -1086,7 +1095,7 @@ export function TeamSelectionBoard({
                               teams: pkg.teams.map((t) =>
                                 t.teamIndex !== team.teamIndex ? t : {
                                   ...t,
-                                  slots: t.slots.map((s) => s.slot !== comp.slot ? s : { ...s, playerRowIndex: player.rowIndex, playerName: player.name }),
+                                  slots: upsertSlot(t.slots, comp.slot, { playerRowIndex: player.rowIndex, playerName: player.name }),
                                 }
                               ),
                             }));
@@ -1394,7 +1403,6 @@ export function TeamSelectionBoard({
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 14 }}>
                     #{picker.slot} · {pickerComp?.role}
-                    {pickerComp?.variant && <span style={{ color: 'rgba(245,240,232,0.45)', fontSize: 11, marginLeft: 6 }}>{pickerComp.variant}</span>}
                   </span>
                   <button onClick={() => { setPicker(null); setPickerSearch(''); }}
                     style={{ background: 'none', border: 'none', color: 'rgba(245,240,232,0.4)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>
