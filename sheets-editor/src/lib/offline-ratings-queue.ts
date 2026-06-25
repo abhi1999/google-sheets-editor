@@ -34,9 +34,9 @@ function setQueue(sheetKey: string, queue: QueuedRating[]): void {
   }
 }
 
-export function enqueueRating(sheetKey: string, payload: InGameRatingPayload, clientId?: string): QueuedRating {
+export function enqueueRating(sheetKey: string, payload: InGameRatingPayload): QueuedRating {
   const item: QueuedRating = {
-    clientId: clientId || newClientId(),
+    clientId: newClientId(),
     payload,
     queuedAt: new Date().toISOString(),
   };

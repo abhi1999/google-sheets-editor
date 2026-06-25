@@ -22,6 +22,10 @@ async function checkAuthorized(userEmail: string, sheetKey: string): Promise<boo
   }
 }
 
+function recordId(coachEmail: string, playerRowIndex: number, teamIndex: number, gameNumber: number): string {
+  return `${coachEmail.toLowerCase()}_${playerRowIndex}_${teamIndex}_${gameNumber}`;
+}
+
 function parseRecord(r: Record<string, unknown>): InGameRatingRecord {
   return {
     id: String(r['Id'] || ''),
@@ -97,16 +101,10 @@ export async function POST(request: NextRequest) {
 
     await ensureTabExists(TAB, HEADERS, sheetKey);
 
-    // A clientId lets a queued offline retry safely no-op if the original
-    // request actually succeeded server-side but the response was lost.
-    if (body.clientId) {
-      const { rows: existingRows } = await readTab(TAB, sheetKey);
-      if (existingRows.some((r) => String(r['Id']) === body.clientId)) {
-        return NextResponse.json({ success: true, id: body.clientId, duplicate: true });
-      }
-    }
-
-    const id = body.clientId || `${user.email}_${Date.now()}`;
+    // One editable rating per coach per player per game — deterministic id means
+    // re-saving (whether the coach reopens "Rate" or an offline retry replays the
+    // same request) always lands on the same row instead of creating a duplicate.
+    const id = recordId(user.email, body.playerRowIndex, body.teamIndex, body.gameNumber);
     const rowValues = [
       id,
       user.email,
@@ -118,9 +116,14 @@ export async function POST(request: NextRequest) {
       new Date().toISOString(),
     ];
 
-    // Always append — multiple coaches (or the same coach more than once) may
-    // rate the same player+game; ratings are never overwritten.
-    await appendRowsToTab([rowValues], TAB, sheetKey);
+    const { rows } = await readTab(TAB, sheetKey);
+    const existing = rows.find((r) => String(r['Id']) === id);
+
+    if (existing) {
+      await updateRowInTab(existing.__rowIndex as number, rowValues, TAB, sheetKey);
+    } else {
+      await appendRowsToTab([rowValues], TAB, sheetKey);
+    }
 
     return NextResponse.json({ success: true, id });
   } catch (error: any) {

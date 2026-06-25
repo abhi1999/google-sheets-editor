@@ -154,9 +154,6 @@ export interface InGameRatingPayload {
   teamIndex: number;
   gameNumber: number;
   rating: InGameRating;
-  // Client-generated idempotency key — lets a queued offline retry safely
-  // no-op if the original request actually succeeded server-side.
-  clientId?: string;
 }
 
 export interface OpportunityEntry {
