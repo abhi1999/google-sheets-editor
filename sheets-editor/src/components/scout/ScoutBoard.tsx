@@ -9,6 +9,7 @@ import { SCHEMAS, FITNESS_FIELDS, calcScore, getRating, playerInitials, type Sec
 import Papa from 'papaparse';
 import { PlayerModal } from './PlayerModal';
 import { TeamSelectionBoard } from './TeamSelectionBoard';
+import { GameRatingBoard } from './GameRatingBoard';
 
 interface ScoutBoardProps {
   sheetKey: string;
@@ -4679,6 +4680,7 @@ const VIEW_LABELS: Record<string, string> = {
   'selection':          'Selection',
   'selected-players':   'Selected Players',
   'team-packages':      'Team Packages',
+  'in-game-ratings':    'In-Game Ratings',
   'skill-pivot':        'Skill Pivot',
   'admin-evals':        'All Coach Evals',
   'admin-skill-details':'All Skill Notes',
@@ -4688,7 +4690,7 @@ const VIEW_LABELS: Record<string, string> = {
   'admin-settings':     'Settings',
 };
 
-type ViewMode = 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot' | 'admin-settings';
+type ViewMode = 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'in-game-ratings' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot' | 'admin-settings';
 
 export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const router = useRouter();
@@ -5049,6 +5051,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                     { label: 'Selection', mode: 'selection' },
                     { label: 'Selected Players', mode: 'selected-players' },
                     { label: 'Team Packages', mode: 'team-packages' },
+                    { label: 'In-Game Ratings', mode: 'in-game-ratings' },
                     { label: 'Skill Pivot', mode: 'skill-pivot' },
                   ]}
                   activeMode={viewMode}
@@ -5217,6 +5220,11 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {/* Team Packages */}
           {!loading && !error && viewMode === 'team-packages' && (
             <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} onPlayerClick={setActivePlayer} playerSelections={playerSelections} />
+          )}
+
+          {/* In-Game Ratings */}
+          {!loading && !error && viewMode === 'in-game-ratings' && (
+            <GameRatingBoard players={players} sheetKey={sheetKey} />
           )}
 
           {/* Admin: All Team Packages */}

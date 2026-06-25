@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { ensureTabExists, readTab, appendRowsToTab, updateRowInTab } from '@/lib/sheets';
-import type { TeamPackage, PackageTeam } from '@/types/scout';
+import { parsePackage } from '@/lib/team-packages';
+import type { PackageTeam } from '@/types/scout';
 
 export const dynamic = 'force-dynamic';
 
 const TAB = 'TeamPackages';
-// 'Shared' is appended at the end so existing sheets (7 cols) remain compatible
-const HEADERS = ['PackageId', 'CoachEmail', 'CoachName', 'PackageName', 'Status', 'Teams', 'SavedAt', 'Shared'];
+// 'Shared' is appended at the end so existing sheets (7 cols) remain compatible.
+// 'ApprovedAt'/'ApprovedBy' appended for the same reason (8-col sheets remain compatible).
+const HEADERS = ['PackageId', 'CoachEmail', 'CoachName', 'PackageName', 'Status', 'Teams', 'SavedAt', 'Shared', 'ApprovedAt', 'ApprovedBy'];
 const MAX_PACKAGES = 5;
 
 async function checkAuthorized(userEmail: string, sheetKey: string): Promise<boolean> {
@@ -34,21 +36,6 @@ async function checkAdmin(userEmail: string, sheetKey: string): Promise<boolean>
   } catch {
     return false;
   }
-}
-
-function parsePackage(r: Record<string, unknown>): TeamPackage {
-  let teams: PackageTeam[] = [];
-  try { teams = JSON.parse(String(r['Teams'] || '[]')); } catch {}
-  return {
-    packageId: String(r['PackageId'] || ''),
-    coachEmail: String(r['CoachEmail'] || ''),
-    coachName: String(r['CoachName'] || ''),
-    packageName: String(r['PackageName'] || 'Default'),
-    status: (String(r['Status'] || 'draft') as 'draft' | 'submitted'),
-    shared: String(r['Shared'] || '').toUpperCase() === 'TRUE',
-    teams,
-    savedAt: String(r['SavedAt'] || ''),
-  };
 }
 
 export async function GET(request: NextRequest) {
@@ -126,15 +113,20 @@ export async function POST(request: NextRequest) {
     }
 
     const packageId = body.packageId || `${user.email}_${Date.now()}`;
+    // Editing an already-approved package keeps its approved status/metadata —
+    // approval is only changed via the dedicated approve route.
+    const wasApproved = existingRow && String(existingRow['Status'] || '') === 'approved';
     const rowValues = [
       packageId,
       user.email,
       user.name,
       body.packageName || 'Default',
-      body.status || 'draft',
+      wasApproved ? 'approved' : (body.status || 'draft'),
       JSON.stringify(body.teams),
       new Date().toISOString(),
       body.shared ? 'TRUE' : 'FALSE',
+      wasApproved ? String(existingRow!['ApprovedAt'] || '') : '',
+      wasApproved ? String(existingRow!['ApprovedBy'] || '') : '',
     ];
 
     if (existingRow) {
@@ -178,7 +170,7 @@ export async function DELETE(request: NextRequest) {
     if (!row) return NextResponse.json({ error: 'Package not found' }, { status: 404 });
 
     // Clear the row — blank PackageId means it will be filtered out on future reads
-    await updateRowInTab(row.__rowIndex as number, ['', '', '', '', '', '', '', ''], TAB, sheetKey);
+    await updateRowInTab(row.__rowIndex as number, ['', '', '', '', '', '', '', '', '', ''], TAB, sheetKey);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

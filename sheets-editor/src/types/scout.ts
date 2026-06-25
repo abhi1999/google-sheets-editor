@@ -79,10 +79,78 @@ export interface TeamPackage {
   coachEmail: string;
   coachName: string;
   packageName: string;
-  status: 'draft' | 'submitted';
+  status: 'draft' | 'submitted' | 'approved';
   shared: boolean;
   locked?: boolean;
   comments?: string;
   teams: PackageTeam[];
   savedAt: string;
+  approvedAt?: string;
+  approvedBy?: string;
+}
+
+export type FieldingEntryType = 'Saved' | 'Conceded' | 'CatchDropped';
+
+export interface FieldingEntry {
+  id: string;
+  type: FieldingEntryType;
+  runs: number;
+  note?: string;
+}
+
+export type WkEventType = 'Bye' | 'MissedCatch';
+
+export interface WkEvent {
+  id: string;
+  type: WkEventType;
+  runs?: number;
+  count?: number;
+  note?: string;
+}
+
+// A chance the player gave (while batting) or created (while bowling) that the
+// fielding side failed to convert — distinct from FieldingEntry's 'CatchDropped',
+// which records a catch THIS player (as a fielder) personally dropped.
+export interface CatchDroppedEntry {
+  id: string;
+  count: number;
+  note?: string;
+}
+
+export interface InGameRating {
+  battingSkills: Record<string, number>;
+  battingCatchesDropped: CatchDroppedEntry[];
+  battingNotes: string;
+  bowledFast: boolean;
+  fastBowlingSkills: Record<string, number>;
+  fastBowlingCatchesDropped: CatchDroppedEntry[];
+  fastBowlingNotes: string;
+  bowledSpin: boolean;
+  spinBowlingSkills: Record<string, number>;
+  spinBowlingCatchesDropped: CatchDroppedEntry[];
+  spinBowlingNotes: string;
+  keptWicket: boolean;
+  wkNotes: string;
+  wkEvents: WkEvent[];
+  fieldingNotes: string;
+  fieldingEntries: FieldingEntry[];
+  overallNotes: string;
+}
+
+export interface InGameRatingRecord {
+  id: string;
+  coachEmail: string;
+  coachName: string;
+  playerRowIndex: number;
+  teamIndex: number; // 1-6, matches PackageTeam.teamIndex
+  gameNumber: number; // 1-6
+  rating: InGameRating;
+  savedAt: string;
+}
+
+export interface InGameRatingPayload {
+  playerRowIndex: number;
+  teamIndex: number;
+  gameNumber: number;
+  rating: InGameRating;
 }

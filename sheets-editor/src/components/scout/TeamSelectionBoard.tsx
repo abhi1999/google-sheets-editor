@@ -5,7 +5,7 @@ import type { AppUser } from '@/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TEAM_COLORS = [
+export const TEAM_COLORS = [
   { name: 'Red',    bg: '#c0392b', text: '#ef9a9a', dim: 'rgba(192,57,43,0.18)' },
   { name: 'Yellow', bg: '#f57f17', text: '#fff176', dim: 'rgba(245,127,23,0.18)' },
   { name: 'Blue',   bg: '#1565c0', text: '#90caf9', dim: 'rgba(21,101,192,0.18)' },
@@ -309,6 +309,7 @@ export function TeamSelectionBoard({
   const [compareFilter, setCompareFilter] = useState<'all' | 'consensus' | 'majority' | 'unique'>('all');
   const [dragOver, setDragOver] = useState<{ teamIndex: number; slot: number } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   const myPackages = useMemo(
     () => packages.filter((p) => p.coachEmail === user.email),
@@ -438,6 +439,20 @@ export function TeamSelectionBoard({
   useEffect(() => { fetchPackages(); }, [fetchPackages]);
 
   const handleRefresh = useCallback(() => fetchPackages(true), [fetchPackages]);
+
+  const handleApprove = useCallback(async (packageId: string) => {
+    setApprovingId(packageId);
+    try {
+      await fetch(`/api/scout/team-packages/approve?sheetKey=${encodeURIComponent(sheetKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageId }),
+      });
+      await fetchPackages(true);
+    } finally {
+      setApprovingId(null);
+    }
+  }, [sheetKey, fetchPackages]);
 
   // ── Actions ──
   const openEdit = useCallback((pkg: TeamPackage | null, editable: boolean) => {
@@ -613,7 +628,7 @@ export function TeamSelectionBoard({
               <table className="w-full" style={{ borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#2a1818', borderBottom: '2px solid rgba(192,57,43,0.3)' }}>
-                    {['Package', 'Teams', 'Fill', 'Visibility', 'Saved'].map((h) => (
+                    {['Package', 'Teams', 'Fill', 'Visibility', 'Saved', 'Approve'].map((h) => (
                       <th key={h} style={{
                         padding: '8px 14px', textAlign: 'left', fontFamily: FONT,
                         fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
@@ -677,6 +692,31 @@ export function TeamSelectionBoard({
                           {pkg.savedAt
                             ? new Date(pkg.savedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })
                             : '—'}
+                        </td>
+                        <td style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>
+                          {pkg.status === 'approved' ? (
+                            <span style={{
+                              display: 'inline-block',
+                              background: 'rgba(129,199,132,0.15)', color: '#81c784',
+                              border: '1px solid rgba(129,199,132,0.3)', borderRadius: 5,
+                              padding: '3px 10px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+                            }}>
+                              ✓ Approved Roster
+                            </span>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleApprove(pkg.packageId); }}
+                              disabled={approvingId === pkg.packageId}
+                              style={{
+                                background: 'rgba(245,240,232,0.06)', color: 'rgba(245,240,232,0.7)',
+                                border: '1px solid rgba(245,240,232,0.15)', borderRadius: 5,
+                                padding: '3px 10px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+                                cursor: approvingId === pkg.packageId ? 'default' : 'pointer',
+                                opacity: approvingId === pkg.packageId ? 0.5 : 1,
+                              }}>
+                              {approvingId === pkg.packageId ? 'Approving…' : 'Approve'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );

@@ -86,7 +86,7 @@ interface PlayerModalProps {
   onToggleSelection?: (selected: boolean) => void;
 }
 
-function SkillStars({
+export function SkillStars({
   skillName,
   value,
   onChange,
