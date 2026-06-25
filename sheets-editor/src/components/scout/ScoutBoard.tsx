@@ -4673,6 +4673,7 @@ function YoyoConfigPanel({
 // ── Main component ────────────────────────────────────────────────────
 
 const VIEW_LABELS: Record<string, string> = {
+  'board':              'Tryout Evaluations',
   'my-evals':           'My Evals',
   'my-eval-details':    'My Eval Details',
   'my-skill-details':   'Skill Notes',
@@ -4690,7 +4691,11 @@ const VIEW_LABELS: Record<string, string> = {
   'admin-settings':     'Settings',
 };
 
-type ViewMode = 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'in-game-ratings' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot' | 'admin-settings';
+type ViewMode = 'home' | 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'in-game-ratings' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-pivot' | 'admin-settings';
+
+// Views reachable directly from the home picker — their breadcrumb "back" goes to Home.
+// Everything else nests under the Tryout board, so its "back" goes to 'board'.
+const TOP_LEVEL_VIEWS = new Set<ViewMode>(['board', 'in-game-ratings']);
 
 export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const router = useRouter();
@@ -4708,13 +4713,13 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
   const [activeBatch, setActiveBatch] = useState<string | null>(null);
   const [viewMode, setViewModeRaw] = useState<ViewMode>(() => {
     const v = searchParams.get('view');
-    return (v && v in VIEW_LABELS ? v : 'board') as ViewMode;
+    return (v && (v in VIEW_LABELS || v === 'home') ? v : 'home') as ViewMode;
   });
 
   const setViewMode = useCallback((mode: ViewMode) => {
     setViewModeRaw(mode);
     const params = new URLSearchParams(window.location.search);
-    if (mode === 'board') params.delete('view'); else params.set('view', mode);
+    if (mode === 'home') params.delete('view'); else params.set('view', mode);
     const qs = params.toString();
     router.replace(`${window.location.pathname}${qs ? `?${qs}` : ''}`, { scroll: false });
   }, [router]);
@@ -5011,31 +5016,21 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
             </div>
           )}
 
-          {/* Batch tabs + Reports/Admin menus */}
+          {/* Batch menu + Reports/Admin menus */}
           {!loading && !error && players.length > 0 && (
             <div className="batch-tabs border-t flex" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
-              {/* Batch tabs — scrollable */}
-              <div className="flex overflow-x-auto flex-1" style={{ scrollbarWidth: 'none' }}>
-                {allBatchNames.map((name) => {
-                  const isActive = viewMode === 'board' && !isSearching && activeBatch === name;
-                  return (
-                    <button
-                      key={name}
-                      onClick={() => { setViewMode('board'); setActiveBatch(name); setSearchQuery(''); }}
-                      className="flex-shrink-0 px-5 py-2 text-sm font-bold uppercase tracking-wider border-b-2 transition-colors"
-                      style={{
-                        fontFamily: 'Barlow Condensed, sans-serif',
-                        color: isActive ? '#f5f0e8' : 'rgba(245,240,232,0.4)',
-                        borderColor: isActive ? '#c0392b' : 'transparent',
-                        background: 'none', cursor: 'pointer', letterSpacing: '0.08em',
-                      }}
-                      onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.75)'; }}
-                      onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.4)'; }}
-                    >
-                      {name}
-                    </button>
-                  );
-                })}
+              {/* Batch picker — dropdown menu */}
+              <div className="flex items-stretch flex-1">
+                <NavDropdown
+                  label={activeBatch || 'Select Batch'}
+                  items={allBatchNames.map((name) => ({
+                    label: name,
+                    mode: name,
+                    badge: players.filter((p) => (p.batch || 'Unassigned') === name).length,
+                  }))}
+                  activeMode={viewMode === 'board' && !isSearching ? (activeBatch || '') : ''}
+                  onSelect={(name) => { setViewMode('board'); setActiveBatch(name); setSearchQuery(''); }}
+                />
               </div>
 
               {/* Reports + Admin dropdowns — fixed, not scrolling */}
@@ -5088,19 +5083,70 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
         <main className="px-5 md:px-7 py-7 pb-16 mx-auto" style={{ maxWidth: '1200px' }}>
 
           {/* Report title bar */}
-          {viewMode !== 'board' && VIEW_LABELS[viewMode] && (
+          {viewMode !== 'home' && VIEW_LABELS[viewMode] && (
             <div className="flex items-center gap-3 mb-6">
               <button
-                onClick={() => setViewMode('board')}
+                onClick={() => setViewMode(TOP_LEVEL_VIEWS.has(viewMode) ? 'home' : 'board')}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 13, padding: 0, lineHeight: 1 }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.7)'; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.35)'; }}>
-                ← Board
+                {TOP_LEVEL_VIEWS.has(viewMode) ? '← Home' : '← Board'}
               </button>
               <span style={{ color: 'rgba(245,240,232,0.15)', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 13 }}>/</span>
               <h2 style={{ margin: 0, color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 20, fontWeight: 700, letterSpacing: '0.03em' }}>
                 {VIEW_LABELS[viewMode]}
               </h2>
+            </div>
+          )}
+
+          {/* Home — choose what to rate */}
+          {!loading && !error && !unauthorized && viewMode === 'home' && (
+            <div className="flex flex-col items-center justify-center py-10">
+              <h2
+                className="text-2xl font-extrabold uppercase tracking-wide mb-2 text-center"
+                style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#f5f0e8' }}
+              >
+                What would you like to rate?
+              </h2>
+              <p className="text-sm mb-10 text-center" style={{ color: 'rgba(245,240,232,0.45)', maxWidth: 380 }}>
+                Choose tryout evaluations or in-game performance ratings.
+              </p>
+              <div className="flex flex-col md:flex-row gap-5 w-full" style={{ maxWidth: 640 }}>
+                <button
+                  onClick={() => setViewMode('board')}
+                  className="flex-1 text-left rounded-xl border p-6 transition-all hover:-translate-y-0.5 cursor-pointer"
+                  style={{ background: '#1e1212', borderColor: 'rgba(192,57,43,0.25)' }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#c0392b'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(192,57,43,0.25)'; }}
+                >
+                  <div
+                    className="text-xs font-bold uppercase tracking-widest mb-3"
+                    style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#c8a84b' }}
+                  >
+                    Tryout Evaluations
+                  </div>
+                  <p className="text-sm" style={{ color: 'rgba(245,240,232,0.55)' }}>
+                    Rate players by batch against the tryout scoring rubric — batting, bowling, fielding, and fitness.
+                  </p>
+                </button>
+                <button
+                  onClick={() => setViewMode('in-game-ratings')}
+                  className="flex-1 text-left rounded-xl border p-6 transition-all hover:-translate-y-0.5 cursor-pointer"
+                  style={{ background: '#1e1212', borderColor: 'rgba(192,57,43,0.25)' }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = '#c0392b'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(192,57,43,0.25)'; }}
+                >
+                  <div
+                    className="text-xs font-bold uppercase tracking-widest mb-3"
+                    style={{ fontFamily: 'Barlow Condensed, sans-serif', color: '#c8a84b' }}
+                  >
+                    In-Game Ratings
+                  </div>
+                  <p className="text-sm" style={{ color: 'rgba(245,240,232,0.55)' }}>
+                    Rate a team&rsquo;s players game by game — batting, bowling, wicketkeeping, and fielding.
+                  </p>
+                </button>
+              </div>
             </div>
           )}
 

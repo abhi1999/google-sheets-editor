@@ -175,7 +175,7 @@ export function GameRatingBoard({
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#2a1818', borderBottom: '2px solid rgba(192,57,43,0.3)' }}>
-              {['Player', 'Schema', 'Ratings This Game', ''].map((h) => (
+              {['Player', 'Ratings This Game', ''].map((h) => (
                 <th key={h} style={{
                   padding: '8px 14px', textAlign: 'left', fontFamily: FONT,
                   fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
@@ -202,9 +202,6 @@ export function GameRatingBoard({
                     {p.name}
                   </span>
                 </td>
-                <td style={{ padding: '9px 14px', fontFamily: FONT, fontSize: 11, color: 'rgba(245,240,232,0.5)', whiteSpace: 'nowrap' }}>
-                  {p.schema}
-                </td>
                 <td style={{ padding: '9px 14px', fontFamily: FONT, fontSize: 11, whiteSpace: 'nowrap',
                   color: ratingCountFor(p.rowIndex) > 0 ? '#81c784' : 'rgba(245,240,232,0.3)' }}>
                   {ratingCountFor(p.rowIndex)}
@@ -224,7 +221,7 @@ export function GameRatingBoard({
             ))}
             {rosterPlayers.length === 0 && (
               <tr>
-                <td colSpan={4} style={{ textAlign: 'center', padding: '24px 0', color: 'rgba(245,240,232,0.25)', fontFamily: FONT }}>
+                <td colSpan={3} style={{ textAlign: 'center', padding: '24px 0', color: 'rgba(245,240,232,0.25)', fontFamily: FONT }}>
                   No players assigned to this team yet.
                 </td>
               </tr>
