@@ -5334,7 +5334,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
 
           {/* In-Game Ratings */}
           {!loading && !error && viewMode === 'in-game-ratings' && (
-            <GameRatingBoard players={players} sheetKey={sheetKey} />
+            <GameRatingBoard players={players} user={user} sheetKey={sheetKey} />
           )}
 
           {/* My In-Game Evaluations */}

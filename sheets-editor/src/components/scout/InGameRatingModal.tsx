@@ -234,18 +234,21 @@ interface InGameRatingModalProps {
   player: ScoutPlayer;
   gameNumber: number;
   teamIndex: number;
+  existingRating?: InGameRating | null;
   onClose: () => void;
   onSave: (payload: InGameRatingPayload) => void;
   saving: boolean;
 }
 
-export function InGameRatingModal({ player, gameNumber, teamIndex, onClose, onSave, saving }: InGameRatingModalProps) {
-  const [rating, setRating] = useState<InGameRating>(() => ({
-    ...emptyInGameRating(),
-    battedThisGame: player.schema === 'Batsman',
-    bowledFast: player.schema === 'Fast Bowler',
-    bowledSpin: player.schema === 'Spin Bowler',
-  }));
+export function InGameRatingModal({ player, gameNumber, teamIndex, existingRating, onClose, onSave, saving }: InGameRatingModalProps) {
+  const [rating, setRating] = useState<InGameRating>(() =>
+    existingRating || {
+      ...emptyInGameRating(),
+      battedThisGame: player.pct > 0,
+      bowledFast: player.schema === 'Fast Bowler',
+      bowledSpin: player.schema === 'Spin Bowler',
+    }
+  );
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -478,7 +481,7 @@ export function InGameRatingModal({ player, gameNumber, teamIndex, onClose, onSa
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? 'Saving…' : 'Save Rating'}
+            {saving ? 'Saving…' : existingRating ? 'Update Rating' : 'Save Rating'}
           </button>
         </div>
       </div>

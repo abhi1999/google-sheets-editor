@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { ScoutPlayer, TeamPackage, InGameRatingRecord, InGameRatingPayload } from '@/types/scout';
+import type { AppUser } from '@/types';
 import { GAME_NUMBERS } from '@/lib/ingame-schemas';
 import { playerInitials } from '@/lib/scout-schemas';
 import { getQueue, enqueueRating, removeFromQueue, markQueueError } from '@/lib/offline-ratings-queue';
@@ -10,10 +11,6 @@ import { InGameRatingModal } from './InGameRatingModal';
 
 const FONT = 'Barlow Condensed, sans-serif';
 
-function newClientId(): string {
-  return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `cid_${Date.now()}_${Math.random()}`;
-}
-
 // Retrying won't fix a bad payload or an auth rejection — only queue transient failures.
 function isRetryable(status: number): boolean {
   return status !== 400 && status !== 401 && status !== 403;
@@ -21,9 +18,11 @@ function isRetryable(status: number): boolean {
 
 export function GameRatingBoard({
   players,
+  user,
   sheetKey,
 }: {
   players: ScoutPlayer[];
+  user: AppUser;
   sheetKey: string;
 }) {
   const [loading, setLoading] = useState(true);
@@ -84,7 +83,7 @@ export function GameRatingBoard({
         const res = await fetch(`/api/scout/in-game-ratings?sheetKey=${encodeURIComponent(sheetKey)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...item.payload, clientId: item.clientId }),
+          body: JSON.stringify(item.payload),
         });
         if (res.ok) {
           removeFromQueue(sheetKey, item.clientId);
@@ -135,21 +134,33 @@ export function GameRatingBoard({
     [ratings]
   );
 
+  // One editable rating per coach per player per game — find the current coach's
+  // own rating (if any) so the modal can be reopened pre-filled instead of blank.
+  const myRatingFor = useCallback(
+    (playerRowIndex: number) =>
+      ratings.find(
+        (r) =>
+          r.playerRowIndex === playerRowIndex &&
+          r.teamIndex === selectedTeamIndex &&
+          r.coachEmail.toLowerCase() === user.email.toLowerCase()
+      ) || null,
+    [ratings, selectedTeamIndex, user.email]
+  );
+
   const handleSaveRating = async (payload: InGameRatingPayload) => {
     setSaving(true);
-    const clientId = newClientId();
     try {
       const res = await fetch(`/api/scout/in-game-ratings?sheetKey=${encodeURIComponent(sheetKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, clientId }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         await fetchRatings();
         setActivePlayer(null);
         setToast('Rating saved');
       } else if (isRetryable(res.status)) {
-        enqueueRating(sheetKey, payload, clientId);
+        enqueueRating(sheetKey, payload);
         refreshPendingCount();
         setActivePlayer(null);
         setToast('Saved offline — will sync automatically');
@@ -159,7 +170,7 @@ export function GameRatingBoard({
       }
     } catch {
       // fetch threw — network unreachable; queue for retry rather than losing the rating.
-      enqueueRating(sheetKey, payload, clientId);
+      enqueueRating(sheetKey, payload);
       refreshPendingCount();
       setActivePlayer(null);
       setToast('Saved offline — will sync automatically');
@@ -304,7 +315,7 @@ export function GameRatingBoard({
                       background: '#c0392b', color: '#fff', border: 'none', cursor: 'pointer',
                     }}
                   >
-                    Rate
+                    {myRatingFor(p.rowIndex) ? 'Edit' : 'Rate'}
                   </button>
                 </td>
               </tr>
@@ -325,6 +336,7 @@ export function GameRatingBoard({
           player={activePlayer}
           gameNumber={selectedGame}
           teamIndex={selectedTeamIndex}
+          existingRating={myRatingFor(activePlayer.rowIndex)?.rating ?? null}
           onClose={() => setActivePlayer(null)}
           onSave={handleSaveRating}
           saving={saving}
