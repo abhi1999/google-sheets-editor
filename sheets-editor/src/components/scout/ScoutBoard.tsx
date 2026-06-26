@@ -3051,6 +3051,7 @@ function exportPivotToCSV(players: ScoutPlayer[], visibleSkillKeys: Set<string>)
       'Batting Hand': p.extraInfo?.['Batting hand'] || '',
       'Bowler Arm': p.extraInfo?.['Bowler arm'] || '',
       'Bowling Type': p.extraInfo?.['Bowling type'] || '',
+      Academy: p.extraInfo?.['Academy'] || '',
     };
     for (const [schemaName, def] of schemaEntries) {
       const label = schemaName === 'Batsman' ? 'BAT' : schemaName === 'Fast Bowler' ? 'FB' : 'SB';
@@ -3431,6 +3432,7 @@ function AdminPivotTable({
         'batting-hand': (p) => p.extraInfo?.['Batting hand'] || '',
         'bowler-arm':   (p) => p.extraInfo?.['Bowler arm'] || '',
         'bowling-type': (p) => p.extraInfo?.['Bowling type'] || '',
+        'academy':      (p) => p.extraInfo?.['Academy'] || '',
       };
       if (STR_SORTS[pivotSortCol]) {
         const sa = STR_SORTS[pivotSortCol](a).toLowerCase();
@@ -3499,6 +3501,7 @@ function AdminPivotTable({
   const BAT_HAND_W = 52;
   const BOWL_ARM_W = 52;
   const BOWL_TYPE_W = 80;
+  const ACADEMY_W = 90;
 
   const stickyCellStyle = (left: number, w: number, bg: string, zIndex = 2): React.CSSProperties => ({
     position: 'sticky',
@@ -3818,6 +3821,7 @@ function AdminPivotTable({
                 <th rowSpan={4} onClick={() => togglePivotSort('batting-hand', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W, BAT_HAND_W, '#1a1010', 3), top: 0, textAlign: 'center', color: pivotSortCol === 'batting-hand' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bat{sortIndicator('batting-hand')}</th>
                 <th rowSpan={4} onClick={() => togglePivotSort('bowler-arm', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, '#1a1010', 3), top: 0, textAlign: 'center', color: pivotSortCol === 'bowler-arm' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Arm{sortIndicator('bowler-arm')}</th>
                 <th rowSpan={4} onClick={() => togglePivotSort('bowling-type', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'bowling-type' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bowl Type{sortIndicator('bowling-type')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('academy', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W + BOWL_TYPE_W, ACADEMY_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'academy' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Academy{sortIndicator('academy')}</th>
                 {visibleSchemas.map(([schemaName, def]) => {
                   const visSecs = getVisibleSections(schemaName, def);
                   const colSpan = visSecs.reduce((s, { visSkills }) => s + visSkills.length * 2 + 1, 0) + 1;
@@ -3943,6 +3947,9 @@ function AdminPivotTable({
                     </td>
                     <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
                       {player.extraInfo?.['Bowling type'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
+                    </td>
+                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W + BOWL_TYPE_W, ACADEMY_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
+                      {player.extraInfo?.['Academy'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
                     </td>
                     {/* Skill cells + section avg + schema avg (only visible skills/sections/schemas) */}
                     {visibleSchemas.map(([schemaName, def]) => {
