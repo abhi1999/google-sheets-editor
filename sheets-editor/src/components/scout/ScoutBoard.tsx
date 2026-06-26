@@ -11,6 +11,7 @@ import { PlayerModal } from './PlayerModal';
 import { TeamSelectionBoard } from './TeamSelectionBoard';
 import { GameRatingBoard } from './GameRatingBoard';
 import { InGameRatingsTable } from './InGameRatingsTable';
+import { InGamePivotTable } from './InGamePivotTable';
 import { OpportunitySheetBoard } from './OpportunitySheetBoard';
 
 interface ScoutBoardProps {
@@ -3143,10 +3144,16 @@ function AdminPivotTable({
   function updateCov(schema: SchemaType, patch: Partial<SchemaCoverage>) {
     setSchemaCoverage((prev) => ({ ...prev, [schema]: { ...prev[schema], ...patch } }));
   }
+  // On mobile, frozen columns eat the whole viewport before any skill data is reachable —
+  // collapse the extra info columns and un-freeze Yo-Yo/Category so only Player stays pinned.
+  const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
-      setShowExtraCols(false);
-    }
+    const mq = window.matchMedia('(max-width: 767px)');
+    setIsMobile(mq.matches);
+    if (mq.matches) setShowExtraCols(false);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, []);
 
   // Saved filters — persisted in the Sheet (shared across all coaches)
@@ -3514,6 +3521,13 @@ function AdminPivotTable({
     boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.06)',
   });
 
+  // Yo-Yo/Category stay frozen on desktop, but on mobile they scroll with everything else —
+  // only Player remains pinned so the skill columns aren't squeezed out of the viewport.
+  const freezeCellStyle = (left: number, w: number, bg: string, zIndex = 2): React.CSSProperties =>
+    isMobile
+      ? { width: w, minWidth: w, maxWidth: w, background: bg }
+      : stickyCellStyle(left, w, bg, zIndex);
+
   const TH_BASE: React.CSSProperties = {
     padding: '5px 6px',
     fontSize: 10,
@@ -3814,14 +3828,14 @@ function AdminPivotTable({
               {/* Row 1: Schema headers (colSpan = visibleSkills*2 + visSections + 1 for schema avg) */}
               <tr>
                 <th rowSpan={4} onClick={() => togglePivotSort('player', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(0, PLAYER_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'player' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Player{sortIndicator('player')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('yoyo')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W, YOYO_W, '#1a1010', 3), top: 0, textAlign: 'center', color: pivotSortCol === 'yoyo' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Yo-Yo{sortIndicator('yoyo')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('category', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'category' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Category{sortIndicator('category')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('div', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, DIV_W, '#1a1010', 3), top: 0, textAlign: 'center', color: pivotSortCol === 'div' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Div{sortIndicator('div')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('primary-skill', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W, PRIM_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'primary-skill' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Skill{sortIndicator('primary-skill')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('batting-hand', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W, BAT_HAND_W, '#1a1010', 3), top: 0, textAlign: 'center', color: pivotSortCol === 'batting-hand' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bat{sortIndicator('batting-hand')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('bowler-arm', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, '#1a1010', 3), top: 0, textAlign: 'center', color: pivotSortCol === 'bowler-arm' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Arm{sortIndicator('bowler-arm')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('bowling-type', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'bowling-type' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bowl Type{sortIndicator('bowling-type')}</th>
-                <th rowSpan={4} onClick={() => togglePivotSort('academy', 'asc')} style={{ ...TH_BASE, ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W + BOWL_TYPE_W, ACADEMY_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'academy' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Academy{sortIndicator('academy')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('yoyo')} style={{ ...TH_BASE, ...freezeCellStyle(PLAYER_W, YOYO_W, '#1a1010', 3), top: 0, textAlign: 'center', color: pivotSortCol === 'yoyo' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Yo-Yo{sortIndicator('yoyo')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('category', 'asc')} style={{ ...TH_BASE, ...freezeCellStyle(PLAYER_W + YOYO_W, CAT_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'category' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none' }}>Category{sortIndicator('category')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('div', 'asc')} style={{ ...TH_BASE, ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W, DIV_W, '#1a1010', 3), top: 0, textAlign: 'center', color: pivotSortCol === 'div' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Div{sortIndicator('div')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('primary-skill', 'asc')} style={{ ...TH_BASE, ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W, PRIM_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'primary-skill' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Skill{sortIndicator('primary-skill')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('batting-hand', 'asc')} style={{ ...TH_BASE, ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W, BAT_HAND_W, '#1a1010', 3), top: 0, textAlign: 'center', color: pivotSortCol === 'batting-hand' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bat{sortIndicator('batting-hand')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('bowler-arm', 'asc')} style={{ ...TH_BASE, ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, '#1a1010', 3), top: 0, textAlign: 'center', color: pivotSortCol === 'bowler-arm' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Arm{sortIndicator('bowler-arm')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('bowling-type', 'asc')} style={{ ...TH_BASE, ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'bowling-type' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Bowl Type{sortIndicator('bowling-type')}</th>
+                <th rowSpan={4} onClick={() => togglePivotSort('academy', 'asc')} style={{ ...TH_BASE, ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W + BOWL_TYPE_W, ACADEMY_W, '#1a1010', 3), top: 0, textAlign: 'left', color: pivotSortCol === 'academy' ? '#c8a84b' : 'rgba(245,240,232,0.6)', cursor: 'pointer', userSelect: 'none', display: showExtraCols ? undefined : 'none' }}>Academy{sortIndicator('academy')}</th>
                 {visibleSchemas.map(([schemaName, def]) => {
                   const visSecs = getVisibleSections(schemaName, def);
                   const colSpan = visSecs.reduce((s, { visSkills }) => s + visSkills.length * 2 + 1, 0) + 1;
@@ -3919,7 +3933,7 @@ function AdminPivotTable({
                       </div>
                     </td>
                     {/* Sticky: Yo-Yo */}
-                    <td style={{ ...stickyCellStyle(PLAYER_W, YOYO_W, rowBg), textAlign: 'center', padding: '5px 4px' }}>
+                    <td style={{ ...freezeCellStyle(PLAYER_W, YOYO_W, rowBg), textAlign: 'center', padding: '5px 4px' }}>
                       {yoyo ? (
                         <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontWeight: 700, fontSize: 11, color: yoyo.text, background: yoyo.bg, borderRadius: 4, padding: '2px 5px' }}>
                           {yoyo.best}
@@ -3927,28 +3941,28 @@ function AdminPivotTable({
                       ) : <span style={{ color: 'rgba(245,240,232,0.2)', fontSize: 10 }}>—</span>}
                     </td>
                     {/* Sticky: Category */}
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W, CAT_W, rowBg), padding: '5px 6px' }}>
+                    <td style={{ ...freezeCellStyle(PLAYER_W + YOYO_W, CAT_W, rowBg), padding: '5px 6px' }}>
                       <span style={{ fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, fontWeight: 700, color: catColor.text, background: catColor.bg, borderRadius: 3, padding: '2px 5px', whiteSpace: 'nowrap', display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {player.category || player.schema}
                       </span>
                     </td>
                     {/* Sticky: Div, Primary Skill, Batting Hand, Bowler Arm, Bowling Type — collapsible */}
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W, DIV_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', display: showExtraCols ? undefined : 'none' }}>
+                    <td style={{ ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W, DIV_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', display: showExtraCols ? undefined : 'none' }}>
                       {player.div || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
                     </td>
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W, PRIM_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
+                    <td style={{ ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W, PRIM_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
                       {player.extraInfo?.['Primary Skill'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
                     </td>
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W, BAT_HAND_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', display: showExtraCols ? undefined : 'none' }}>
+                    <td style={{ ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W, BAT_HAND_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', display: showExtraCols ? undefined : 'none' }}>
                       {player.extraInfo?.['Batting hand'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
                     </td>
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', display: showExtraCols ? undefined : 'none' }}>
+                    <td style={{ ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W, BOWL_ARM_W, rowBg), textAlign: 'center', padding: '5px 3px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', display: showExtraCols ? undefined : 'none' }}>
                       {player.extraInfo?.['Bowler arm'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
                     </td>
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
+                    <td style={{ ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W, BOWL_TYPE_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
                       {player.extraInfo?.['Bowling type'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
                     </td>
-                    <td style={{ ...stickyCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W + BOWL_TYPE_W, ACADEMY_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
+                    <td style={{ ...freezeCellStyle(PLAYER_W + YOYO_W + CAT_W + DIV_W + PRIM_W + BAT_HAND_W + BOWL_ARM_W + BOWL_TYPE_W, ACADEMY_W, rowBg), padding: '5px 5px', fontFamily: 'Barlow Condensed, sans-serif', fontSize: 10, color: 'rgba(245,240,232,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: showExtraCols ? undefined : 'none' }}>
                       {player.extraInfo?.['Academy'] || <span style={{ color: 'rgba(245,240,232,0.2)' }}>—</span>}
                     </td>
                     {/* Skill cells + section avg + schema avg (only visible skills/sections/schemas) */}
@@ -4700,15 +4714,16 @@ const VIEW_LABELS: Record<string, string> = {
   'admin-pivot':        'Admin Skill Pivot',
   'admin-team-packages':'All Packages',
   'admin-in-game-ratings': 'All In-Game Ratings',
+  'admin-in-game-pivot': 'All In-Game Pivot',
   'admin-settings':     'Settings',
 };
 
-type ViewMode = 'home' | 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'in-game-ratings' | 'my-in-game-ratings' | 'opportunity-sheet' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-in-game-ratings' | 'admin-pivot' | 'admin-settings';
+type ViewMode = 'home' | 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'in-game-ratings' | 'my-in-game-ratings' | 'opportunity-sheet' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-in-game-ratings' | 'admin-in-game-pivot' | 'admin-pivot' | 'admin-settings';
 
 // Views reachable directly from the home picker — their breadcrumb "back" goes to Home.
 const TOP_LEVEL_VIEWS = new Set<ViewMode>(['board', 'in-game-ratings', 'opportunity-sheet']);
 // Views that report on in-game ratings nest under the In-Game Ratings board, not the tryout board.
-const IN_GAME_NESTED_VIEWS = new Set<ViewMode>(['my-in-game-ratings', 'admin-in-game-ratings']);
+const IN_GAME_NESTED_VIEWS = new Set<ViewMode>(['my-in-game-ratings', 'admin-in-game-ratings', 'admin-in-game-pivot']);
 
 function getBackTarget(viewMode: ViewMode): { target: ViewMode; label: string } {
   if (TOP_LEVEL_VIEWS.has(viewMode)) return { target: 'home', label: '← Home' };
@@ -5112,6 +5127,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                         { label: 'Skill Pivot', mode: 'admin-pivot' },
                         { label: 'All Packages', mode: 'admin-team-packages' },
                         { label: 'All In-Game Ratings', mode: 'admin-in-game-ratings' },
+                        { label: 'All In-Game Pivot', mode: 'admin-in-game-pivot' },
                         { label: 'Settings', mode: 'admin-settings' },
                       ]}
                       activeMode={viewMode}
@@ -5357,6 +5373,11 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
           {/* Admin: All In-Game Ratings */}
           {!loading && !error && viewMode === 'admin-in-game-ratings' && isAdmin && (
             <InGameRatingsTable players={players} user={user} sheetKey={sheetKey} scope="all" />
+          )}
+
+          {/* Admin: In-Game Pivot */}
+          {!loading && !error && viewMode === 'admin-in-game-pivot' && isAdmin && (
+            <InGamePivotTable players={players} user={user} sheetKey={sheetKey} />
           )}
 
           {/* Admin: All Team Packages */}
