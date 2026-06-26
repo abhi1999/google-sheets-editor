@@ -63,6 +63,7 @@ export interface TeamSlot {
   slot: number;
   playerRowIndex: number | null;
   playerName: string;
+  role?: string; // custom role label, used for reserve slots to override the generic "Reserve" tag (e.g. "Backup Opener")
 }
 
 export interface PackageTeam {

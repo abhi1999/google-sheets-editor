@@ -37,7 +37,7 @@ const RESERVE_SLOTS = [
   { slot: 16, role: 'Reserve', color: '#b0bec5' },
 ] as const;
 
-const ALL_SLOTS = [...TEAM_SLOTS, ...RESERVE_SLOTS];
+export const ALL_SLOTS = [...TEAM_SLOTS, ...RESERVE_SLOTS];
 const REQUIRED_SLOT_NUMBERS = new Set<number>(TEAM_SLOTS.map((s) => s.slot));
 
 const MAX_PACKAGES = 10;
@@ -1206,6 +1206,33 @@ export function TeamSelectionBoard({
                                 {isEditable ? 'pick player' : '—'}
                               </span>
                             )}
+                            {comp.role === 'Reserve' && (isEditable ? (
+                              <input
+                                type="text"
+                                value={slotData?.role || ''}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  const role = e.target.value;
+                                  updatePkg((pkg) => ({
+                                    ...pkg,
+                                    teams: pkg.teams.map((t) =>
+                                      t.teamIndex !== team.teamIndex ? t : { ...t, slots: upsertSlot(t.slots, comp.slot, { role }) }
+                                    ),
+                                  }));
+                                }}
+                                placeholder="Role (e.g. Backup Opener)…"
+                                title="Shown in the Opportunity Sheet instead of &quot;Reserve&quot;"
+                                style={{
+                                  width: '100%', fontFamily: FONT, fontStyle: 'italic', fontSize: 10, padding: '2px 5px',
+                                  borderRadius: 3, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                                  color: 'rgba(245,240,232,0.6)',
+                                }}
+                              />
+                            ) : slotData?.role ? (
+                              <span style={{ color: 'rgba(245,240,232,0.4)', fontFamily: FONT, fontStyle: 'italic', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {slotData.role}
+                              </span>
+                            ) : null)}
                           </div>
                         </td>
                       );

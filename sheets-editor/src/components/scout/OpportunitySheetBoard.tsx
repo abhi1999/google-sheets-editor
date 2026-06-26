@@ -1,15 +1,61 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
-import type { ScoutPlayer, TeamPackage, OpportunityRecord, OpportunityEntry } from '@/types/scout';
+import type { ScoutPlayer, TeamPackage, PackageTeam, OpportunityRecord, OpportunityEntry } from '@/types/scout';
 import { GAME_NUMBERS } from '@/lib/ingame-schemas';
 import { emptyOpportunityEntry } from '@/lib/opportunity-schemas';
 import { playerInitials } from '@/lib/scout-schemas';
-import { TEAM_COLORS } from './TeamSelectionBoard';
+import { TEAM_COLORS, ALL_SLOTS } from './TeamSelectionBoard';
 
 const FONT = 'Barlow Condensed, sans-serif';
 
 type Mode = 'edit' | 'view';
+
+function roleFor(team: PackageTeam, playerRowIndex: number): string | null {
+  const slotData = team.slots.find((s) => s.playerRowIndex === playerRowIndex);
+  if (!slotData) return null;
+  // A custom role on the slot (set for reserves in Team Packages) overrides the generic
+  // slot-template label — e.g. "Backup Opener" instead of just "Reserve".
+  if (slotData.role) return slotData.role;
+  return ALL_SLOTS.find((s) => s.slot === slotData.slot)?.role ?? null;
+}
+
+const ROLE_BADGES = [
+  { code: 'C', match: (t: PackageTeam, pid: number) => t.captain === pid, bg: 'rgba(200,168,75,0.35)', color: '#c8a84b', border: 'rgba(200,168,75,0.6)' },
+  { code: 'VC', match: (t: PackageTeam, pid: number) => t.vc === pid, bg: 'rgba(144,202,249,0.2)', color: '#90caf9', border: 'rgba(144,202,249,0.45)' },
+  { code: 'WK', match: (t: PackageTeam, pid: number) => (t.wks ?? []).includes(pid), bg: 'rgba(128,203,196,0.2)', color: '#80cbc4', border: 'rgba(128,203,196,0.45)' },
+] as const;
+
+// Name + avatar + Captain/Vice-Captain/Wicketkeeper badges + the player's slot role from the
+// team package — shared between Edit and View mode so the two stay in sync.
+function PlayerNameCell({ player, team }: { player: ScoutPlayer; team: PackageTeam }) {
+  const role = roleFor(team, player.rowIndex);
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span
+        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+        style={{ background: '#2e4030', color: '#fff' }}
+      >
+        {playerInitials(player.name)}
+      </span>
+      {player.name}
+      {ROLE_BADGES.filter((b) => b.match(team, player.rowIndex)).map((b) => (
+        <span key={b.code} style={{
+          flexShrink: 0, fontFamily: FONT, fontWeight: 800, fontSize: 9,
+          padding: '1px 4px', borderRadius: 3, lineHeight: 1.4,
+          background: b.bg, color: b.color, border: `1px solid ${b.border}`,
+        }}>
+          {b.code}
+        </span>
+      ))}
+      {role && (
+        <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 600, color: 'rgba(245,240,232,0.35)', whiteSpace: 'nowrap' }}>
+          {role}
+        </span>
+      )}
+    </span>
+  );
+}
 
 export function OpportunitySheetBoard({
   players,
@@ -257,15 +303,7 @@ export function OpportunitySheetBoard({
                       borderBottom: '1px solid rgba(192,57,43,0.06)',
                     }}>
                       <td style={{ padding: '9px 14px', fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#f5f0e8', whiteSpace: 'nowrap' }}>
-                        <span className="inline-flex items-center gap-2">
-                          <span
-                            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-                            style={{ background: '#2e4030', color: '#fff' }}
-                          >
-                            {playerInitials(p.name)}
-                          </span>
-                          {p.name}
-                        </span>
+                        <PlayerNameCell player={p} team={selectedTeam!} />
                       </td>
                       <td style={{ padding: '6px 14px' }}>
                         <input
@@ -382,15 +420,7 @@ export function OpportunitySheetBoard({
                     whiteSpace: 'nowrap', borderRight: '1px solid rgba(245,240,232,0.1)',
                     position: 'sticky', left: 0, background: i % 2 === 0 ? '#1e1212' : '#1a1010',
                   }}>
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-                        style={{ background: '#2e4030', color: '#fff' }}
-                      >
-                        {playerInitials(p.name)}
-                      </span>
-                      {p.name}
-                    </span>
+                    <PlayerNameCell player={p} team={selectedTeam!} />
                   </td>
                   {GAME_NUMBERS.map((g) => {
                     const entry = recordFor(selectedTeamIndex, g)?.entries.find((e) => e.playerRowIndex === p.rowIndex);
