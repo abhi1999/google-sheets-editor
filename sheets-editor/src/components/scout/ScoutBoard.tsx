@@ -3137,6 +3137,7 @@ function AdminPivotTable({
   const [selectedOnlyFilter, setSelectedOnlyFilter] = useState(false);
   const [selectedCoaches, setSelectedCoaches] = useState<Set<string> | null>(null); // null = all
   const [showExtraCols, setShowExtraCols] = useState(true);
+  const [showFilters, setShowFilters] = useState(true);
   // Per-schema coverage filter — controls which skill columns are visible
   const [schemaCoverage, setSchemaCoverage] = useState<Record<SchemaType, SchemaCoverage>>(() => ({ ...DEFAULT_SCHEMA_COVERAGE }));
   const [showCoveragePanel, setShowCoveragePanel] = useState(false);
@@ -3146,15 +3147,44 @@ function AdminPivotTable({
   }
   // On mobile, frozen columns eat the whole viewport before any skill data is reachable —
   // collapse the extra info columns and un-freeze Yo-Yo/Category so only Player stays pinned.
+  // Width alone misses landscape phones (e.g. 812×375 — wider than the 767 breakpoint but
+  // just as cramped), so also catch short viewports via max-height in landscape.
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
+    const mq = window.matchMedia('(max-width: 767px), (max-height: 480px) and (orientation: landscape)');
     setIsMobile(mq.matches);
-    if (mq.matches) setShowExtraCols(false);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    if (mq.matches) { setShowExtraCols(false); setShowFilters(false); }
+    const handler = (e: MediaQueryListEvent) => {
+      setIsMobile(e.matches);
+      if (e.matches) { setShowExtraCols(false); setShowFilters(false); }
+    };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  // A fixed "100vh minus a guessed constant" never matched the real chrome above the table
+  // (sticky header, demo banner, the filter toolbar, the coverage panel — all variable height,
+  // and mobile browsers resize the viewport as their own UI shows/hides). Measure what's actually
+  // left instead.
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [tableMaxHeight, setTableMaxHeight] = useState<number | null>(null);
+  useEffect(() => {
+    function recalc() {
+      if (!tableWrapRef.current) return;
+      const top = tableWrapRef.current.getBoundingClientRect().top;
+      const vh = window.visualViewport?.height ?? window.innerHeight;
+      setTableMaxHeight(Math.max(200, vh - top - 16));
+    }
+    recalc();
+    const raf = requestAnimationFrame(recalc); // run again once layout from this render settles
+    window.addEventListener('resize', recalc);
+    window.visualViewport?.addEventListener('resize', recalc);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', recalc);
+      window.visualViewport?.removeEventListener('resize', recalc);
+    };
+  }, [showFilters, showCoveragePanel, showExtraCols, isMobile]);
 
   // Saved filters — persisted in the Sheet (shared across all coaches)
   const [savedFilters, setSavedFilters] = useState<PivotSavedFilter[]>([]);
@@ -3555,7 +3585,46 @@ function AdminPivotTable({
 
   return (
     <div className="relative">
-      {/* Filter bar */}
+      {/* Always-visible toolbar — collapsing the quick filters below shouldn't hide these */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <button
+          onClick={() => setShowFilters((v) => !v)}
+          style={{
+            padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+            fontFamily: 'Barlow Condensed, sans-serif',
+            background: showFilters ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.05)',
+            color: showFilters ? '#c8a84b' : 'rgba(245,240,232,0.5)',
+            border: `1px solid ${showFilters ? 'rgba(200,168,75,0.4)' : 'rgba(255,255,255,0.1)'}`,
+            cursor: 'pointer',
+          }}>
+          ⚙ Filters {showFilters ? '▲' : '▼'}
+        </button>
+        <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+          {filteredPlayers.length} player{filteredPlayers.length !== 1 ? 's' : ''} · {visibleSkillKeys.size} skill{visibleSkillKeys.size !== 1 ? 's' : ''} visible
+        </span>
+        <button
+          onClick={() => exportPivotToCSV(filteredPlayers, visibleSkillKeys)}
+          style={EXPORT_BTN_STYLE}
+          className="transition-opacity hover:opacity-80"
+          title="Export to CSV (visible skills only)">
+          ↓ Export CSV
+        </button>
+        <button
+          onClick={() => setShowExtraCols((v) => !v)}
+          title={showExtraCols ? 'Hide Skill/Hand/Arm/Bowl Type columns' : 'Show Skill/Hand/Arm/Bowl Type columns'}
+          style={{
+            padding: '3px 9px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+            fontFamily: 'Barlow Condensed, sans-serif',
+            background: showExtraCols ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
+            color: showExtraCols ? 'rgba(245,240,232,0.55)' : 'rgba(245,240,232,0.3)',
+            border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer',
+          }}>
+          {showExtraCols ? '⊟' : '⊞'} Info cols
+        </button>
+      </div>
+
+      {/* Quick filters — collapsible, off by default on mobile so the table gets the screen */}
+      {showFilters && (
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <TableSearch value={search} onChange={setSearch} />
         <div className="flex items-center gap-1">
@@ -3666,16 +3735,6 @@ function AdminPivotTable({
           }}>
           ✓ Selected
         </button>
-        <span style={{ fontSize: 10, color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif', marginLeft: 4 }}>
-          {filteredPlayers.length} player{filteredPlayers.length !== 1 ? 's' : ''} · {visibleSkillKeys.size} skill{visibleSkillKeys.size !== 1 ? 's' : ''} visible
-        </span>
-        <button
-          onClick={() => exportPivotToCSV(filteredPlayers, visibleSkillKeys)}
-          style={EXPORT_BTN_STYLE}
-          className="transition-opacity hover:opacity-80"
-          title="Export to CSV (visible skills only)">
-          ↓ Export CSV
-        </button>
         <button
           onClick={() => setShowCoveragePanel((v) => !v)}
           style={{
@@ -3700,22 +3759,11 @@ function AdminPivotTable({
             ✕ reset skills
           </button>
         )}
-        <button
-          onClick={() => setShowExtraCols((v) => !v)}
-          title={showExtraCols ? 'Hide Skill/Hand/Arm/Bowl Type columns' : 'Show Skill/Hand/Arm/Bowl Type columns'}
-          style={{
-            padding: '3px 9px', borderRadius: 4, fontSize: 11, fontWeight: 700,
-            fontFamily: 'Barlow Condensed, sans-serif',
-            background: showExtraCols ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
-            color: showExtraCols ? 'rgba(245,240,232,0.55)' : 'rgba(245,240,232,0.3)',
-            border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer',
-          }}>
-          {showExtraCols ? '⊟' : '⊞'} Info cols
-        </button>
       </div>
+      )}
 
       {/* Coverage filter panel — one row per schema */}
-      {showCoveragePanel && (
+      {showFilters && showCoveragePanel && (
         <div style={{ background: 'rgba(200,168,75,0.05)', border: '1px solid rgba(200,168,75,0.2)', borderRadius: 6, padding: '10px 12px', marginBottom: 10 }}>
           <div className="flex flex-col gap-2">
             {schemaEntries.map(([schemaName, def]) => {
@@ -3822,7 +3870,7 @@ function AdminPivotTable({
       {filteredPlayers.length === 0 ? (
         <div className="py-8 text-center" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>No matching players</div>
       ) : (
-        <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 300px)' }}>
+        <div ref={tableWrapRef} style={{ overflow: 'auto', maxHeight: tableMaxHeight !== null ? `${tableMaxHeight}px` : 'calc(100vh - 300px)' }}>
           <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 4 }}>
               {/* Row 1: Schema headers (colSpan = visibleSkills*2 + visSections + 1 for schema avg) */}
