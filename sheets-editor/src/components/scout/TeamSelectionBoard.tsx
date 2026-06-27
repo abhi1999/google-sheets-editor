@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { ScoutPlayer, TeamPackage, PackageTeam, TeamSlot } from '@/types/scout';
+import type { ScoutPlayer, TeamPackage, PackageTeam, TeamSlot, YoyoThresholds } from '@/types/scout';
+import { DEFAULT_YOYO_THRESHOLDS } from '@/types/scout';
 import type { AppUser } from '@/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -87,10 +88,10 @@ function playerYoyo(player: ScoutPlayer): number | null {
   return vals.length > 0 ? Math.min(...vals) : null;
 }
 
-function yoyoColor(yy: number | null): string {
+function yoyoColor(yy: number | null, t: YoyoThresholds = DEFAULT_YOYO_THRESHOLDS): string {
   if (yy === null) return 'rgba(245,240,232,0.3)';
-  if (yy >= 15.5) return '#81c784';
-  if (yy >= 15.2) return '#ffb74d';
+  if (yy >= t.greenMin) return '#81c784';
+  if (yy >= t.amberMin) return '#ffb74d';
   return '#ef9a9a';
 }
 
@@ -303,6 +304,7 @@ export function TeamSelectionBoard({
   initialSubView = 'list',
   onPlayerClick,
   playerSelections = {},
+  yoyoThresholds = DEFAULT_YOYO_THRESHOLDS,
 }: {
   players: ScoutPlayer[];
   user: AppUser;
@@ -310,6 +312,7 @@ export function TeamSelectionBoard({
   initialSubView?: 'list' | 'admin';
   onPlayerClick?: (player: ScoutPlayer) => void;
   playerSelections?: Record<number, boolean>;
+  yoyoThresholds?: YoyoThresholds;
 }) {
   // ── State (ALL hooks before any conditional return) ──
   const [packages, setPackages] = useState<TeamPackage[]>([]);
@@ -368,14 +371,14 @@ export function TeamSelectionBoard({
     );
   }, [players, pickerSearch]);
 
-  // Players who MUST appear in at least one team: Pre- category + green Yo-Yo (≥15.5)
+  // Players who MUST appear in at least one team: Pre- category + green Yo-Yo (configurable threshold)
   const requiredPlayers = useMemo(
     () => players.filter((p) => {
       if (!p.category.startsWith('Pre-')) return false;
       const yy = playerYoyo(p);
-      return yy !== null && yy >= 15.5;
+      return yy !== null && yy >= yoyoThresholds.greenMin;
     }),
-    [players]
+    [players, yoyoThresholds]
   );
 
   const allManuallySelected = useMemo(
@@ -839,7 +842,7 @@ export function TeamSelectionBoard({
                       <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.55)', fontFamily: FONT }}>{player.category || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.65)', fontFamily: FONT }}>{player.extraInfo?.['Primary Skill'] || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <span style={{ color: yoyoColor(yy), fontFamily: FONT, fontWeight: 700, fontSize: 11 }}>
+                        <span style={{ color: yoyoColor(yy, yoyoThresholds), fontFamily: FONT, fontWeight: 700, fontSize: 11 }}>
                           {yy !== null ? yy.toFixed(1) : '—'}
                         </span>
                       </td>
@@ -1359,7 +1362,7 @@ export function TeamSelectionBoard({
                         {player.batch} · {player.category}
                       </span>
                       {yy !== null && (
-                        <span style={{ color: yoyoColor(yy), fontFamily: FONT, fontSize: 10, fontWeight: 700, marginLeft: 6 }}>
+                        <span style={{ color: yoyoColor(yy, yoyoThresholds), fontFamily: FONT, fontSize: 10, fontWeight: 700, marginLeft: 6 }}>
                           {yy.toFixed(1)}
                         </span>
                       )}
@@ -1495,7 +1498,7 @@ export function TeamSelectionBoard({
                           </span>
                         )}
                         {yy !== null && (
-                          <span style={{ color: yoyoColor(yy), fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                          <span style={{ color: yoyoColor(yy, yoyoThresholds), fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
                             {yy.toFixed(1)}
                           </span>
                         )}

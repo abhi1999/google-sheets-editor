@@ -30,9 +30,11 @@ export async function GET(request: Request) {
       });
       const sheets = google.sheets({ version: 'v4', auth });
 
+      // Wide enough range that the cap doesn't quietly start hiding newer rows
+      // once the log grows past a couple hundred entries (append always grows downward).
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: config.sheetId,
-        range: `${config.auditSheetName}!A1:I200`,
+        range: `${config.auditSheetName}!A1:I20000`,
       });
 
       const values = response.data.values || [];

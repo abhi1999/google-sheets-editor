@@ -1,5 +1,8 @@
 export type SchemaType = 'Batsman' | 'Fast Bowler' | 'Spin Bowler';
 
+export type YoyoThresholds = { greenMin: number; amberMin: number };
+export const DEFAULT_YOYO_THRESHOLDS: YoyoThresholds = { greenMin: 15.5, amberMin: 15.2 };
+
 export interface PlayerEvaluation {
   skills: Record<string, number>;
   notes: Record<string, string>;

@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment, createContext, useContext } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import type { ScoutPlayer, PlayerEvaluation, SchemaType, CoachEval } from '@/types/scout';
+import type { ScoutPlayer, PlayerEvaluation, SchemaType, CoachEval, YoyoThresholds } from '@/types/scout';
+import { DEFAULT_YOYO_THRESHOLDS } from '@/types/scout';
 import type { AppUser } from '@/types';
 import { SCHEMAS, FITNESS_FIELDS, calcScore, getRating, playerInitials, type SectionDef, type SchemaDef } from '@/lib/scout-schemas';
 import Papa from 'papaparse';
@@ -11,6 +12,7 @@ import { PlayerModal } from './PlayerModal';
 import { TeamSelectionBoard } from './TeamSelectionBoard';
 import { GameRatingBoard } from './GameRatingBoard';
 import { InGameRatingsTable } from './InGameRatingsTable';
+import { AuditLogTable } from './AuditLogTable';
 import { InGamePivotTable } from './InGamePivotTable';
 import { OpportunitySheetBoard } from './OpportunitySheetBoard';
 
@@ -19,8 +21,6 @@ interface ScoutBoardProps {
   user: AppUser;
 }
 
-export type YoyoThresholds = { greenMin: number; amberMin: number };
-export const DEFAULT_YOYO_THRESHOLDS: YoyoThresholds = { greenMin: 15.5, amberMin: 15.2 };
 const YoyoThresholdsCtx = createContext<YoyoThresholds>(DEFAULT_YOYO_THRESHOLDS);
 const PlayerSelectionsCtx = createContext<Record<number, boolean>>({});
 
@@ -4763,10 +4763,11 @@ const VIEW_LABELS: Record<string, string> = {
   'admin-team-packages':'All Packages',
   'admin-in-game-ratings': 'All In-Game Ratings',
   'admin-in-game-pivot': 'All In-Game Pivot',
+  'admin-audit-log':    'Audit Log',
   'admin-settings':     'Settings',
 };
 
-type ViewMode = 'home' | 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'in-game-ratings' | 'my-in-game-ratings' | 'opportunity-sheet' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-in-game-ratings' | 'admin-in-game-pivot' | 'admin-pivot' | 'admin-settings';
+type ViewMode = 'home' | 'board' | 'my-evals' | 'my-eval-details' | 'my-skill-details' | 'all-fitness' | 'selection' | 'selected-players' | 'team-packages' | 'in-game-ratings' | 'my-in-game-ratings' | 'opportunity-sheet' | 'skill-pivot' | 'admin-evals' | 'admin-skill-details' | 'admin-agg-skills' | 'admin-team-packages' | 'admin-in-game-ratings' | 'admin-in-game-pivot' | 'admin-pivot' | 'admin-audit-log' | 'admin-settings';
 
 // Views reachable directly from the home picker — their breadcrumb "back" goes to Home.
 const TOP_LEVEL_VIEWS = new Set<ViewMode>(['board', 'in-game-ratings', 'opportunity-sheet']);
@@ -5176,6 +5177,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                         { label: 'All Packages', mode: 'admin-team-packages' },
                         { label: 'All In-Game Ratings', mode: 'admin-in-game-ratings' },
                         { label: 'All In-Game Pivot', mode: 'admin-in-game-pivot' },
+                        { label: 'Audit Log', mode: 'admin-audit-log' },
                         { label: 'Settings', mode: 'admin-settings' },
                       ]}
                       activeMode={viewMode}
@@ -5400,7 +5402,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
 
           {/* Team Packages */}
           {!loading && !error && viewMode === 'team-packages' && (
-            <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} onPlayerClick={setActivePlayer} playerSelections={playerSelections} />
+            <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} onPlayerClick={setActivePlayer} playerSelections={playerSelections} yoyoThresholds={yoyoThresholds} />
           )}
 
           {/* In-Game Ratings */}
@@ -5428,6 +5430,11 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
             <InGamePivotTable players={players} user={user} sheetKey={sheetKey} />
           )}
 
+          {/* Admin: Audit Log */}
+          {!loading && !error && viewMode === 'admin-audit-log' && isAdmin && (
+            <AuditLogTable players={players} sheetKey={sheetKey} />
+          )}
+
           {/* Admin: All Team Packages */}
           {!loading && !error && viewMode === 'admin-team-packages' && isAdmin && (
             <>
@@ -5440,7 +5447,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                   Admin Report — All Coach Team Packages
                 </span>
               </div>
-              <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} initialSubView="admin" onPlayerClick={setActivePlayer} playerSelections={playerSelections} />
+              <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} initialSubView="admin" onPlayerClick={setActivePlayer} playerSelections={playerSelections} yoyoThresholds={yoyoThresholds} />
             </>
           )}
 

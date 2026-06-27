@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { ensureTabExists, readTab, appendRowsToTab, updateRowInTab } from '@/lib/sheets';
+import { ensureTabExists, readTab, appendRowsToTab, updateRowInTab, createAuditEntry, appendAuditEntries } from '@/lib/sheets';
 import { parseInGameRating } from '@/lib/ingame-schemas';
 import type { InGameRatingPayload, InGameRatingRecord } from '@/types/scout';
 
@@ -123,6 +123,21 @@ export async function POST(request: NextRequest) {
       await updateRowInTab(existing.__rowIndex as number, rowValues, TAB, sheetKey);
     } else {
       await appendRowsToTab([rowValues], TAB, sheetKey);
+    }
+
+    // Audit log — one entry per game/team if anything actually changed.
+    const oldRatingStr = String(existing?.['Rating'] || '');
+    const newRatingStr = JSON.stringify(body.rating);
+    if (oldRatingStr !== newRatingStr) {
+      appendAuditEntries([
+        createAuditEntry(
+          user.email, user.name, body.playerRowIndex,
+          `In-Game Evaluation: Game ${body.gameNumber} (Team ${body.teamIndex})`,
+          oldRatingStr, newRatingStr
+        ),
+      ], sheetKey).catch((err) => {
+        console.error('[Audit] Failed to write in-game-ratings audit log:', err);
+      });
     }
 
     return NextResponse.json({ success: true, id });
