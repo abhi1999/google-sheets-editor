@@ -149,10 +149,14 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving, isAdmi
   );
   const [openSections, setOpenSections] = useState<Set<string>>(() => new Set());
   const [fitnessOpen, setFitnessOpen] = useState(true);
+  // Collapsible everywhere so coaches can tuck it away and focus on skill evaluations —
+  // collapsed by default on mobile (least screen to spare), open by default on desktop.
+  const [infoOpen, setInfoOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
     setIsMobile(mq.matches);
+    if (mq.matches) setInfoOpen(false);
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
@@ -318,9 +322,15 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving, isAdmi
 
         {/* Player info — structured groups */}
         {Object.keys(player.extraInfo).length > 0 && (() => {
-          const EXCLUDED_KEYS = new Set(['Academy', 'Batting order', 'Special Request']);
+          // Matched case/whitespace-insensitively since these are raw sheet column headers —
+          // double spaces, non-breaking spaces, and casing differences would otherwise slip through.
+          const normalizeKey = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+          const EXCLUDED_KEYS = new Set(
+            ['Academy', 'Batting order', 'Special Request', 'Team', 'CC Bat lookup', 'CC bowl lookup', 'CC ID']
+              .map(normalizeKey)
+          );
           const info = Object.fromEntries(
-            Object.entries(player.extraInfo).filter(([k]) => !EXCLUDED_KEYS.has(k))
+            Object.entries(player.extraInfo).filter(([k]) => !EXCLUDED_KEYS.has(normalizeKey(k)))
           );
           const unknownEntries = Object.entries(info).filter(([k]) => !ALL_KNOWN_KEYS.has(k));
 
@@ -341,28 +351,52 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving, isAdmi
             </div>
           );
 
+          const body = (
+            <div className="px-5 py-2 flex flex-wrap gap-x-6 gap-y-3">
+              {INFO_GROUPS.map((group) => {
+                const entries = group.keys
+                  .map((k) => [k, info[k]] as [string, string])
+                  .filter(([, v]) => v);
+                if (entries.length === 0) return null;
+                return (
+                  <div key={group.label} className="flex items-baseline gap-x-4 gap-y-1.5 flex-wrap">
+                    <span
+                      className="text-[0.55rem] font-bold uppercase tracking-widest flex-shrink-0"
+                      style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif', opacity: 0.6 }}
+                    >
+                      {group.label}
+                    </span>
+                    {entries.map(([k, v]) => renderStat(k, v))}
+                  </div>
+                );
+              })}
+              {unknownEntries.map(([k, v]) => renderStat(k, v))}
+            </div>
+          );
+
+          // Collapsible on every screen size so coaches can tuck profile info away and
+          // focus on skill evaluations — collapsed by default on mobile, open on desktop.
           return (
             <div style={{ background: '#1a2a1a', borderBottom: '1px solid rgba(200,168,75,0.15)' }}>
-              <div className="px-5 py-2 flex flex-wrap gap-x-6 gap-y-3">
-                {INFO_GROUPS.map((group) => {
-                  const entries = group.keys
-                    .map((k) => [k, info[k]] as [string, string])
-                    .filter(([, v]) => v);
-                  if (entries.length === 0) return null;
-                  return (
-                    <div key={group.label} className="flex items-baseline gap-x-4 gap-y-1.5 flex-wrap">
-                      <span
-                        className="text-[0.55rem] font-bold uppercase tracking-widest flex-shrink-0"
-                        style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif', opacity: 0.6 }}
-                      >
-                        {group.label}
-                      </span>
-                      {entries.map(([k, v]) => renderStat(k, v))}
-                    </div>
-                  );
-                })}
-                {unknownEntries.map(([k, v]) => renderStat(k, v))}
-              </div>
+              <button
+                className="w-full flex items-center gap-2 px-5 py-2"
+                style={{ background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer' }}
+                onClick={() => setInfoOpen((o) => !o)}
+              >
+                <span
+                  className="text-[0.6rem] font-bold uppercase tracking-widest"
+                  style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif', opacity: 0.7 }}
+                >
+                  Player Info
+                </span>
+                <span
+                  className="text-xs flex-shrink-0 transition-transform duration-200 ml-auto"
+                  style={{ color: 'rgba(245,240,232,0.4)', transform: infoOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                >
+                  ▼
+                </span>
+              </button>
+              {infoOpen && body}
             </div>
           );
         })()}
