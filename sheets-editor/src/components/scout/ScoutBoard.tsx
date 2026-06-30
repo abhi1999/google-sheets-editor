@@ -527,7 +527,7 @@ function MyEvalsTable({
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span className="text-xs" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>
-                      {ev.savedAt ? new Date(ev.savedAt).toLocaleDateString() : '—'}
+                      {ev.savedAt ? new Date(ev.savedAt).toLocaleString() : '—'}
                     </span>
                   </td>
                 </tr>
@@ -579,7 +579,7 @@ function exportMyEvalsToCSV(players: ScoutPlayer[]) {
       row[`${schemaLabels[s]} %`] = calcScore(p.myEval!.evaluation, SCHEMAS[s]).pct;
     });
     row['Remarks'] = p.myEval!.remarks || '';
-    row['Date'] = p.myEval!.savedAt ? new Date(p.myEval!.savedAt).toLocaleDateString() : '';
+    row['Date'] = p.myEval!.savedAt ? new Date(p.myEval!.savedAt).toLocaleString() : '';
     return row;
   });
   const csv = Papa.unparse(rows);
@@ -607,7 +607,7 @@ function exportToCSV(players: ScoutPlayer[]) {
       row[`${schemaLabel} ${section.letter} Max`] = maxW;
     });
     row['Remarks'] = p.myEval!.remarks || '';
-    row['Date'] = p.myEval!.savedAt ? new Date(p.myEval!.savedAt).toLocaleDateString() : '';
+    row['Date'] = p.myEval!.savedAt ? new Date(p.myEval!.savedAt).toLocaleString() : '';
     return row;
   });
   const csv = Papa.unparse(rows);
@@ -895,7 +895,7 @@ function MyEvalDetailsTable({
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <span style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        {p.myEval!.savedAt ? new Date(p.myEval!.savedAt).toLocaleDateString() : '—'}
+                        {p.myEval!.savedAt ? new Date(p.myEval!.savedAt).toLocaleString() : '—'}
                       </span>
                     </td>
                   </tr>
@@ -923,6 +923,7 @@ type SkillDetailRow = {
   score: number;
   note: string;
   remarks: string;
+  savedAt: string;
 };
 
 function exportMySkillDetailsToCSV(rows: SkillDetailRow[]) {
@@ -938,6 +939,7 @@ function exportMySkillDetailsToCSV(rows: SkillDetailRow[]) {
     Score: r.score > 0 ? r.score : '',
     Notes: r.note,
     'Overall Comment': r.remarks,
+    Date: r.savedAt ? new Date(r.savedAt).toLocaleString() : '',
   }));
   const csv = Papa.unparse(data);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -977,6 +979,7 @@ function MySkillDetailsTable({
               sectionLetter: sec.letter, sectionName: sec.name,
               skillName: sk.name, skillDesc: sk.desc, weight: sk.weight,
               score, note, remarks,
+              savedAt: player.myEval?.savedAt || '',
             });
           }
         }
@@ -1011,6 +1014,7 @@ function MySkillDetailsTable({
       if (col === 'Score') return r.score;
       if (col === 'Notes') return r.note;
       if (col === 'Overall Comment') return r.remarks;
+      if (col === 'Date') return r.savedAt || '';
       return '';
     });
   }, [allRows, search, sortCol, sortDir]);
@@ -1029,7 +1033,7 @@ function MySkillDetailsTable({
     );
   }
 
-  const cols = ['Player', 'Batch', 'Category', 'Academy', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes', 'Overall Comment'];
+  const cols = ['Player', 'Batch', 'Category', 'Academy', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes', 'Overall Comment', 'Date'];
 
   return (
     <div>
@@ -1146,6 +1150,12 @@ function MySkillDetailsTable({
                       ) : (
                         <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
                       )}
+                    </td>
+                    {/* Date */}
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.savedAt ? new Date(r.savedAt).toLocaleString() : '—'}
+                      </span>
                     </td>
                   </tr>
                 );
@@ -1439,7 +1449,7 @@ function exportAdminEvalsToCSV(rows: { player: ScoutPlayer; ev: CoachEval }[]) {
       row[`${schemaLabel} ${section.letter} Max`] = maxW;
     });
     row['Remarks'] = ev.remarks || '';
-    row['Date'] = ev.savedAt ? new Date(ev.savedAt).toLocaleDateString() : '';
+    row['Date'] = ev.savedAt ? new Date(ev.savedAt).toLocaleString() : '';
     return row;
   });
   const csv = Papa.unparse(data);
@@ -1914,6 +1924,15 @@ function AllEvalDetailsTable({
   onRowClick: (p: ScoutPlayer) => void;
 }) {
   const { search, setSearch, sortCol, sortDir, toggleSort } = useSortSearch();
+  const [coachFilters, setCoachFilters] = useState<Set<string>>(new Set());
+
+  function toggleCoach(email: string) {
+    setCoachFilters((prev) => {
+      const next = new Set(prev);
+      next.has(email) ? next.delete(email) : next.add(email);
+      return next;
+    });
+  }
 
   const allRows = useMemo(() => {
     const result: { player: ScoutPlayer; ev: CoachEval }[] = [];
@@ -1925,6 +1944,14 @@ function AllEvalDetailsTable({
     return result;
   }, [players]);
 
+  const allCoaches = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of allRows) {
+      if (!seen.has(r.ev.coachEmail)) seen.set(r.ev.coachEmail, r.ev.coachName);
+    }
+    return Array.from(seen.entries()).map(([email, name]) => ({ email, name }));
+  }, [allRows]);
+
   const displayRows = useMemo(() => {
     const q = search.toLowerCase();
     const base = q
@@ -1935,7 +1962,10 @@ function AllEvalDetailsTable({
           r.ev.coachName.toLowerCase().includes(q)
         )
       : allRows;
-    return applySort(base, sortCol, sortDir, (r, col) => {
+    const coachFiltered = coachFilters.size > 0
+      ? base.filter((r) => coachFilters.has(r.ev.coachEmail))
+      : base;
+    return applySort(coachFiltered, sortCol, sortDir, (r, col) => {
       if (col === 'Player') return r.player.name;
       if (col === 'Batch') return r.player.batch || '';
       if (col === 'Category') return r.player.category || '';
@@ -1948,7 +1978,7 @@ function AllEvalDetailsTable({
       }
       return '';
     });
-  }, [allRows, search, sortCol, sortDir]);
+  }, [allRows, search, sortCol, sortDir, coachFilters]);
 
   const schemaGroups = (Object.entries(SCHEMAS) as [SchemaType, (typeof SCHEMAS)[SchemaType]][]).map(
     ([schemaName, def]) => ({
@@ -1974,15 +2004,48 @@ function AllEvalDetailsTable({
     );
   }
 
-  const uniqueCoaches = new Set(allRows.map((r) => r.ev.coachEmail)).size;
-
   return (
     <div>
+      {/* Coach filter chips */}
+      {allCoaches.length > 1 && (
+        <div className="flex flex-col gap-1.5 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'rgba(239,154,154,0.5)', fontFamily: 'Barlow Condensed, sans-serif' }}>Coach</span>
+            {coachFilters.size > 0 && (
+              <button onClick={() => setCoachFilters(new Set())} className="text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: 'rgba(245,240,232,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                Clear ✕
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {allCoaches.map(({ email, name }) => {
+              const isActive = coachFilters.has(email);
+              return (
+                <button
+                  key={email}
+                  onClick={() => toggleCoach(email)}
+                  className="px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+                  style={{
+                    fontFamily: 'Barlow Condensed, sans-serif',
+                    background: isActive ? 'rgba(192,57,43,0.45)' : 'rgba(192,57,43,0.12)',
+                    color: isActive ? '#f5f0e8' : '#ef9a9a',
+                    border: `1px solid ${isActive ? 'rgba(192,57,43,0.6)' : 'rgba(192,57,43,0.2)'}`,
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  {name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <TableSearch value={search} onChange={setSearch} />
         <span className="text-xs flex-1" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
-          {displayRows.length} of {allRows.length} entries · {uniqueCoaches} coach{uniqueCoaches !== 1 ? 'es' : ''}
+          {displayRows.length} of {allRows.length} entries · {allCoaches.length} coach{allCoaches.length !== 1 ? 'es' : ''}
         </span>
         <button onClick={() => exportAdminEvalsToCSV(allRows)} style={EXPORT_BTN_STYLE} className="transition-opacity hover:opacity-80">
           {EXPORT_ICON} Export CSV
@@ -2118,7 +2181,7 @@ function AllEvalDetailsTable({
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <span style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
-                        {ev.savedAt ? new Date(ev.savedAt).toLocaleDateString() : '—'}
+                        {ev.savedAt ? new Date(ev.savedAt).toLocaleString() : '—'}
                       </span>
                     </td>
                   </tr>
@@ -2152,6 +2215,7 @@ function exportAdminSkillDetailsToCSV(rows: AdminSkillDetailRow[]) {
     Score: r.score > 0 ? r.score : '',
     Notes: r.note,
     'Overall Comment': r.remarks,
+    Date: r.savedAt ? new Date(r.savedAt).toLocaleString() : '',
   }));
   const csv = Papa.unparse(data);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -2206,6 +2270,7 @@ function AdminSkillDetailsTable({
                 sectionLetter: sec.letter, sectionName: sec.name,
                 skillName: sk.name, skillDesc: sk.desc, weight: sk.weight,
                 score, note, remarks,
+                savedAt: ev.savedAt || '',
                 coachName: ev.coachName || ev.coachEmail,
                 coachEmail: ev.coachEmail,
               });
@@ -2257,6 +2322,7 @@ function AdminSkillDetailsTable({
       if (col === 'Score') return r.score;
       if (col === 'Notes') return r.note;
       if (col === 'Overall Comment') return r.remarks;
+      if (col === 'Date') return r.savedAt || '';
       return '';
     });
   }, [allRows, search, sortCol, sortDir, coachFilters, yoyoFilter, schemaFilters]);
@@ -2295,7 +2361,7 @@ function AdminSkillDetailsTable({
     }
     return c;
   }, [allRows, t]);
-  const cols = ['Player', 'Batch', 'Div', 'Category', 'Academy', 'Primary Skill', 'Yo-Yo', 'Coach', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes', 'Overall Comment'];
+  const cols = ['Player', 'Batch', 'Div', 'Category', 'Academy', 'Primary Skill', 'Yo-Yo', 'Coach', 'Schema', 'Section', 'Skill', 'Wt', 'Score', 'Notes', 'Overall Comment', 'Date'];
 
   return (
     <div>
@@ -2504,6 +2570,12 @@ function AdminSkillDetailsTable({
                       ) : (
                         <span style={{ color: 'rgba(245,240,232,0.15)' }}>—</span>
                       )}
+                    </td>
+                    {/* Date */}
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <span style={{ color: 'rgba(245,240,232,0.3)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                        {r.savedAt ? new Date(r.savedAt).toLocaleString() : '—'}
+                      </span>
                     </td>
                   </tr>
                 );
@@ -4619,15 +4691,22 @@ function YoyoConfigPanel({
   sheetKey,
   thresholds,
   onSave,
+  maxReserves,
+  onMaxReservesSave,
 }: {
   sheetKey: string;
   thresholds: YoyoThresholds;
   onSave: (t: YoyoThresholds) => void;
+  maxReserves: number;
+  onMaxReservesSave: (n: number) => void;
 }) {
   const [greenMin, setGreenMin] = useState(String(thresholds.greenMin));
   const [amberMin, setAmberMin] = useState(String(thresholds.amberMin));
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [reserveCount, setReserveCount] = useState(String(maxReserves));
+  const [reserveSaving, setReserveSaving] = useState(false);
+  const [reserveMsg, setReserveMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const g = parseFloat(greenMin);
   const a = parseFloat(amberMin);
@@ -4657,6 +4736,32 @@ function YoyoConfigPanel({
     }
   }
 
+  async function handleReserveSave() {
+    const n = parseInt(reserveCount, 10);
+    if (isNaN(n) || n < 0 || n > 10) return;
+    setReserveSaving(true);
+    setReserveMsg(null);
+    try {
+      const g = parseFloat(greenMin), a = parseFloat(amberMin);
+      const res = await fetch(`/api/scout/yoyo-config?sheetKey=${encodeURIComponent(sheetKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ greenMin: isNaN(g) ? thresholds.greenMin : g, amberMin: isNaN(a) ? thresholds.amberMin : a, maxReserves: n }),
+      });
+      if (res.ok) {
+        onMaxReservesSave(n);
+        setReserveMsg({ text: 'Saved', ok: true });
+      } else {
+        const data = await res.json();
+        setReserveMsg({ text: data.error || 'Failed to save', ok: false });
+      }
+    } catch {
+      setReserveMsg({ text: 'Network error', ok: false });
+    } finally {
+      setReserveSaving(false);
+    }
+  }
+
   const INPUT_STYLE: React.CSSProperties = {
     background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
     borderRadius: 4, color: '#f5f0e8', padding: '5px 10px', width: 90,
@@ -4683,6 +4788,51 @@ function YoyoConfigPanel({
       </div>
 
       <div className="flex flex-col gap-6" style={{ maxWidth: 480 }}>
+
+        {/* Team Package — Reserve Slots */}
+        <div className="rounded-lg border p-5" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(192,57,43,0.2)' }}>
+          <p className="text-sm font-bold mb-1 uppercase tracking-wider" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em' }}>
+            Team Package — Reserve Slots
+          </p>
+          <p className="text-xs mb-4" style={{ color: 'rgba(245,240,232,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
+            Number of optional reserve slots per team (0–10). Default is 3.
+          </p>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold w-28 uppercase" style={{ color: 'rgba(245,240,232,0.6)', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.06em' }}>Max Reserves</span>
+            <input
+              type="number" step="1" min="0" max="10"
+              value={reserveCount}
+              onChange={(e) => setReserveCount(e.target.value)}
+              style={{ ...INPUT_STYLE, width: 70 }}
+            />
+            <span className="text-xs" style={{ color: 'rgba(245,240,232,0.35)', fontFamily: 'Barlow Condensed, sans-serif' }}>slots per team</span>
+          </div>
+          {(() => { const n = parseInt(reserveCount, 10); return (isNaN(n) || n < 0 || n > 10) && reserveCount; })() && (
+            <p className="text-xs mt-2" style={{ color: '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif' }}>Must be a whole number between 0 and 10.</p>
+          )}
+          <div className="flex items-center gap-3 mt-4">
+            <button
+              onClick={handleReserveSave}
+              disabled={reserveSaving || (() => { const n = parseInt(reserveCount, 10); return isNaN(n) || n < 0 || n > 10; })()}
+              style={{
+                padding: '6px 18px', borderRadius: 4, fontSize: 12, fontWeight: 800,
+                fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em',
+                background: !reserveSaving ? '#c0392b' : 'rgba(192,57,43,0.3)',
+                color: !reserveSaving ? '#f5f0e8' : 'rgba(245,240,232,0.35)',
+                border: 'none', cursor: !reserveSaving ? 'pointer' : 'not-allowed',
+                textTransform: 'uppercase',
+              }}>
+              {reserveSaving ? 'Saving…' : 'Save'}
+            </button>
+            {reserveMsg && (
+              <span className="text-xs font-bold" style={{ color: reserveMsg.ok ? '#a5d6a7' : '#ef9a9a', fontFamily: 'Barlow Condensed, sans-serif' }}>
+                {reserveMsg.text}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Yo-Yo Test Thresholds */}
         <div className="rounded-lg border p-5" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(192,57,43,0.2)' }}>
           <p className="text-sm font-bold mb-4 uppercase tracking-wider" style={{ color: '#f5f0e8', fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em' }}>
             Yo-Yo Test Thresholds
@@ -4854,6 +5004,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [yoyoThresholds, setYoyoThresholds] = useState<YoyoThresholds>(DEFAULT_YOYO_THRESHOLDS);
+  const [maxReserves, setMaxReserves] = useState(3);
   const [playerSelections, setPlayerSelections] = useState<Record<number, boolean>>({});
   const [selectionSaving, setSelectionSaving] = useState(false);
   const isDemo = sheetKey === 'demo';
@@ -4879,6 +5030,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
       if (data.error) setError(data.error);
       else { setPlayers(data.players || []); setIsAdmin(!!data.isAdmin); }
       if (cfg && typeof cfg.greenMin === 'number') setYoyoThresholds(cfg);
+      if (cfg && typeof cfg.maxReserves === 'number') setMaxReserves(cfg.maxReserves);
       if (selData?.selections) setPlayerSelections(selData.selections);
     }).catch(() => setError('Failed to load player data.'))
       .finally(() => setLoading(false));
@@ -5418,7 +5570,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
 
           {/* Team Packages */}
           {!loading && !error && viewMode === 'team-packages' && (
-            <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} onPlayerClick={setActivePlayer} playerSelections={playerSelections} yoyoThresholds={yoyoThresholds} />
+            <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} onPlayerClick={setActivePlayer} playerSelections={playerSelections} yoyoThresholds={yoyoThresholds} maxReserves={maxReserves} />
           )}
 
           {/* In-Game Ratings */}
@@ -5463,7 +5615,7 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
                   Admin Report — All Coach Team Packages
                 </span>
               </div>
-              <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} initialSubView="admin" onPlayerClick={setActivePlayer} playerSelections={playerSelections} yoyoThresholds={yoyoThresholds} />
+              <TeamSelectionBoard players={players} user={user} sheetKey={sheetKey} initialSubView="admin" onPlayerClick={setActivePlayer} playerSelections={playerSelections} yoyoThresholds={yoyoThresholds} maxReserves={maxReserves} />
             </>
           )}
 
@@ -5542,6 +5694,8 @@ export function ScoutBoard({ sheetKey, user }: ScoutBoardProps) {
               sheetKey={sheetKey}
               thresholds={yoyoThresholds}
               onSave={setYoyoThresholds}
+              maxReserves={maxReserves}
+              onMaxReservesSave={setMaxReserves}
             />
           )}
 

@@ -5,7 +5,7 @@ import type { ScoutPlayer, TeamPackage, PackageTeam, OpportunityRecord, Opportun
 import { GAME_NUMBERS } from '@/lib/ingame-schemas';
 import { emptyOpportunityEntry } from '@/lib/opportunity-schemas';
 import { playerInitials } from '@/lib/scout-schemas';
-import { TEAM_COLORS, ALL_SLOTS } from './TeamSelectionBoard';
+import { TEAM_COLORS, slotRole } from './TeamSelectionBoard';
 
 const FONT = 'Barlow Condensed, sans-serif';
 
@@ -17,7 +17,7 @@ function roleFor(team: PackageTeam, playerRowIndex: number): string | null {
   // A custom role on the slot (set for reserves in Team Packages) overrides the generic
   // slot-template label — e.g. "Backup Opener" instead of just "Reserve".
   if (slotData.role) return slotData.role;
-  return ALL_SLOTS.find((s) => s.slot === slotData.slot)?.role ?? null;
+  return slotRole(slotData.slot);
 }
 
 const ROLE_BADGES = [

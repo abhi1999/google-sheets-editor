@@ -39,14 +39,28 @@ const RESERVE_SLOTS = [
 ] as const;
 
 export const ALL_SLOTS = [...TEAM_SLOTS, ...RESERVE_SLOTS];
-const REQUIRED_SLOT_NUMBERS = new Set<number>(TEAM_SLOTS.map((s) => s.slot));
+export const REQUIRED_SLOT_NUMBERS = new Set<number>(TEAM_SLOTS.map((s) => s.slot));
+
+export function makeAllSlots(maxReserves: number) {
+  const reserves = Array.from({ length: Math.max(0, maxReserves) }, (_, i) => ({
+    slot: TEAM_SLOTS.length + 1 + i,
+    role: 'Reserve' as const,
+    color: '#b0bec5',
+  }));
+  return [...TEAM_SLOTS, ...reserves] as typeof ALL_SLOTS;
+}
+
+/** Role label for any slot — any slot ≥ 14 that isn't in TEAM_SLOTS is a Reserve. */
+export function slotRole(slot: number): string {
+  return TEAM_SLOTS.find((s) => s.slot === slot)?.role ?? 'Reserve';
+}
 
 const MAX_PACKAGES = 10;
 const FONT = 'Barlow Condensed, sans-serif';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeNewPackage(email: string, name: string): TeamPackage {
+function makeNewPackage(email: string, name: string, allSlots: ReturnType<typeof makeAllSlots>): TeamPackage {
   return {
     packageId: `${email}_${Date.now()}`,
     coachEmail: email,
@@ -59,7 +73,7 @@ function makeNewPackage(email: string, name: string): TeamPackage {
     teams: TEAM_COLORS.map((tc, i) => ({
       teamIndex: i + 1,
       teamName: tc.name,
-      slots: ALL_SLOTS.map((s) => ({ slot: s.slot, playerRowIndex: null, playerName: '' })),
+      slots: allSlots.map((s) => ({ slot: s.slot, playerRowIndex: null, playerName: '' })),
       captain: null,
       vc: null,
       wks: [],
@@ -95,11 +109,11 @@ function yoyoColor(yy: number | null, t: YoyoThresholds = DEFAULT_YOYO_THRESHOLD
   return '#ef9a9a';
 }
 
-function exportPackage(pkg: TeamPackage, players: ScoutPlayer[]) {
+function exportPackage(pkg: TeamPackage, players: ScoutPlayer[], allSlots: ReturnType<typeof makeAllSlots>) {
   const playerMap = new Map(players.map((p) => [p.rowIndex, p]));
   const teamCols = pkg.teams.map((t) => t.teamName);
   const headers = ['Slot', 'Role', ...teamCols];
-  const rows = ALL_SLOTS.map((comp) => {
+  const rows = allSlots.map((comp) => {
     const row: string[] = [
       String(comp.slot),
       comp.role,
@@ -305,6 +319,7 @@ export function TeamSelectionBoard({
   onPlayerClick,
   playerSelections = {},
   yoyoThresholds = DEFAULT_YOYO_THRESHOLDS,
+  maxReserves = 3,
 }: {
   players: ScoutPlayer[];
   user: AppUser;
@@ -313,7 +328,9 @@ export function TeamSelectionBoard({
   onPlayerClick?: (player: ScoutPlayer) => void;
   playerSelections?: Record<number, boolean>;
   yoyoThresholds?: YoyoThresholds;
+  maxReserves?: number;
 }) {
+  const allSlots = makeAllSlots(maxReserves);
   // ── State (ALL hooks before any conditional return) ──
   const [packages, setPackages] = useState<TeamPackage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -477,7 +494,7 @@ export function TeamSelectionBoard({
 
   // ── Actions ──
   const openEdit = useCallback((pkg: TeamPackage | null, editable: boolean) => {
-    const p = pkg ?? makeNewPackage(user.email, user.name);
+    const p = pkg ?? makeNewPackage(user.email, user.name, allSlots);
     setEditPkg(JSON.parse(JSON.stringify(p)));
     // Locked packages are always view-only, even for the owner
     setIsEditable(editable && !p.locked);
@@ -877,7 +894,7 @@ export function TeamSelectionBoard({
 
   // ── Edit / View ──
   if (subView === 'edit' && editPkg) {
-    const pickerComp = picker ? ALL_SLOTS.find((s) => s.slot === picker.slot) : null;
+    const pickerComp = picker ? allSlots.find((s) => s.slot === picker.slot) : null;
     const pickerTeamIdx = picker ? editPkg.teams.findIndex((t) => t.teamIndex === picker.teamIndex) : -1;
 
     return (
@@ -922,7 +939,7 @@ export function TeamSelectionBoard({
 
           {!isEditable && (
             <button
-              onClick={() => exportPackage(editPkg, players)}
+              onClick={() => exportPackage(editPkg, players, allSlots)}
               style={{
                 background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
                 color: 'rgba(245,240,232,0.55)', borderRadius: 6, padding: '6px 14px',
@@ -966,7 +983,7 @@ export function TeamSelectionBoard({
               {saveError && <span style={{ color: '#ef9a9a', fontFamily: FONT, fontSize: 11 }}>{saveError}</span>}
 
               <button
-                onClick={() => exportPackage(editPkg, players)}
+                onClick={() => exportPackage(editPkg, players, allSlots)}
                 style={{
                   background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
                   color: 'rgba(245,240,232,0.55)', borderRadius: 6, padding: '6px 14px',
@@ -1063,7 +1080,7 @@ export function TeamSelectionBoard({
                 </tr>
               </thead>
               <tbody>
-                {ALL_SLOTS.map((comp, ri) => (
+                {allSlots.map((comp, ri) => (
                   <tr key={comp.slot}
                     style={{ background: ri % 2 === 0 ? '#1e1212' : '#1a1010', borderBottom: '1px solid rgba(192,57,43,0.06)' }}>
                     <td style={{ padding: '7px 10px', textAlign: 'center', color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 11 }}>
