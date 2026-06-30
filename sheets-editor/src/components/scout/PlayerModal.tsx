@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { ScoutPlayer, PlayerEvaluation, SchemaType } from '@/types/scout';
 import {
   SCHEMAS,
@@ -80,9 +80,13 @@ interface PlayerModalProps {
   onClose: () => void;
   onSave: (evaluation: PlayerEvaluation, remarks: string) => void;
   saving: boolean;
+  isAdmin?: boolean;
+  isSelected?: boolean;
+  selectionSaving?: boolean;
+  onToggleSelection?: (selected: boolean) => void;
 }
 
-function SkillStars({
+export function SkillStars({
   skillName,
   value,
   onChange,
@@ -91,20 +95,77 @@ function SkillStars({
   value: number;
   onChange: (v: number) => void;
 }) {
-  const [hovered, setHovered] = useState(0);
-  const display = hovered || value;
+  const [dragRating, setDragRating] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const movedRef = useRef(false);
+  const display = dragRating ?? value;
+
+  function ratingFromX(clientX: number): number {
+    if (!containerRef.current) return 1;
+    const rect = containerRef.current.getBoundingClientRect();
+    return Math.min(5, Math.max(1, Math.ceil(((clientX - rect.left) / rect.width) * 5)));
+  }
 
   return (
-    <div className="flex gap-1 flex-shrink-0" onMouseLeave={() => setHovered(0)}>
+    <div
+      ref={containerRef}
+      className="flex flex-shrink-0"
+      style={{
+        // pan-y lets the page scroll vertically while horizontal drag sets the rating.
+        // Without this, iOS would cancel pointer events whenever it guesses "scroll".
+        touchAction: 'pan-y',
+        userSelect: 'none',
+        cursor: 'pointer',
+      }}
+      onPointerDown={(e) => {
+        draggingRef.current = true;
+        movedRef.current = false;
+        setDragRating(ratingFromX(e.clientX));
+      }}
+      onPointerMove={(e) => {
+        if (!draggingRef.current) return;
+        movedRef.current = true;
+        setDragRating(ratingFromX(e.clientX));
+      }}
+      onPointerUp={(e) => {
+        if (!draggingRef.current) return;
+        draggingRef.current = false;
+        const r = ratingFromX(e.clientX);
+        // tap (no drag): toggle off if same star; drag: always commit to final position
+        onChange(movedRef.current ? r : r === value ? 0 : r);
+        setDragRating(null);
+      }}
+      onPointerLeave={(e) => {
+        // Finger slid off the edge while dragging — commit to boundary star
+        if (!draggingRef.current) return;
+        draggingRef.current = false;
+        onChange(ratingFromX(e.clientX));
+        setDragRating(null);
+      }}
+      onPointerCancel={() => {
+        // Browser took over (e.g. scroll gesture won) — cancel without committing
+        draggingRef.current = false;
+        setDragRating(null);
+      }}
+    >
       {[1, 2, 3, 4, 5].map((i) => (
         <span
           key={i}
-          className={`text-2xl cursor-pointer select-none transition-all leading-none ${
-            i <= display ? 'text-[#c8a84b]' : 'text-gray-300'
-          } hover:scale-110`}
-          onMouseEnter={() => setHovered(i)}
-          onClick={() => { const v = i === value ? 0 : i; if (v === 0) setHovered(0); onChange(v); }}
           title={`${i} — ${['Poor', 'Below Average', 'Average', 'Good', 'Excellent'][i - 1]}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            // 10px vertical padding pushes the touch target to ~44px — Apple HIG minimum
+            padding: '10px 3px',
+            minWidth: 28,
+            fontSize: 22,
+            lineHeight: 1,
+            color: i <= display ? '#c8a84b' : 'rgba(0,0,0,0.15)',
+            // Instant color during drag; subtle transition otherwise
+            transition: draggingRef.current ? 'none' : 'color 0.1s',
+          }}
         >
           ★
         </span>
@@ -130,7 +191,7 @@ function RatingChip({ cls, label }: { cls: string; label: string }) {
   );
 }
 
-export function PlayerModal({ player, userEmail, onClose, onSave, saving }: PlayerModalProps) {
+export function PlayerModal({ player, userEmail, onClose, onSave, saving, isAdmin, isSelected, selectionSaving, onToggleSelection }: PlayerModalProps) {
   const [activeTab, setActiveTab] = useState<'mine' | 'all'>('mine');
 
   const [skills, setSkills] = useState<Record<string, number>>(
@@ -145,6 +206,25 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
   );
   const [openSections, setOpenSections] = useState<Set<string>>(() => new Set());
   const [fitnessOpen, setFitnessOpen] = useState(true);
+  // Collapsible everywhere so coaches can tuck it away and focus on skill evaluations —
+  // collapsed by default on mobile (least screen to spare), open by default on desktop.
+  const [infoOpen, setInfoOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    setIsMobile(mq.matches);
+    if (mq.matches) setInfoOpen(false);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  // Lock background scroll while modal is open — on iOS the page under a fixed overlay
+  // still scrolls on touch, which is disorienting during evaluations.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
   const schemaScores = useMemo(
     () => (Object.entries(SCHEMAS) as [SchemaType, typeof SCHEMAS[SchemaType]][]).map(([name, def]) => {
@@ -191,15 +271,24 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center p-4 md:p-6 overflow-y-auto"
-      style={{ background: 'rgba(8,18,8,0.88)', backdropFilter: 'blur(4px)' }}
+      className="fixed inset-0 z-50 flex md:items-start md:justify-center md:p-6 md:overflow-y-auto"
+      style={{
+        background: 'rgba(8,18,8,0.88)', backdropFilter: 'blur(4px)',
+        alignItems: isMobile ? 'flex-end' : undefined,
+      }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="bg-white rounded-xl w-full max-w-2xl my-auto shadow-2xl overflow-hidden"
+        className="bg-white rounded-t-2xl md:rounded-xl w-full md:max-w-2xl md:my-auto shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
-        style={{ fontFamily: 'Barlow, sans-serif', color: '#1a1a1a' }}
+        style={{ fontFamily: 'Barlow, sans-serif', color: '#1a1a1a', ...(isMobile ? { height: '92dvh' } : {}) }}
       >
+        {/* Drag handle — mobile only */}
+        {isMobile && (
+          <div className="flex-shrink-0 flex justify-center pt-3 pb-1">
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.25)' }} />
+          </div>
+        )}
         {/* Modal header */}
         <div
           className="flex items-center gap-4 px-5 py-4 border-b-2 border-[#c0392b]"
@@ -262,9 +351,31 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
               })()}
             </div>
           </div>
+          {isSelected !== undefined && (
+            <button
+              onClick={isAdmin && !selectionSaving ? () => onToggleSelection?.(!isSelected) : undefined}
+              title={isAdmin ? (isSelected ? 'Click to deselect' : 'Click to select') : (isSelected ? 'Selected' : 'Not selected')}
+              style={{
+                marginLeft: 'auto',
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '5px 11px', borderRadius: 6,
+                fontSize: 11, fontWeight: 800,
+                fontFamily: 'Barlow Condensed, sans-serif', letterSpacing: '0.08em',
+                background: isSelected ? 'rgba(27,94,32,0.5)' : 'rgba(255,255,255,0.06)',
+                color: isSelected ? '#a5d6a7' : 'rgba(245,240,232,0.3)',
+                border: `1px solid ${isSelected ? 'rgba(46,125,50,0.7)' : 'rgba(245,240,232,0.12)'}`,
+                cursor: isAdmin && !selectionSaving ? 'pointer' : 'default',
+                flexShrink: 0,
+                opacity: selectionSaving ? 0.5 : 1,
+                transition: 'all 0.15s',
+              }}
+            >
+              {isSelected ? '✓ Selected' : '○ Not Selected'}
+            </button>
+          )}
           <button
-            className="ml-auto text-2xl leading-none cursor-pointer transition-colors"
-            style={{ color: 'rgba(245,240,232,0.4)', background: 'none', border: 'none' }}
+            className="text-2xl leading-none cursor-pointer transition-colors"
+            style={{ color: 'rgba(245,240,232,0.4)', background: 'none', border: 'none', marginLeft: isSelected !== undefined ? 8 : 'auto' }}
             onClick={onClose}
             onMouseEnter={(e) => (e.currentTarget.style.color = '#f5f0e8')}
             onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(245,240,232,0.4)')}
@@ -275,9 +386,15 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
 
         {/* Player info — structured groups */}
         {Object.keys(player.extraInfo).length > 0 && (() => {
-          const EXCLUDED_KEYS = new Set(['Academy', 'Batting order', 'Special Request']);
+          // Matched case/whitespace-insensitively since these are raw sheet column headers —
+          // double spaces, non-breaking spaces, and casing differences would otherwise slip through.
+          const normalizeKey = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+          const EXCLUDED_KEYS = new Set(
+            ['Academy', 'Batting order', 'Special Request', 'Team', 'CC Bat lookup', 'CC bowl lookup', 'CC ID']
+              .map(normalizeKey)
+          );
           const info = Object.fromEntries(
-            Object.entries(player.extraInfo).filter(([k]) => !EXCLUDED_KEYS.has(k))
+            Object.entries(player.extraInfo).filter(([k]) => !EXCLUDED_KEYS.has(normalizeKey(k)))
           );
           const unknownEntries = Object.entries(info).filter(([k]) => !ALL_KNOWN_KEYS.has(k));
 
@@ -298,28 +415,52 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
             </div>
           );
 
+          const body = (
+            <div className="px-5 py-2 flex flex-wrap gap-x-6 gap-y-3">
+              {INFO_GROUPS.map((group) => {
+                const entries = group.keys
+                  .map((k) => [k, info[k]] as [string, string])
+                  .filter(([, v]) => v);
+                if (entries.length === 0) return null;
+                return (
+                  <div key={group.label} className="flex items-baseline gap-x-4 gap-y-1.5 flex-wrap">
+                    <span
+                      className="text-[0.55rem] font-bold uppercase tracking-widest flex-shrink-0"
+                      style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif', opacity: 0.6 }}
+                    >
+                      {group.label}
+                    </span>
+                    {entries.map(([k, v]) => renderStat(k, v))}
+                  </div>
+                );
+              })}
+              {unknownEntries.map(([k, v]) => renderStat(k, v))}
+            </div>
+          );
+
+          // Collapsible on every screen size so coaches can tuck profile info away and
+          // focus on skill evaluations — collapsed by default on mobile, open on desktop.
           return (
             <div style={{ background: '#1a2a1a', borderBottom: '1px solid rgba(200,168,75,0.15)' }}>
-              <div className="px-5 py-2 flex flex-wrap gap-x-6 gap-y-3">
-                {INFO_GROUPS.map((group) => {
-                  const entries = group.keys
-                    .map((k) => [k, info[k]] as [string, string])
-                    .filter(([, v]) => v);
-                  if (entries.length === 0) return null;
-                  return (
-                    <div key={group.label} className="flex items-baseline gap-x-4 gap-y-1.5 flex-wrap">
-                      <span
-                        className="text-[0.55rem] font-bold uppercase tracking-widest flex-shrink-0"
-                        style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif', opacity: 0.6 }}
-                      >
-                        {group.label}
-                      </span>
-                      {entries.map(([k, v]) => renderStat(k, v))}
-                    </div>
-                  );
-                })}
-                {unknownEntries.map(([k, v]) => renderStat(k, v))}
-              </div>
+              <button
+                className="w-full flex items-center gap-2 px-5 py-2"
+                style={{ background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer' }}
+                onClick={() => setInfoOpen((o) => !o)}
+              >
+                <span
+                  className="text-[0.6rem] font-bold uppercase tracking-widest"
+                  style={{ color: '#c8a84b', fontFamily: 'Barlow Condensed, sans-serif', opacity: 0.7 }}
+                >
+                  Player Info
+                </span>
+                <span
+                  className="text-xs flex-shrink-0 transition-transform duration-200 ml-auto"
+                  style={{ color: 'rgba(245,240,232,0.4)', transform: infoOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                >
+                  ▼
+                </span>
+              </button>
+              {infoOpen && body}
             </div>
           );
         })()}
@@ -349,6 +490,9 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
             );
           })}
         </div>
+
+        {/* Tab content — single scroll container on mobile, transparent wrapper on desktop */}
+        <div className="flex-1 min-h-0 overflow-y-auto md:flex-none md:overflow-visible" style={{ overscrollBehavior: 'contain' }}>
 
         {/* My Evaluation tab */}
         {activeTab === 'mine' && (
@@ -385,7 +529,7 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
             </div>
 
             {/* Evaluation sections — all 3 schemas */}
-            <div className="overflow-y-auto" style={{ maxHeight: '55vh' }}>
+            <div className="overflow-y-auto" style={{ maxHeight: isMobile ? 'none' : '55vh', overscrollBehavior: 'contain' }}>
               {(Object.entries(SCHEMAS) as [SchemaType, (typeof SCHEMAS)[SchemaType]][]).map(([schemaName, schemaDef]) => (
                 <div key={schemaName}>
                   {/* Schema group header */}
@@ -591,7 +735,7 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
 
         {/* All Coaches tab */}
         {activeTab === 'all' && (
-          <div className="overflow-y-auto" style={{ maxHeight: '60vh' }}>
+          <div className="overflow-y-auto" style={{ maxHeight: isMobile ? 'none' : '60vh' }}>
             {player.coachEvals.length === 0 ? (
               <div className="px-5 py-10 text-center">
                 <p className="text-sm font-semibold" style={{ color: 'rgba(26,26,26,0.4)', fontFamily: 'Barlow Condensed, sans-serif' }}>
@@ -726,9 +870,11 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving }: Play
           </div>
         )}
 
+        </div>{/* end tab content scroll wrapper */}
+
         {/* Footer */}
         <div
-          className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t"
+          className="flex-shrink-0 flex items-center justify-end gap-2.5 px-5 py-3.5 border-t"
           style={{ background: '#fafafa', borderColor: '#eee' }}
         >
           <button

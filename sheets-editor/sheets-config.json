@@ -55,9 +55,20 @@
     },
     {
       "id": "tryout",
-      "name": "Cricket Tryouts",
+      "name": "Cricket Tryouts U15",
       "description": "Player evaluation sheet for tryouts. Tab must have columns: Name, Category, Schema, Score, Pct, Rating, Remarks, Evaluation",
       "sheetId": "13HAtzkA2yxftiJbyEWdEMOfM5ITvHH6yqxnlvcFxKOc",
+      "range": "Players!A1:AZ1000",
+      "auditSheetName": "AuditLog",
+      "editableColumns": ["Evaluation", "Score", "Pct", "Rating", "Remarks"],
+      "editorEmails": [],
+      "useEditAccessSheet": true
+    },
+    {
+      "id": "tryout-u13",
+      "name": "Cricket Tryouts U13",
+      "description": "Player evaluation sheet for U13 tryouts.",
+      "sheetId": "1jbDkspzWyBW-6Yokbff1dsnxavUMjbp1Q_GmQWtbjA4",
       "range": "Players!A1:AZ1000",
       "auditSheetName": "AuditLog",
       "editableColumns": ["Evaluation", "Score", "Pct", "Rating", "Remarks"],

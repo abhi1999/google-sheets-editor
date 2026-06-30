@@ -1,0 +1,1649 @@
+'use client';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import type { ScoutPlayer, TeamPackage, PackageTeam, TeamSlot, YoyoThresholds } from '@/types/scout';
+import { DEFAULT_YOYO_THRESHOLDS } from '@/types/scout';
+import type { AppUser } from '@/types';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+export const TEAM_COLORS = [
+  { name: 'Red',    bg: '#c0392b', text: '#ef9a9a', dim: 'rgba(192,57,43,0.18)' },
+  { name: 'Yellow', bg: '#f57f17', text: '#fff176', dim: 'rgba(245,127,23,0.18)' },
+  { name: 'Blue',   bg: '#1565c0', text: '#90caf9', dim: 'rgba(21,101,192,0.18)' },
+  { name: 'Purple', bg: '#6a1b9a', text: '#ce93d8', dim: 'rgba(106,27,154,0.18)' },
+  { name: 'Orange', bg: '#e65100', text: '#ffcc80', dim: 'rgba(230,81,0,0.18)' },
+  { name: 'Maroon', bg: '#880e4f', text: '#f48fb1', dim: 'rgba(136,14,79,0.18)' },
+] as const;
+
+const TEAM_SLOTS = [
+  { slot: 1,  role: 'Top Order',       color: '#64b5f6' },
+  { slot: 2,  role: 'Top Order',       color: '#64b5f6' },
+  { slot: 3,  role: 'Top Order',       color: '#64b5f6' },
+  { slot: 4,  role: 'Top Order',       color: '#64b5f6' },
+  { slot: 5,  role: 'All Rounder',     color: '#81c784' },
+  { slot: 6,  role: 'All Rounder',     color: '#81c784' },
+  { slot: 7,  role: 'All Rounder',     color: '#ffb74d' },
+  { slot: 8,  role: 'All Rounder',     color: '#ffb74d' },
+  { slot: 9,  role: 'Bowler',          color: '#ff8a65' },
+  { slot: 10, role: 'Bowler',          color: '#ff8a65' },
+  { slot: 11, role: 'Bowler',          color: '#ff8a65' },
+  { slot: 12, role: 'Bowler',          color: '#ff8a65' },
+  { slot: 13, role: 'Wicket Keeper',   color: '#80cbc4' },
+] as const;
+
+// Up to 3 optional reserve/bench slots — not required to be filled.
+const RESERVE_SLOTS = [
+  { slot: 14, role: 'Reserve', color: '#b0bec5' },
+  { slot: 15, role: 'Reserve', color: '#b0bec5' },
+  { slot: 16, role: 'Reserve', color: '#b0bec5' },
+] as const;
+
+export const ALL_SLOTS = [...TEAM_SLOTS, ...RESERVE_SLOTS];
+const REQUIRED_SLOT_NUMBERS = new Set<number>(TEAM_SLOTS.map((s) => s.slot));
+
+const MAX_PACKAGES = 10;
+const FONT = 'Barlow Condensed, sans-serif';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function makeNewPackage(email: string, name: string): TeamPackage {
+  return {
+    packageId: `${email}_${Date.now()}`,
+    coachEmail: email,
+    coachName: name,
+    packageName: 'Default',
+    status: 'draft',
+    shared: false,
+    locked: false,
+    comments: '',
+    teams: TEAM_COLORS.map((tc, i) => ({
+      teamIndex: i + 1,
+      teamName: tc.name,
+      slots: ALL_SLOTS.map((s) => ({ slot: s.slot, playerRowIndex: null, playerName: '' })),
+      captain: null,
+      vc: null,
+      wks: [],
+    })),
+    savedAt: '',
+  };
+}
+
+function teamFillCount(team: PackageTeam): number {
+  // Only counts the 13 required starting slots — reserve slots are optional and excluded.
+  return team.slots.filter((s) => !!s.playerRowIndex && REQUIRED_SLOT_NUMBERS.has(s.slot)).length;
+}
+
+// Updates a slot by number, adding it if the package was saved before reserve slots existed.
+function upsertSlot(slots: TeamSlot[], slot: number, data: Partial<TeamSlot>): TeamSlot[] {
+  if (slots.some((s) => s.slot === slot)) {
+    return slots.map((s) => (s.slot !== slot ? s : { ...s, ...data }));
+  }
+  return [...slots, { slot, playerRowIndex: null, playerName: '', ...data }].sort((a, b) => a.slot - b.slot);
+}
+
+function playerYoyo(player: ScoutPlayer): number | null {
+  const vals = player.coachEvals
+    .map((e) => parseFloat(e.evaluation.fitness?.['Yo-Yo'] || ''))
+    .filter((v) => !isNaN(v) && v > 0);
+  return vals.length > 0 ? Math.min(...vals) : null;
+}
+
+function yoyoColor(yy: number | null, t: YoyoThresholds = DEFAULT_YOYO_THRESHOLDS): string {
+  if (yy === null) return 'rgba(245,240,232,0.3)';
+  if (yy >= t.greenMin) return '#81c784';
+  if (yy >= t.amberMin) return '#ffb74d';
+  return '#ef9a9a';
+}
+
+function exportPackage(pkg: TeamPackage, players: ScoutPlayer[]) {
+  const playerMap = new Map(players.map((p) => [p.rowIndex, p]));
+  const teamCols = pkg.teams.map((t) => t.teamName);
+  const headers = ['Slot', 'Role', ...teamCols];
+  const rows = ALL_SLOTS.map((comp) => {
+    const row: string[] = [
+      String(comp.slot),
+      comp.role,
+      ...pkg.teams.map((team) => {
+        const s = team.slots.find((sl) => sl.slot === comp.slot);
+        if (!s?.playerRowIndex) return '';
+        const p = playerMap.get(s.playerRowIndex);
+        const name = p ? p.name : s.playerName;
+        // Append role badges inline
+        const pid = s.playerRowIndex;
+        const badges: string[] = [];
+        if (team.captain === pid) badges.push('C');
+        if (team.vc === pid) badges.push('VC');
+        if ((team.wks ?? []).includes(pid)) badges.push('WK');
+        return badges.length > 0 ? `${name} [${badges.join('/')}]` : name;
+      }),
+    ];
+    return row;
+  });
+
+  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const blankRow = Array(headers.length).fill('');
+  const exportDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  const sections: string[][] = [
+    headers,
+    ...rows,
+    blankRow,
+    ['Exported', exportDate, ...Array(headers.length - 2).fill('')],
+  ];
+
+  if (pkg.comments?.trim()) {
+    sections.push(blankRow);
+    sections.push(['Comments', ...Array(headers.length - 1).fill('')]);
+    // Split multi-line comments into separate rows under the Comments column
+    pkg.comments.trim().split('\n').forEach((line) => {
+      sections.push(['', line, ...Array(headers.length - 2).fill('')]);
+    });
+  }
+
+  const csv = sections.map((r) => r.map(escape).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${pkg.packageName.replace(/\s+/g, '-')}-teams.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── PackageCard ──────────────────────────────────────────────────────────────
+
+function PackageCard({
+  pkg,
+  editable,
+  requiredIds,
+  manuallySelectedIds,
+  onOpen,
+  onClone,
+}: {
+  pkg: TeamPackage;
+  editable: boolean;
+  requiredIds: Set<number>;
+  manuallySelectedIds: Set<number>;
+  onOpen: () => void;
+  onClone?: () => void;
+}) {
+  const totalFilled = pkg.teams.reduce((s, t) => s + teamFillCount(t), 0);
+  const totalPossible = pkg.teams.length * 13;
+  const pickedIds = new Set(
+    pkg.teams.flatMap((t) => t.slots.map((s) => s.playerRowIndex)).filter(Boolean) as number[]
+  );
+  const missingCount = requiredIds.size > 0
+    ? [...requiredIds].filter((id) => !pickedIds.has(id)).length
+    : 0;
+  const manualAddedCount = manuallySelectedIds.size > 0
+    ? [...manuallySelectedIds].filter((id) => pickedIds.has(id)).length
+    : 0;
+
+  return (
+    <div
+      onClick={onOpen}
+      style={{
+        background: '#221515',
+        border: `1px solid ${pkg.locked ? 'rgba(200,168,75,0.2)' : 'rgba(192,57,43,0.15)'}`,
+        borderRadius: 10,
+        padding: '16px 20px',
+        cursor: 'pointer',
+        transition: 'border-color 0.15s',
+      }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = pkg.locked ? 'rgba(200,168,75,0.45)' : 'rgba(192,57,43,0.4)'; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = pkg.locked ? 'rgba(200,168,75,0.2)' : 'rgba(192,57,43,0.15)'; }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {pkg.locked && (
+            <span title="Locked" style={{ color: '#c8a84b', fontSize: 11, flexShrink: 0 }}>🔒</span>
+          )}
+          <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pkg.packageName}</span>
+          {!editable && (
+            <span style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT, fontSize: 11, flexShrink: 0 }}>{pkg.coachName}</span>
+          )}
+        </div>
+        <span style={{ color: totalFilled === totalPossible ? '#81c784' : 'rgba(245,240,232,0.3)', fontFamily: FONT, fontSize: 10, whiteSpace: 'nowrap', flexShrink: 0 }}>
+          {totalFilled}/{totalPossible} filled
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mt-3">
+        {pkg.teams.map((team, i) => {
+          const tc = TEAM_COLORS[i];
+          const filled = teamFillCount(team);
+          return (
+            <span key={i} style={{
+              background: tc.dim, color: tc.text, borderRadius: 4,
+              padding: '2px 8px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+              border: `1px solid ${tc.bg}44`,
+            }}>
+              {team.teamName} {filled === 13 ? '✓' : `${filled}/13`}
+            </span>
+          );
+        })}
+      </div>
+
+      {(requiredIds.size > 0 || manuallySelectedIds.size > 0) && (
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          {requiredIds.size > 0 && (
+            missingCount > 0 ? (
+              <span style={{ color: '#ffb74d', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                ⚠ {requiredIds.size - missingCount}/{requiredIds.size} pre-selected
+              </span>
+            ) : (
+              <span style={{ color: '#81c784', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                ✓ {requiredIds.size}/{requiredIds.size} pre-selected
+              </span>
+            )
+          )}
+          {manuallySelectedIds.size > 0 && (
+            manualAddedCount < manuallySelectedIds.size ? (
+              <span style={{ color: 'rgba(165,214,167,0.6)', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                ○ {manualAddedCount}/{manuallySelectedIds.size} selected
+              </span>
+            ) : (
+              <span style={{ color: '#a5d6a7', fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                ✓ {manualAddedCount}/{manuallySelectedIds.size} selected
+              </span>
+            )
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mt-3">
+        <div className="flex items-center gap-2">
+          {pkg.savedAt ? (
+            <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 10 }}>
+              {new Date(pkg.savedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}
+            </span>
+          ) : <span />}
+          <span style={{
+            background: pkg.shared ? 'rgba(129,199,132,0.12)' : 'rgba(255,255,255,0.04)',
+            color: pkg.shared ? '#81c784' : 'rgba(245,240,232,0.22)',
+            border: `1px solid ${pkg.shared ? 'rgba(129,199,132,0.25)' : 'rgba(255,255,255,0.07)'}`,
+            borderRadius: 4, padding: '2px 8px', fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
+          }}>
+            {pkg.shared ? '◉ Shared' : '◎ Private'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {onClone && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onClone(); }}
+              title="Clone this package"
+              style={{
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                color: 'rgba(245,240,232,0.35)', borderRadius: 4, padding: '2px 8px',
+                fontFamily: FONT, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#c8a84b'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.35)'; }}>
+              ⎘ Clone
+            </button>
+          )}
+          <span style={{
+            background: editable && !pkg.locked ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.06)',
+            color: editable && !pkg.locked ? '#c8a84b' : 'rgba(245,240,232,0.4)',
+            borderRadius: 4, padding: '2px 10px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+          }}>
+            {pkg.locked ? 'View →' : editable ? 'Edit →' : 'View →'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export function TeamSelectionBoard({
+  players,
+  user,
+  sheetKey,
+  initialSubView = 'list',
+  onPlayerClick,
+  playerSelections = {},
+  yoyoThresholds = DEFAULT_YOYO_THRESHOLDS,
+}: {
+  players: ScoutPlayer[];
+  user: AppUser;
+  sheetKey: string;
+  initialSubView?: 'list' | 'admin';
+  onPlayerClick?: (player: ScoutPlayer) => void;
+  playerSelections?: Record<number, boolean>;
+  yoyoThresholds?: YoyoThresholds;
+}) {
+  // ── State (ALL hooks before any conditional return) ──
+  const [packages, setPackages] = useState<TeamPackage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [subView, setSubView] = useState<'list' | 'edit' | 'compare' | 'admin'>(initialSubView);
+  const [editPkg, setEditPkg] = useState<TeamPackage | null>(null);
+  const [isEditable, setIsEditable] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [picker, setPicker] = useState<{ teamIndex: number; slot: number } | null>(null);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [compareFilter, setCompareFilter] = useState<'all' | 'consensus' | 'majority' | 'unique'>('all');
+  const [dragOver, setDragOver] = useState<{ teamIndex: number; slot: number } | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+
+  const myPackages = useMemo(
+    () => packages.filter((p) => p.coachEmail === user.email),
+    [packages, user.email]
+  );
+  const otherPackages = useMemo(
+    () => packages.filter((p) => p.coachEmail !== user.email),
+    [packages, user.email]
+  );
+  const coachGroups = useMemo(() => {
+    const map = new Map<string, { coachName: string; pkgs: TeamPackage[] }>();
+    for (const pkg of otherPackages) {
+      if (!map.has(pkg.coachEmail)) map.set(pkg.coachEmail, { coachName: pkg.coachName, pkgs: [] });
+      map.get(pkg.coachEmail)!.pkgs.push(pkg);
+    }
+    return Array.from(map.values());
+  }, [otherPackages]);
+
+  const usedMap = useMemo(() => {
+    const map = new Map<number, { teamIndex: number; teamName: string; slot: number }>();
+    if (!editPkg) return map;
+    for (const team of editPkg.teams) {
+      for (const s of team.slots) {
+        if (s.playerRowIndex) map.set(s.playerRowIndex, { teamIndex: team.teamIndex, teamName: team.teamName, slot: s.slot });
+      }
+    }
+    return map;
+  }, [editPkg]);
+
+  const pickerPlayers = useMemo(() => {
+    const q = pickerSearch.toLowerCase();
+    if (!q) return players;
+    return players.filter((p) =>
+      p.name.toLowerCase().includes(q) ||
+      p.batch.toLowerCase().includes(q) ||
+      p.div.toLowerCase().includes(q) ||
+      (p.extraInfo?.['Primary Skill'] || '').toLowerCase().includes(q)
+    );
+  }, [players, pickerSearch]);
+
+  // Players who MUST appear in at least one team: Pre- category + green Yo-Yo (configurable threshold)
+  const requiredPlayers = useMemo(
+    () => players.filter((p) => {
+      if (!p.category.startsWith('Pre-')) return false;
+      const yy = playerYoyo(p);
+      return yy !== null && yy >= yoyoThresholds.greenMin;
+    }),
+    [players, yoyoThresholds]
+  );
+
+  const allManuallySelected = useMemo(
+    () => players.filter((p) => playerSelections[p.rowIndex] === true),
+    [players, playerSelections]
+  );
+
+  // Manually selected players not yet assigned to any slot in the package being edited
+  const missingManuallySelected = useMemo(() => {
+    if (!editPkg) return allManuallySelected;
+    const pickedIds = new Set(
+      editPkg.teams.flatMap((t) => t.slots.map((s) => s.playerRowIndex)).filter(Boolean) as number[]
+    );
+    return allManuallySelected.filter((p) => !pickedIds.has(p.rowIndex));
+  }, [allManuallySelected, editPkg]);
+
+  const requiredIds = useMemo(
+    () => new Set(requiredPlayers.map((p) => p.rowIndex)),
+    [requiredPlayers]
+  );
+
+  const manuallySelectedIds = useMemo(
+    () => new Set(allManuallySelected.map((p) => p.rowIndex)),
+    [allManuallySelected]
+  );
+
+  // Required players not present in any slot of the package being edited
+  const missingRequired = useMemo(() => {
+    if (!editPkg) return requiredPlayers;
+    const pickedIds = new Set(
+      editPkg.teams.flatMap((t) => t.slots.map((s) => s.playerRowIndex)).filter(Boolean) as number[]
+    );
+    return requiredPlayers.filter((p) => !pickedIds.has(p.rowIndex));
+  }, [editPkg, requiredPlayers]);
+
+  // All coaches grouped (admin only — admins receive all packages from the API)
+  const allCoachGroups = useMemo(() => {
+    const map = new Map<string, { coachName: string; coachEmail: string; pkgs: TeamPackage[] }>();
+    for (const pkg of packages) {
+      if (!map.has(pkg.coachEmail)) map.set(pkg.coachEmail, { coachName: pkg.coachName, coachEmail: pkg.coachEmail, pkgs: [] });
+      map.get(pkg.coachEmail)!.pkgs.push(pkg);
+    }
+    return Array.from(map.values());
+  }, [packages]);
+
+  const compareData = useMemo(() => {
+    const totalPkgs = packages.length;
+    const freq = new Map<number, { player: ScoutPlayer; count: number; coaches: string[] }>();
+    for (const pkg of packages) {
+      const seenInPkg = new Set<number>();
+      for (const team of pkg.teams) {
+        for (const s of team.slots) {
+          if (!s.playerRowIndex || seenInPkg.has(s.playerRowIndex)) continue;
+          seenInPkg.add(s.playerRowIndex);
+          const player = players.find((p) => p.rowIndex === s.playerRowIndex);
+          if (!player) continue;
+          if (!freq.has(s.playerRowIndex)) freq.set(s.playerRowIndex, { player, count: 0, coaches: [] });
+          const entry = freq.get(s.playerRowIndex)!;
+          entry.count++;
+          if (!entry.coaches.includes(pkg.coachName)) entry.coaches.push(pkg.coachName);
+        }
+      }
+    }
+    return { items: Array.from(freq.values()).sort((a, b) => b.count - a.count), totalPkgs };
+  }, [packages, players]);
+
+  // ── Fetch ──
+  const fetchPackages = useCallback(async (silent = false) => {
+    if (silent) setRefreshing(true); else setLoading(true);
+    try {
+      const res = await fetch(`/api/scout/team-packages?sheetKey=${encodeURIComponent(sheetKey)}`);
+      const data = await res.json();
+      if (data.packages) setPackages(data.packages);
+      if (data.isAdmin !== undefined) setIsAdmin(!!data.isAdmin);
+    } catch {}
+    if (silent) setRefreshing(false); else setLoading(false);
+  }, [sheetKey]);
+
+  useEffect(() => { fetchPackages(); }, [fetchPackages]);
+
+  const handleRefresh = useCallback(() => fetchPackages(true), [fetchPackages]);
+
+  const handleApprove = useCallback(async (packageId: string) => {
+    setApprovingId(packageId);
+    try {
+      await fetch(`/api/scout/team-packages/approve?sheetKey=${encodeURIComponent(sheetKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageId }),
+      });
+      await fetchPackages(true);
+    } finally {
+      setApprovingId(null);
+    }
+  }, [sheetKey, fetchPackages]);
+
+  // ── Actions ──
+  const openEdit = useCallback((pkg: TeamPackage | null, editable: boolean) => {
+    const p = pkg ?? makeNewPackage(user.email, user.name);
+    setEditPkg(JSON.parse(JSON.stringify(p)));
+    // Locked packages are always view-only, even for the owner
+    setIsEditable(editable && !p.locked);
+    setDirty(!pkg);
+    setSubView('edit');
+    setPicker(null);
+    setPickerSearch('');
+    setSaveError('');
+    setConfirmDelete(false);
+  }, [user]);
+
+  function goBack() {
+    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    setSubView('list');
+    setEditPkg(null);
+    setDirty(false);
+    setPicker(null);
+  }
+
+  function updatePkg(updater: (pkg: TeamPackage) => TeamPackage) {
+    setEditPkg((prev) => (prev ? updater(prev) : prev));
+    setDirty(true);
+  }
+
+  function assignPlayer(player: ScoutPlayer) {
+    if (!picker) return;
+    const { teamIndex, slot } = picker;
+    updatePkg((pkg) => ({
+      ...pkg,
+      teams: pkg.teams.map((t) =>
+        t.teamIndex !== teamIndex ? t : {
+          ...t,
+          slots: upsertSlot(t.slots, slot, { playerRowIndex: player.rowIndex, playerName: player.name }),
+        }
+      ),
+    }));
+    setPicker(null);
+    setPickerSearch('');
+  }
+
+  function clearSlot(teamIndex: number, slot: number) {
+    updatePkg((pkg) => ({
+      ...pkg,
+      teams: pkg.teams.map((t) =>
+        t.teamIndex !== teamIndex ? t : {
+          ...t,
+          slots: t.slots.map((s) => s.slot !== slot ? s : { ...s, playerRowIndex: null, playerName: '' }),
+        }
+      ),
+    }));
+  }
+
+  async function handleSave() {
+    if (!editPkg) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      const res = await fetch(`/api/scout/team-packages?sheetKey=${encodeURIComponent(sheetKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageId: editPkg.packageId, packageName: editPkg.packageName, shared: editPkg.shared, locked: editPkg.locked ?? false, comments: editPkg.comments ?? '', teams: editPkg.teams }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setSaveError(data.error || 'Failed to save'); return; }
+      setDirty(false);
+      await fetchPackages();
+    } catch (e: any) {
+      setSaveError(e.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleClone(pkg: TeamPackage) {
+    if (myPackages.length >= MAX_PACKAGES) return;
+    setSaving(true);
+    try {
+      const cloned: TeamPackage = {
+        ...JSON.parse(JSON.stringify(pkg)),
+        packageId: `${user.email}_${Date.now()}`,
+        coachEmail: user.email,
+        coachName: user.name,
+        packageName: `${pkg.packageName} (Copy)`,
+        shared: false,
+        locked: false,
+        savedAt: '',
+      };
+      const res = await fetch(`/api/scout/team-packages?sheetKey=${encodeURIComponent(sheetKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageId: cloned.packageId, packageName: cloned.packageName, shared: cloned.shared, locked: cloned.locked, teams: cloned.teams }),
+      });
+      if (res.ok) await fetchPackages();
+    } catch {}
+    setSaving(false);
+  }
+
+  function setRole(teamIndex: number, playerRowIndex: number, role: 'captain' | 'vc' | 'wk') {
+    updatePkg((pkg) => ({
+      ...pkg,
+      teams: pkg.teams.map((t) => {
+        if (t.teamIndex !== teamIndex) return t;
+        if (role === 'captain') {
+          return { ...t, captain: t.captain === playerRowIndex ? null : playerRowIndex };
+        }
+        if (role === 'vc') {
+          return { ...t, vc: t.vc === playerRowIndex ? null : playerRowIndex };
+        }
+        // wk: toggle in list, max 3
+        const wks = t.wks ?? [];
+        if (wks.includes(playerRowIndex)) return { ...t, wks: wks.filter((id) => id !== playerRowIndex) };
+        if (wks.length >= 3) return t;
+        return { ...t, wks: [...wks, playerRowIndex] };
+      }),
+    }));
+  }
+
+  async function handleDelete() {
+    if (!editPkg) return;
+    setSaving(true);
+    try {
+      await fetch(
+        `/api/scout/team-packages?sheetKey=${encodeURIComponent(sheetKey)}&packageId=${encodeURIComponent(editPkg.packageId)}`,
+        { method: 'DELETE' }
+      );
+      setSubView('list');
+      setEditPkg(null);
+      setDirty(false);
+      await fetchPackages();
+    } catch {}
+    setSaving(false);
+    setConfirmDelete(false);
+  }
+
+  // ── Loading ──
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <span style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT }}>Loading packages…</span>
+      </div>
+    );
+  }
+
+  // ── Admin view ──
+  if (subView === 'admin' && isAdmin) {
+    const sharedCount = packages.filter((p) => p.shared).length;
+    return (
+      <div>
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <h2 style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 20, fontWeight: 700, margin: 0 }}>
+            All Packages
+          </h2>
+          <span style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT, fontSize: 12 }}>
+            {packages.length} package{packages.length !== 1 ? 's' : ''} · {sharedCount} shared
+          </span>
+        </div>
+
+        {allCoachGroups.map(({ coachName, coachEmail, pkgs }) => (
+          <div key={coachEmail} className="mb-7">
+            <div className="flex items-center gap-3 mb-3">
+              <span style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>{coachName}</span>
+              <span style={{ color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 11 }}>{coachEmail}</span>
+              <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 11 }}>
+                {pkgs.filter((p) => p.shared).length}/{pkgs.length} shared
+              </span>
+            </div>
+
+            <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+              <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#2a1818', borderBottom: '2px solid rgba(192,57,43,0.3)' }}>
+                    {['Package', 'Teams', 'Fill', 'Visibility', 'Saved', 'Approve'].map((h) => (
+                      <th key={h} style={{
+                        padding: '8px 14px', textAlign: 'left', fontFamily: FONT,
+                        fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+                        textTransform: 'uppercase', color: 'rgba(245,240,232,0.4)',
+                        whiteSpace: 'nowrap',
+                      }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pkgs.map((pkg, i) => {
+                    const totalFilled = pkg.teams.reduce((s, t) => s + teamFillCount(t), 0);
+                    const totalPossible = pkg.teams.length * 13;
+                    const isOwn = pkg.coachEmail === user.email;
+                    return (
+                      <tr key={pkg.packageId}
+                        onClick={() => openEdit(pkg, isOwn)}
+                        style={{
+                          background: i % 2 === 0 ? '#1e1212' : '#1a1010',
+                          borderBottom: '1px solid rgba(192,57,43,0.06)',
+                          cursor: 'pointer',
+                        }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(192,57,43,0.07)'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = i % 2 === 0 ? '#1e1212' : '#1a1010'; }}>
+                        <td style={{ padding: '9px 14px', fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#f5f0e8', whiteSpace: 'nowrap' }}>
+                          {pkg.packageName}
+                        </td>
+                        <td style={{ padding: '9px 14px' }}>
+                          <div className="flex flex-wrap gap-1">
+                            {pkg.teams.map((t, ti) => {
+                              const tc = TEAM_COLORS[ti];
+                              return (
+                                <span key={ti} style={{
+                                  background: tc.dim, color: tc.text, borderRadius: 3,
+                                  padding: '1px 6px', fontFamily: FONT, fontSize: 9, fontWeight: 700,
+                                }}>
+                                  {t.teamName}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
+                        <td style={{ padding: '9px 14px', fontFamily: FONT, fontSize: 11, whiteSpace: 'nowrap',
+                          color: totalFilled === totalPossible ? '#81c784' : 'rgba(245,240,232,0.4)' }}>
+                          {totalFilled}/{totalPossible}
+                        </td>
+                        <td style={{ padding: '9px 14px' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            background: pkg.shared ? 'rgba(129,199,132,0.15)' : 'rgba(255,255,255,0.05)',
+                            color: pkg.shared ? '#81c784' : 'rgba(245,240,232,0.35)',
+                            border: `1px solid ${pkg.shared ? 'rgba(129,199,132,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                            borderRadius: 5, padding: '3px 10px',
+                            fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {pkg.shared ? '◉ Shared' : '◎ Private'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '9px 14px', fontFamily: FONT, fontSize: 11, color: 'rgba(245,240,232,0.3)', whiteSpace: 'nowrap' }}>
+                          {pkg.savedAt
+                            ? new Date(pkg.savedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })
+                            : '—'}
+                        </td>
+                        <td style={{ padding: '9px 14px', whiteSpace: 'nowrap' }}>
+                          {pkg.status === 'approved' ? (
+                            <span style={{
+                              display: 'inline-block',
+                              background: 'rgba(129,199,132,0.15)', color: '#81c784',
+                              border: '1px solid rgba(129,199,132,0.3)', borderRadius: 5,
+                              padding: '3px 10px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+                            }}>
+                              ✓ Approved Roster
+                            </span>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleApprove(pkg.packageId); }}
+                              disabled={approvingId === pkg.packageId}
+                              style={{
+                                background: 'rgba(245,240,232,0.06)', color: 'rgba(245,240,232,0.7)',
+                                border: '1px solid rgba(245,240,232,0.15)', borderRadius: 5,
+                                padding: '3px 10px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+                                cursor: approvingId === pkg.packageId ? 'default' : 'pointer',
+                                opacity: approvingId === pkg.packageId ? 0.5 : 1,
+                              }}>
+                              {approvingId === pkg.packageId ? 'Approving…' : 'Approve'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+
+        {packages.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(245,240,232,0.25)', fontFamily: FONT }}>
+            No packages created yet.
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Compare view ──
+  if (subView === 'compare') {
+    const { items, totalPkgs } = compareData;
+    const filtered =
+      compareFilter === 'consensus' ? items.filter((x) => x.count === totalPkgs) :
+      compareFilter === 'majority'  ? items.filter((x) => x.count > 1 && x.count < totalPkgs) :
+      compareFilter === 'unique'    ? items.filter((x) => x.count === 1) :
+      items;
+
+    const uniqueCoaches = new Set(packages.map((p) => p.coachEmail)).size;
+
+    return (
+      <div>
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <button onClick={() => setSubView('list')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(245,240,232,0.5)', fontFamily: FONT, fontSize: 13 }}>
+            ← Back
+          </button>
+          <h2 style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 20, fontWeight: 700, margin: 0 }}>
+            Package Comparison
+          </h2>
+          <span style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT, fontSize: 12 }}>
+            {totalPkgs} package{totalPkgs !== 1 ? 's' : ''} · {uniqueCoaches} coach{uniqueCoaches !== 1 ? 'es' : ''}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mb-5">
+          {([
+            ['all',       `All Players (${items.length})`],
+            ['consensus', `In Every Package (${items.filter((x) => x.count === totalPkgs).length})`],
+            ['majority',  `Shared (${items.filter((x) => x.count > 1 && x.count < totalPkgs).length})`],
+            ['unique',    `Unique to One Coach (${items.filter((x) => x.count === 1).length})`],
+          ] as [string, string][]).map(([key, label]) => {
+            const active = compareFilter === key;
+            return (
+              <button key={key} onClick={() => setCompareFilter(key as typeof compareFilter)}
+                style={{
+                  fontFamily: FONT, fontSize: 11, fontWeight: 700,
+                  letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer',
+                  borderRadius: 6, padding: '6px 14px',
+                  background: active ? 'rgba(200,168,75,0.22)' : 'rgba(255,255,255,0.04)',
+                  color: active ? '#c8a84b' : 'rgba(245,240,232,0.4)',
+                  border: `1px solid ${active ? '#c8a84b' : 'rgba(255,255,255,0.08)'}`,
+                }}>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#2a1818', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
+                  {['Player', 'Batch', 'Div', 'Category', 'Primary Skill', 'Yo-Yo', 'In Packages', 'Coaches'].map((h) => (
+                    <th key={h} className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
+                      style={{ fontFamily: FONT, color: h === 'In Packages' ? '#c8a84b' : 'rgba(245,240,232,0.55)' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(({ player, count, coaches }, i) => {
+                  const yy = playerYoyo(player);
+                  const pct = totalPkgs > 0 ? count / totalPkgs : 0;
+                  const barColor = pct === 1 ? '#81c784' : pct >= 0.5 ? '#ffb74d' : '#ef9a9a';
+                  return (
+                    <tr key={player.rowIndex}
+                      style={{ background: i % 2 === 0 ? '#1e1212' : '#221515', borderBottom: '1px solid rgba(192,57,43,0.06)' }}>
+                      <td className="px-3 py-2 font-bold whitespace-nowrap" style={{ color: '#f5f0e8', fontFamily: FONT }}>
+                        {onPlayerClick ? (
+                          <button onClick={() => onPlayerClick(player)}
+                            style={{ background: 'none', border: 'none', color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 12, cursor: 'pointer', padding: 0, textAlign: 'left' }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#c8a84b'; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = '#f5f0e8'; }}>
+                            {player.name}
+                          </button>
+                        ) : player.name}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: FONT }}>{player.batch || '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.45)', fontFamily: FONT }}>{player.div || '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.55)', fontFamily: FONT }}>{player.category || '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'rgba(245,240,232,0.65)', fontFamily: FONT }}>{player.extraInfo?.['Primary Skill'] || '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span style={{ color: yoyoColor(yy, yoyoThresholds), fontFamily: FONT, fontWeight: 700, fontSize: 11 }}>
+                          {yy !== null ? yy.toFixed(1) : '—'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span style={{ color: barColor, fontFamily: FONT, fontWeight: 700 }}>{count}/{totalPkgs}</span>
+                          <div style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ width: `${pct * 100}%`, height: '100%', background: barColor, borderRadius: 2 }} />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2" style={{ color: 'rgba(245,240,232,0.55)', fontFamily: FONT, fontStyle: 'italic' }}>
+                        {coaches.join(' · ')}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-8 text-center" style={{ color: 'rgba(245,240,232,0.25)', fontFamily: FONT }}>
+                      No players match this filter.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Edit / View ──
+  if (subView === 'edit' && editPkg) {
+    const pickerComp = picker ? ALL_SLOTS.find((s) => s.slot === picker.slot) : null;
+    const pickerTeamIdx = picker ? editPkg.teams.findIndex((t) => t.teamIndex === picker.teamIndex) : -1;
+
+    return (
+      <div>
+        {/* ── Header ── */}
+        <div className="flex flex-wrap items-center gap-3 mb-5">
+          <button onClick={goBack}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(245,240,232,0.5)', fontFamily: FONT, fontSize: 13, padding: 0 }}>
+            ← Back
+          </button>
+          <button
+            onClick={async () => { await fetchPackages(true); }}
+            disabled={refreshing}
+            title="Refresh package data"
+            style={{
+              background: 'none', border: '1px solid rgba(255,255,255,0.1)',
+              color: refreshing ? 'rgba(245,240,232,0.2)' : 'rgba(245,240,232,0.35)',
+              borderRadius: 6, padding: '4px 10px', fontFamily: FONT, fontSize: 11,
+              cursor: refreshing ? 'default' : 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}>
+            <span style={{ display: 'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>↺</span>
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+
+          {isEditable ? (
+            <input
+              value={editPkg.packageName}
+              onChange={(e) => updatePkg((p) => ({ ...p, packageName: e.target.value }))}
+              style={{
+                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(192,57,43,0.3)',
+                borderRadius: 6, color: '#f5f0e8', fontFamily: FONT, fontSize: 16,
+                fontWeight: 700, padding: '4px 10px', outline: 'none', letterSpacing: '0.04em',
+              }}
+            />
+          ) : (
+            <div>
+              <span style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 16, fontWeight: 700 }}>{editPkg.packageName}</span>
+              <span style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT, fontSize: 12, marginLeft: 8 }}>by {editPkg.coachName}</span>
+            </div>
+          )}
+
+          {!isEditable && (
+            <button
+              onClick={() => exportPackage(editPkg, players)}
+              style={{
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
+                color: 'rgba(245,240,232,0.55)', borderRadius: 6, padding: '6px 14px',
+                fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+                textTransform: 'uppercase' as const, cursor: 'pointer', marginLeft: 'auto',
+              }}>
+              ↓ Export CSV
+            </button>
+          )}
+
+          {/* Lock toggle always visible for own packages */}
+          {editPkg.coachEmail === user.email && (
+            <button
+              onClick={async () => {
+                const next = { ...editPkg, locked: !editPkg.locked };
+                setEditPkg(next);
+                setIsEditable(!next.locked);
+                // Save lock state immediately
+                await fetch(`/api/scout/team-packages?sheetKey=${encodeURIComponent(sheetKey)}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ packageId: next.packageId, packageName: next.packageName, shared: next.shared, locked: next.locked, comments: next.comments ?? '', teams: next.teams }),
+                });
+                await fetchPackages();
+              }}
+              title={editPkg.locked ? 'Unlock package to allow edits' : 'Lock package to prevent accidental changes'}
+              style={{
+                background: editPkg.locked ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${editPkg.locked ? 'rgba(200,168,75,0.4)' : 'rgba(255,255,255,0.12)'}`,
+                color: editPkg.locked ? '#c8a84b' : 'rgba(245,240,232,0.4)',
+                borderRadius: 6, padding: '6px 14px', fontFamily: FONT, fontSize: 11,
+                fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer',
+              }}>
+              {editPkg.locked ? '🔒 Locked' : '🔓 Unlocked'}
+            </button>
+          )}
+
+          {isEditable && (
+            <div className="flex flex-wrap items-center gap-2 ml-auto">
+              {dirty && <span style={{ color: 'rgba(200,168,75,0.7)', fontFamily: FONT, fontSize: 11 }}>Unsaved changes</span>}
+              {saveError && <span style={{ color: '#ef9a9a', fontFamily: FONT, fontSize: 11 }}>{saveError}</span>}
+
+              <button
+                onClick={() => exportPackage(editPkg, players)}
+                style={{
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
+                  color: 'rgba(245,240,232,0.55)', borderRadius: 6, padding: '6px 14px',
+                  fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+                  textTransform: 'uppercase' as const, cursor: 'pointer',
+                }}>
+                ↓ Export CSV
+              </button>
+
+              <button
+                onClick={() => updatePkg((p) => ({ ...p, shared: !p.shared }))}
+                style={{
+                  background: editPkg.shared ? 'rgba(129,199,132,0.15)' : 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${editPkg.shared ? 'rgba(129,199,132,0.35)' : 'rgba(255,255,255,0.1)'}`,
+                  color: editPkg.shared ? '#81c784' : 'rgba(245,240,232,0.35)',
+                  borderRadius: 6, padding: '6px 14px', fontFamily: FONT, fontSize: 11,
+                  fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer',
+                }}>
+                {editPkg.shared ? '◉ Shared' : '◎ Private'}
+              </button>
+
+              <button onClick={handleSave} disabled={saving || !dirty}
+                style={{
+                  background: dirty && !saving ? 'rgba(46,125,50,0.35)' : 'rgba(46,125,50,0.1)',
+                  border: `1px solid ${dirty && !saving ? 'rgba(46,125,50,0.6)' : 'rgba(46,125,50,0.15)'}`,
+                  color: dirty && !saving ? '#a5d6a7' : 'rgba(165,214,167,0.25)',
+                  borderRadius: 6, padding: '6px 16px', fontFamily: FONT, fontSize: 12,
+                  fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' as const,
+                  cursor: dirty && !saving ? 'pointer' : 'not-allowed',
+                }}>
+                {saving ? 'Saving…' : 'Save Package'}
+              </button>
+
+              {confirmDelete ? (
+                <>
+                  <span style={{ color: '#ef9a9a', fontFamily: FONT, fontSize: 11 }}>Delete this package?</span>
+                  <button onClick={handleDelete} disabled={saving}
+                    style={{ background: 'rgba(192,57,43,0.4)', border: '1px solid rgba(192,57,43,0.7)', color: '#ef9a9a', borderRadius: 6, padding: '5px 12px', fontFamily: FONT, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                    Yes, Delete
+                  </button>
+                  <button onClick={() => setConfirmDelete(false)}
+                    style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(245,240,232,0.4)', borderRadius: 6, padding: '5px 12px', fontFamily: FONT, fontSize: 11, cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setConfirmDelete(true)}
+                  style={{ background: 'none', border: '1px solid rgba(192,57,43,0.2)', color: 'rgba(239,154,154,0.5)', borderRadius: 6, padding: '5px 12px', fontFamily: FONT, fontSize: 11, cursor: 'pointer' }}>
+                  Delete
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Grid ── */}
+        <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'rgba(192,57,43,0.2)' }}>
+          <div className="overflow-x-auto">
+            <table style={{ borderCollapse: 'collapse', minWidth: 860 }}>
+              <thead>
+                <tr style={{ background: '#2a1818', borderBottom: '2px solid rgba(192,57,43,0.4)' }}>
+                  <th style={{ width: 30, padding: '8px 10px', color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 11, fontWeight: 700, textAlign: 'center' }}>#</th>
+                  <th style={{ padding: '8px 12px', color: 'rgba(245,240,232,0.55)', fontFamily: FONT, fontSize: 11, fontWeight: 700, textAlign: 'left', whiteSpace: 'nowrap', minWidth: 90 }}>Role</th>
+                  {editPkg.teams.map((team, ti) => {
+                    const tc = TEAM_COLORS[ti];
+                    const filled = teamFillCount(team);
+                    return (
+                      <th key={ti} style={{ padding: '8px 10px', textAlign: 'center', minWidth: 130 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                          {isEditable ? (
+                            <input
+                              value={team.teamName}
+                              onChange={(e) => updatePkg((p) => ({
+                                ...p,
+                                teams: p.teams.map((t) => t.teamIndex !== team.teamIndex ? t : { ...t, teamName: e.target.value }),
+                              }))}
+                              style={{
+                                background: 'transparent', border: 'none',
+                                borderBottom: `1px solid ${tc.text}55`,
+                                color: tc.text, fontFamily: FONT, fontSize: 11, fontWeight: 700,
+                                textAlign: 'center', outline: 'none', width: 100, letterSpacing: '0.06em',
+                              }}
+                            />
+                          ) : (
+                            <span style={{ color: tc.text, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>{team.teamName}</span>
+                          )}
+                          <span style={{ color: filled === 13 ? tc.text : 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 9 }}>
+                            {filled}/13
+                          </span>
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {ALL_SLOTS.map((comp, ri) => (
+                  <tr key={comp.slot}
+                    style={{ background: ri % 2 === 0 ? '#1e1212' : '#1a1010', borderBottom: '1px solid rgba(192,57,43,0.06)' }}>
+                    <td style={{ padding: '7px 10px', textAlign: 'center', color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 11 }}>
+                      {comp.slot}
+                    </td>
+                    <td style={{ padding: '7px 12px', whiteSpace: 'nowrap', color: comp.color, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>
+                      {comp.role}
+                      {comp.role === 'Reserve' && (
+                        <span style={{ color: 'rgba(245,240,232,0.25)', fontWeight: 600, fontSize: 9, marginLeft: 5 }}>optional</span>
+                      )}
+                    </td>
+                    {editPkg.teams.map((team, ti) => {
+                      const slotData = team.slots.find((s) => s.slot === comp.slot);
+                      const hasPlayer = !!slotData?.playerRowIndex;
+                      const tc = TEAM_COLORS[ti];
+                      const isDragTarget = isEditable && dragOver?.teamIndex === team.teamIndex && dragOver?.slot === comp.slot;
+                      return (
+                        <td key={ti}
+                          onClick={() => isEditable && setPicker({ teamIndex: team.teamIndex, slot: comp.slot })}
+                          onDragOver={(e) => { if (isEditable) { e.preventDefault(); setDragOver({ teamIndex: team.teamIndex, slot: comp.slot }); } }}
+                          onDragLeave={() => setDragOver(null)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDragOver(null);
+                            if (!isEditable) return;
+                            const rowIdx = parseInt(e.dataTransfer.getData('playerRowIndex'), 10);
+                            if (!rowIdx || usedMap.has(rowIdx)) return;
+                            const player = players.find((p) => p.rowIndex === rowIdx);
+                            if (!player) return;
+                            updatePkg((pkg) => ({
+                              ...pkg,
+                              teams: pkg.teams.map((t) =>
+                                t.teamIndex !== team.teamIndex ? t : {
+                                  ...t,
+                                  slots: upsertSlot(t.slots, comp.slot, { playerRowIndex: player.rowIndex, playerName: player.name }),
+                                }
+                              ),
+                            }));
+                          }}
+                          style={{
+                            padding: '5px 8px', minWidth: 130, maxWidth: 170,
+                            cursor: isEditable ? 'pointer' : 'default',
+                            outline: isDragTarget ? '2px dashed rgba(255,183,77,0.6)' : 'none',
+                            outlineOffset: -2,
+                            background: isDragTarget ? 'rgba(255,183,77,0.12)' : 'transparent',
+                            transition: 'background 0.1s',
+                          }}
+                          onMouseEnter={(e) => { if (isEditable && !isDragTarget) (e.currentTarget as HTMLElement).style.background = 'rgba(192,57,43,0.08)'; }}
+                          onMouseLeave={(e) => { if (!isDragTarget) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {hasPlayer ? (
+                              <>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  {/* Role badges — shown in both view and edit mode */}
+                                  {(() => {
+                                    const pid = slotData!.playerRowIndex!;
+                                    const isCap = team.captain === pid;
+                                    const isVC = team.vc === pid;
+                                    const isWK = (team.wks ?? []).includes(pid);
+                                    return (
+                                      <>
+                                        {(isCap || isEditable) && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); if (isEditable) setRole(team.teamIndex, pid, 'captain'); }}
+                                            title={isCap ? 'Remove Captain' : 'Set as Captain'}
+                                            style={{
+                                              flexShrink: 0, fontFamily: FONT, fontWeight: 800, fontSize: 9,
+                                              padding: '1px 4px', borderRadius: 3, lineHeight: 1.4,
+                                              background: isCap ? 'rgba(200,168,75,0.35)' : 'rgba(255,255,255,0.06)',
+                                              color: isCap ? '#c8a84b' : 'rgba(245,240,232,0.2)',
+                                              border: `1px solid ${isCap ? 'rgba(200,168,75,0.6)' : 'rgba(255,255,255,0.08)'}`,
+                                              cursor: isEditable ? 'pointer' : 'default',
+                                            }}>
+                                            C
+                                          </button>
+                                        )}
+                                        {(isVC || isEditable) && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); if (isEditable) setRole(team.teamIndex, pid, 'vc'); }}
+                                            title={isVC ? 'Remove Vice Captain' : 'Set as Vice Captain'}
+                                            style={{
+                                              flexShrink: 0, fontFamily: FONT, fontWeight: 800, fontSize: 9,
+                                              padding: '1px 4px', borderRadius: 3, lineHeight: 1.4,
+                                              background: isVC ? 'rgba(144,202,249,0.2)' : 'rgba(255,255,255,0.06)',
+                                              color: isVC ? '#90caf9' : 'rgba(245,240,232,0.2)',
+                                              border: `1px solid ${isVC ? 'rgba(144,202,249,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                                              cursor: isEditable ? 'pointer' : 'default',
+                                            }}>
+                                            VC
+                                          </button>
+                                        )}
+                                        {(isWK || isEditable) && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); if (isEditable) setRole(team.teamIndex, pid, 'wk'); }}
+                                            title={isWK ? 'Remove Wicket Keeper' : `Set as Wicket Keeper${(team.wks ?? []).length >= 3 ? ' (max 3 reached)' : ''}`}
+                                            disabled={isEditable && !isWK && (team.wks ?? []).length >= 3}
+                                            style={{
+                                              flexShrink: 0, fontFamily: FONT, fontWeight: 800, fontSize: 9,
+                                              padding: '1px 4px', borderRadius: 3, lineHeight: 1.4,
+                                              background: isWK ? 'rgba(128,203,196,0.2)' : 'rgba(255,255,255,0.06)',
+                                              color: isWK ? '#80cbc4' : 'rgba(245,240,232,0.2)',
+                                              border: `1px solid ${isWK ? 'rgba(128,203,196,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                                              cursor: isEditable && !((!isWK) && (team.wks ?? []).length >= 3) ? 'pointer' : 'default',
+                                              opacity: isEditable && !isWK && (team.wks ?? []).length >= 3 ? 0.3 : 1,
+                                            }}>
+                                            WK
+                                          </button>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                  <span style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 11, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                    {slotData!.playerName}
+                                  </span>
+                                  {onPlayerClick && (() => {
+                                    const p = players.find((pl) => pl.rowIndex === slotData!.playerRowIndex);
+                                    return p ? (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); onPlayerClick(p); }}
+                                        title="View player details"
+                                        style={{ background: 'none', border: 'none', color: 'rgba(245,240,232,0.2)', cursor: 'pointer', fontSize: 10, padding: '0 1px', lineHeight: 1, flexShrink: 0 }}
+                                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(200,168,75,0.7)'; }}
+                                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(245,240,232,0.2)'; }}>
+                                        ↗
+                                      </button>
+                                    ) : null;
+                                  })()}
+                                  {isEditable && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); clearSlot(team.teamIndex, comp.slot); }}
+                                      title="Remove player"
+                                      style={{ background: 'none', border: 'none', color: 'rgba(245,240,232,0.2)', cursor: 'pointer', fontSize: 11, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+                              </>
+                            ) : (
+                              <span style={{
+                                color: isEditable ? `${tc.text}33` : 'rgba(245,240,232,0.1)',
+                                fontFamily: FONT, fontStyle: 'italic', fontSize: 10,
+                              }}>
+                                {isEditable ? 'pick player' : '—'}
+                              </span>
+                            )}
+                            {comp.role === 'Reserve' && (isEditable ? (
+                              <input
+                                type="text"
+                                value={slotData?.role || ''}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  const role = e.target.value;
+                                  updatePkg((pkg) => ({
+                                    ...pkg,
+                                    teams: pkg.teams.map((t) =>
+                                      t.teamIndex !== team.teamIndex ? t : { ...t, slots: upsertSlot(t.slots, comp.slot, { role }) }
+                                    ),
+                                  }));
+                                }}
+                                placeholder="Role (e.g. Backup Opener)…"
+                                title="Shown in the Opportunity Sheet instead of &quot;Reserve&quot;"
+                                style={{
+                                  width: '100%', fontFamily: FONT, fontStyle: 'italic', fontSize: 10, padding: '2px 5px',
+                                  borderRadius: 3, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                                  color: 'rgba(245,240,232,0.6)',
+                                }}
+                              />
+                            ) : slotData?.role ? (
+                              <span style={{ color: 'rgba(245,240,232,0.4)', fontFamily: FONT, fontStyle: 'italic', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {slotData.role}
+                              </span>
+                            ) : null)}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ── Required players panel ── */}
+        {requiredPlayers.length > 0 && (
+          () => {
+            const assignedCount = requiredPlayers.length - missingRequired.length;
+            const allDone = missingRequired.length === 0;
+            return (
+          <div className="mt-4 rounded-lg border overflow-hidden" style={{
+            borderColor: allDone ? 'rgba(129,199,132,0.25)' : 'rgba(255,183,77,0.3)',
+            background: allDone ? 'rgba(129,199,132,0.06)' : 'rgba(255,183,77,0.06)',
+          }}>
+            <div className="flex items-center gap-2 px-4 py-2.5" style={{
+              borderBottom: allDone ? '1px solid rgba(129,199,132,0.15)' : '1px solid rgba(255,183,77,0.2)',
+            }}>
+              <span style={{ fontSize: 13 }}>{allDone ? '✓' : '⚠'}</span>
+              <span style={{
+                color: allDone ? '#81c784' : '#ffb74d',
+                fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase',
+              }}>
+                Pre- players · {assignedCount}/{requiredPlayers.length} added to teams
+              </span>
+              <span style={{ color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 10, marginLeft: 4 }}>
+                green Yo-Yo · must appear in at least one team
+              </span>
+              {isEditable && missingRequired.length > 0 && (
+                <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 10, marginLeft: 'auto' }}>
+                  drag to slot ↑
+                </span>
+              )}
+            </div>
+            {missingRequired.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-4 py-3">
+                {missingRequired.map((player) => {
+                  const yy = playerYoyo(player);
+                  return (
+                    <div
+                      key={player.rowIndex}
+                      draggable={isEditable}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('playerRowIndex', String(player.rowIndex));
+                        e.dataTransfer.setData('playerName', player.name);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      style={{
+                        background: 'rgba(255,183,77,0.1)', border: '1px solid rgba(255,183,77,0.2)',
+                        borderRadius: 6, padding: '5px 10px',
+                        cursor: isEditable ? 'grab' : 'default',
+                        userSelect: 'none',
+                      }}>
+                      <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>{player.name}</span>
+                      <span style={{ color: 'rgba(245,240,232,0.4)', fontFamily: FONT, fontSize: 10, marginLeft: 6 }}>
+                        {player.batch} · {player.category}
+                      </span>
+                      {yy !== null && (
+                        <span style={{ color: '#81c784', fontFamily: FONT, fontSize: 10, fontWeight: 700, marginLeft: 6 }}>
+                          {yy.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+            );
+          }
+        )()}
+
+        {/* ── Manually Selected Players Panel ── */}
+        {allManuallySelected.length > 0 && (
+          () => {
+            const assignedCount = allManuallySelected.length - missingManuallySelected.length;
+            const allDone = missingManuallySelected.length === 0;
+            return (
+          <div className="mt-4 rounded-lg border overflow-hidden" style={{
+            borderColor: allDone ? 'rgba(46,125,50,0.4)' : 'rgba(46,125,50,0.25)',
+            background: 'rgba(27,94,32,0.06)',
+          }}>
+            <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(46,125,50,0.15)' }}>
+              <span style={{ fontSize: 13 }}>{allDone ? '✓' : '○'}</span>
+              <span style={{ color: '#a5d6a7', fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                Selected players · {assignedCount}/{allManuallySelected.length} added to teams
+              </span>
+              <span style={{ color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 10, marginLeft: 4 }}>
+                manually selected by an admin
+              </span>
+              {isEditable && missingManuallySelected.length > 0 && (
+                <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 10, marginLeft: 'auto' }}>
+                  drag to slot ↑
+                </span>
+              )}
+            </div>
+            {missingManuallySelected.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-4 py-3">
+                {missingManuallySelected.map((player) => {
+                  const yy = playerYoyo(player);
+                  return (
+                    <div
+                      key={player.rowIndex}
+                      draggable={isEditable}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('playerRowIndex', String(player.rowIndex));
+                        e.dataTransfer.setData('playerName', player.name);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      style={{
+                        background: 'rgba(46,125,50,0.12)', border: '1px solid rgba(46,125,50,0.25)',
+                        borderRadius: 6, padding: '5px 10px',
+                        cursor: isEditable ? 'grab' : 'default',
+                        userSelect: 'none',
+                      }}>
+                      <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>{player.name}</span>
+                      <span style={{ color: 'rgba(245,240,232,0.4)', fontFamily: FONT, fontSize: 10, marginLeft: 6 }}>
+                        {player.batch} · {player.category}
+                      </span>
+                      {yy !== null && (
+                        <span style={{ color: yoyoColor(yy, yoyoThresholds), fontFamily: FONT, fontSize: 10, fontWeight: 700, marginLeft: 6 }}>
+                          {yy.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+            );
+          }
+        )()}
+
+        {/* ── Comments ── */}
+        <div className="mt-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span style={{ color: 'rgba(245,240,232,0.45)', fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              Comments
+            </span>
+          </div>
+          {isEditable ? (
+            <textarea
+              value={editPkg.comments ?? ''}
+              onChange={(e) => updatePkg((p) => ({ ...p, comments: e.target.value }))}
+              placeholder="Add general comments about this package…"
+              rows={4}
+              style={{
+                width: '100%', background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(192,57,43,0.2)', borderRadius: 8,
+                color: '#f5f0e8', fontFamily: FONT, fontSize: 12,
+                padding: '10px 14px', outline: 'none', resize: 'vertical',
+                boxSizing: 'border-box', lineHeight: 1.6,
+              }}
+              onFocus={(e) => { (e.currentTarget as HTMLTextAreaElement).style.borderColor = 'rgba(192,57,43,0.45)'; }}
+              onBlur={(e) => { (e.currentTarget as HTMLTextAreaElement).style.borderColor = 'rgba(192,57,43,0.2)'; }}
+            />
+          ) : editPkg.comments?.trim() ? (
+            <div style={{
+              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+              borderRadius: 8, padding: '10px 14px',
+            }}>
+              {editPkg.comments.trim().split('\n').map((line, i) => (
+                <p key={i} style={{ color: 'rgba(245,240,232,0.6)', fontFamily: FONT, fontSize: 12, margin: 0, lineHeight: 1.6 }}>
+                  {line || ' '}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: 'rgba(245,240,232,0.18)', fontFamily: FONT, fontSize: 12, fontStyle: 'italic', margin: 0 }}>
+              No comments.
+            </p>
+          )}
+        </div>
+
+        {/* ── Player Picker Drawer ── */}
+        {picker && isEditable && (
+          <>
+            <div
+              onClick={() => { setPicker(null); setPickerSearch(''); }}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 40 }}
+            />
+            <div style={{
+              position: 'fixed', top: 0, right: 0, bottom: 0, width: 320,
+              background: '#1a1010', borderLeft: '1px solid rgba(192,57,43,0.28)',
+              zIndex: 50, display: 'flex', flexDirection: 'column',
+            }}>
+              <div style={{ padding: 16, borderBottom: '1px solid rgba(192,57,43,0.2)', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 14 }}>
+                    #{picker.slot} · {pickerComp?.role}
+                  </span>
+                  <button onClick={() => { setPicker(null); setPickerSearch(''); }}
+                    style={{ background: 'none', border: 'none', color: 'rgba(245,240,232,0.4)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>
+                    ×
+                  </button>
+                </div>
+                {pickerTeamIdx >= 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: TEAM_COLORS[pickerTeamIdx].text }}>
+                      → {editPkg.teams.find((t) => t.teamIndex === picker.teamIndex)?.teamName} Team
+                    </span>
+                  </div>
+                )}
+                <input
+                  autoFocus
+                  placeholder="Search name, batch, skill…"
+                  value={pickerSearch}
+                  onChange={(e) => setPickerSearch(e.target.value)}
+                  style={{
+                    width: '100%', background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(192,57,43,0.25)', borderRadius: 6,
+                    color: '#f5f0e8', fontFamily: FONT, fontSize: 12, padding: '7px 10px',
+                    outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ marginTop: 6, color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 10 }}>
+                  {players.length - usedMap.size} available · {usedMap.size} used
+                </div>
+              </div>
+
+              <div style={{ flex: 1, overflowY: 'auto' }}>
+                {pickerPlayers.map((player) => {
+                  const inTeam = usedMap.get(player.rowIndex);
+                  const yy = playerYoyo(player);
+                  return (
+                    <div
+                      key={player.rowIndex}
+                      onClick={() => !inTeam && assignPlayer(player)}
+                      style={{
+                        padding: '9px 16px',
+                        borderBottom: '1px solid rgba(192,57,43,0.07)',
+                        cursor: inTeam ? 'not-allowed' : 'pointer',
+                        opacity: inTeam ? 0.4 : 1,
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={(e) => { if (!inTeam) (e.currentTarget as HTMLElement).style.background = 'rgba(192,57,43,0.1)'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#f5f0e8', fontFamily: FONT, fontWeight: 700, fontSize: 12 }}>{player.name}</span>
+                        {inTeam && (
+                          <span style={{ color: 'rgba(245,240,232,0.4)', fontFamily: FONT, fontSize: 10, fontStyle: 'italic' }}>
+                            {inTeam.teamName} #{inTeam.slot}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <span style={{ color: 'rgba(245,240,232,0.4)', fontFamily: FONT, fontSize: 10 }}>
+                          {player.batch || '—'} · {player.div || '—'}
+                        </span>
+                        {player.extraInfo?.['Primary Skill'] && (
+                          <span style={{ color: 'rgba(245,240,232,0.6)', fontFamily: FONT, fontSize: 10 }}>
+                            {player.extraInfo['Primary Skill']}
+                          </span>
+                        )}
+                        {yy !== null && (
+                          <span style={{ color: yoyoColor(yy, yoyoThresholds), fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                            {yy.toFixed(1)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {pickerPlayers.length === 0 && (
+                  <div style={{ padding: 20, textAlign: 'center', color: 'rgba(245,240,232,0.25)', fontFamily: FONT, fontSize: 12 }}>
+                    No players found.
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ── List view ──
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <h2 style={{ color: '#f5f0e8', fontFamily: FONT, fontSize: 20, fontWeight: 700, margin: 0, flex: 1 }}>
+          Team Packages
+        </h2>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          title="Refresh packages"
+          style={{
+            background: 'none', border: '1px solid rgba(255,255,255,0.1)',
+            color: refreshing ? 'rgba(245,240,232,0.25)' : 'rgba(245,240,232,0.4)',
+            borderRadius: 6, padding: '7px 12px', fontFamily: FONT, fontSize: 12,
+            cursor: refreshing ? 'default' : 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+          }}>
+          <span style={{ display: 'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>↺</span>
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+        {packages.length >= 2 && (
+          <button
+            onClick={() => { setSubView('compare'); setCompareFilter('all'); }}
+            style={{
+              background: 'rgba(200,168,75,0.12)', border: '1px solid rgba(200,168,75,0.25)',
+              color: '#c8a84b', borderRadius: 6, padding: '7px 16px',
+              fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+              textTransform: 'uppercase', cursor: 'pointer',
+            }}>
+            ⊞ Compare All
+          </button>
+        )}
+        {myPackages.length < MAX_PACKAGES && (
+          <button
+            onClick={() => openEdit(null, true)}
+            style={{
+              background: 'rgba(192,57,43,0.18)', border: '1px solid rgba(192,57,43,0.4)',
+              color: '#ef9a9a', borderRadius: 6, padding: '7px 16px',
+              fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+              textTransform: 'uppercase', cursor: 'pointer',
+            }}>
+            + New Package
+          </button>
+        )}
+      </div>
+
+      {/* My Packages */}
+      <section className="mb-8">
+        <div className="flex items-center gap-3 mb-3">
+          <h3 style={{ color: '#c8a84b', fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 }}>
+            My Packages
+          </h3>
+          <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 11 }}>
+            {myPackages.length}/{MAX_PACKAGES}
+          </span>
+        </div>
+
+        {myPackages.length === 0 ? (
+          <div style={{
+            background: '#221515', border: '1px dashed rgba(192,57,43,0.25)',
+            borderRadius: 10, padding: '28px 20px', textAlign: 'center',
+          }}>
+            <p style={{ color: 'rgba(245,240,232,0.3)', fontFamily: FONT, fontSize: 13, margin: '0 0 12px' }}>
+              You haven't created a package yet.
+            </p>
+            <button onClick={() => openEdit(null, true)}
+              style={{
+                background: 'rgba(192,57,43,0.2)', border: '1px solid rgba(192,57,43,0.4)',
+                color: '#ef9a9a', borderRadius: 6, padding: '8px 20px',
+                fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
+                textTransform: 'uppercase', cursor: 'pointer',
+              }}>
+              Create Default Package
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {myPackages.map((pkg) => (
+              <PackageCard key={pkg.packageId} pkg={pkg} editable requiredIds={requiredIds} manuallySelectedIds={manuallySelectedIds}
+                onOpen={() => openEdit(pkg, true)}
+                onClone={myPackages.length < MAX_PACKAGES ? () => handleClone(pkg) : undefined} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Other Coaches */}
+      {otherPackages.length > 0 && (
+        <section>
+          <div className="flex items-center gap-3 mb-4">
+            <h3 style={{ color: 'rgba(245,240,232,0.35)', fontFamily: FONT, fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 }}>
+              Other Coaches
+            </h3>
+            <span style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 10 }}>
+              {isAdmin ? 'all packages visible to admins' : 'shared packages only'}
+            </span>
+          </div>
+          {coachGroups.map(({ coachName, pkgs }) => (
+            <div key={coachName} className="mb-5">
+              <div style={{ color: 'rgba(245,240,232,0.55)', fontFamily: FONT, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+                {coachName}
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {pkgs.map((pkg) => (
+                  <PackageCard key={pkg.packageId} pkg={pkg} editable={false} requiredIds={requiredIds} manuallySelectedIds={manuallySelectedIds}
+                    onOpen={() => openEdit(pkg, false)}
+                    onClone={myPackages.length < MAX_PACKAGES ? () => handleClone(pkg) : undefined} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {packages.length === 0 && myPackages.length === 0 && (
+        <div style={{
+          background: '#221515', border: '1px solid rgba(192,57,43,0.1)',
+          borderRadius: 10, padding: '24px 20px', textAlign: 'center', marginTop: 8,
+        }}>
+          <p style={{ color: 'rgba(245,240,232,0.2)', fontFamily: FONT, fontSize: 13, margin: 0 }}>
+            No packages yet. Create the first one above.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

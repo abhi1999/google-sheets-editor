@@ -137,6 +137,9 @@ html, body {
 /* Additional micro-animations and polish */
 button {
   transition: all 0.2s ease;
+  /* Eliminate the 300ms tap delay and grey flash on every tap across the whole app */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button:hover {
@@ -150,6 +153,32 @@ button:active {
 input:focus, select:focus {
   transform: scale(1.01);
   transition: all 0.2s ease;
+}
+
+/* iOS auto-zooms the viewport when focusing an input smaller than 16px — prevent it.
+   Visual size is controlled by the component; this just stops the jarring zoom. */
+@media (max-width: 767px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* Hover transforms don't make sense on touch screens — on iOS a tapped button
+   stays in the "hover" state until the user taps elsewhere, leaving everything
+   slightly raised until then. */
+@media (hover: none) {
+  button:hover {
+    transform: none;
+  }
+  input:focus, select:focus {
+    transform: none;
+  }
+}
+
+/* Interactive elements beyond <button> should also skip the tap delay */
+[role="button"], label[for] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 @keyframes shimmer {
@@ -209,6 +238,15 @@ html {
   to { transform: rotate(360deg); }
 }
 .spin { animation: spin 0.8s linear infinite; }
+
+@keyframes slideUp {
+  from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+
+.search-input::placeholder { color: rgba(245,240,232,0.3); }
+.search-input:focus { outline: none; border-color: rgba(192,57,43,0.6); }
+.batch-tabs::-webkit-scrollbar { display: none; }
 
 /* Toast */
 .toast-enter {

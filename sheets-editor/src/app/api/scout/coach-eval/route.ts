@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { ensureTabExists, readTab, appendRowsToTab, updateRowInTab } from '@/lib/sheets';
-import type { CoachEvalPayload } from '@/types/scout';
+import { ensureTabExists, readTab, appendRowsToTab, updateRowInTab, createAuditEntry, appendAuditEntries } from '@/lib/sheets';
+import { diffRecord, safeJsonParse } from '@/lib/audit';
+import type { CoachEvalPayload, PlayerEvaluation } from '@/types/scout';
+import type { AuditEntry } from '@/types';
 
 async function checkAuthorized(userEmail: string, sheetKey: string): Promise<boolean> {
   try {
@@ -64,6 +66,42 @@ export async function POST(request: NextRequest) {
       await updateRowInTab(existingRow.__rowIndex as number, rowValues, COACH_EVALS_TAB, sheetKey);
     } else {
       await appendRowsToTab([rowValues], COACH_EVALS_TAB, sheetKey);
+    }
+
+    // Audit log — split into Fitness Score vs Tryout Evaluation so each can be
+    // reviewed independently, and only log the fields that actually changed.
+    const emptyEval: PlayerEvaluation = { skills: {}, notes: {}, fitness: {} };
+    const oldEval = existingRow ? safeJsonParse<PlayerEvaluation>(String(existingRow['Evaluation'] || ''), emptyEval) : emptyEval;
+    const auditEntries: AuditEntry[] = [];
+
+    const fitnessDiff = diffRecord(oldEval.fitness, body.evaluation.fitness);
+    if (fitnessDiff) {
+      auditEntries.push(createAuditEntry(
+        user.email, user.name, body.playerRowIndex, 'Fitness Score',
+        JSON.stringify(fitnessDiff.old), JSON.stringify(fitnessDiff.new)
+      ));
+    }
+
+    const skillsDiff = diffRecord(oldEval.skills, body.evaluation.skills);
+    const notesDiff = diffRecord(oldEval.notes, body.evaluation.notes);
+    const oldScore = {
+      score: String(existingRow?.['Score'] ?? ''), pct: String(existingRow?.['Pct'] ?? ''),
+      rating: String(existingRow?.['Rating'] ?? ''), remarks: String(existingRow?.['Remarks'] ?? ''),
+    };
+    const newScore = { score: String(body.score), pct: String(body.pct), rating: body.rating, remarks: body.remarks };
+    const scoreChanged = JSON.stringify(oldScore) !== JSON.stringify(newScore);
+    if (skillsDiff || notesDiff || scoreChanged) {
+      auditEntries.push(createAuditEntry(
+        user.email, user.name, body.playerRowIndex, 'Tryout Evaluation',
+        JSON.stringify({ skills: skillsDiff?.old, notes: notesDiff?.old, ...oldScore }),
+        JSON.stringify({ skills: skillsDiff?.new, notes: notesDiff?.new, ...newScore })
+      ));
+    }
+
+    if (auditEntries.length > 0) {
+      appendAuditEntries(auditEntries, sheetKey).catch((err) => {
+        console.error('[Audit] Failed to write coach-eval audit log:', err);
+      });
     }
 
     return NextResponse.json({ success: true });
