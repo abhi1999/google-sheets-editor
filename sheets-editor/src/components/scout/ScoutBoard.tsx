@@ -3028,7 +3028,8 @@ type PivotSavedFilter = {
   id: string;
   name: string;
   schemaFilter: SchemaType | 'all';
-  yoyoFilter: YoyoFilterKey;
+  yoyoFilters?: Array<Exclude<YoyoFilterKey, 'all'>>; // new multi-select format
+  yoyoFilter?: YoyoFilterKey; // kept for backward-compat with saved filters that predate multi-select
   categoryFilter: string;
   schemaCoverage: Record<SchemaType, SchemaCoverage>;
 };
@@ -3128,7 +3129,7 @@ function AdminPivotTable({
   const t = useContext(YoyoThresholdsCtx);
   const playerSelections = useContext(PlayerSelectionsCtx);
   const [schemaFilter, setSchemaFilter] = useState<SchemaType | 'all'>('all');
-  const [yoyoFilter, setYoyoFilter] = useState<YoyoFilterKey>('all');
+  const [yoyoFilters, setYoyoFilters] = useState<Array<Exclude<YoyoFilterKey, 'all'>>>([]);
   const [search, setSearch] = useState('');
   const [popover, setPopover] = useState<PivotPopover | null>(null);
   const [remarksPopover, setRemarksPopover] = useState<RemarksPopover | null>(null);
@@ -3350,7 +3351,7 @@ function AdminPivotTable({
     const next: PivotSavedFilter = {
       id: `pf_${Date.now()}`,
       name: filterName.trim(),
-      schemaFilter, yoyoFilter, categoryFilter, schemaCoverage,
+      schemaFilter, yoyoFilters, categoryFilter, schemaCoverage,
     };
     setFilterSaving(true);
     try {
@@ -3368,7 +3369,14 @@ function AdminPivotTable({
   }
   function handleLoadFilter(f: PivotSavedFilter) {
     setSchemaFilter(f.schemaFilter);
-    setYoyoFilter(f.yoyoFilter);
+    // Support both new array format and old single-key format from pre-multi-select saves
+    if (f.yoyoFilters) {
+      setYoyoFilters(f.yoyoFilters);
+    } else if (f.yoyoFilter && f.yoyoFilter !== 'all') {
+      setYoyoFilters([f.yoyoFilter as Exclude<YoyoFilterKey, 'all'>]);
+    } else {
+      setYoyoFilters([]);
+    }
     setCategoryFilter(f.categoryFilter ?? 'all');
     const loaded = f.schemaCoverage ?? DEFAULT_SCHEMA_COVERAGE;
     setSchemaCoverage({
@@ -3394,7 +3402,7 @@ function AdminPivotTable({
     const q = search.toLowerCase();
     const visibleIndexes = new Set(
       players.filter((p) => {
-        if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals, t) !== yoyoFilter) return false;
+        if (yoyoFilters.length > 0 && !yoyoFilters.includes(yoyoCategory(p.coachEvals, t) as Exclude<YoyoFilterKey, 'all'>)) return false;
         if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
         if (divFilter !== 'all' && p.div !== divFilter) return false;
         if (q && !matchesSearch(p, q)) return false;
@@ -3411,7 +3419,7 @@ function AdminPivotTable({
       }).map((p) => p.rowIndex)
     );
     return effectivePlayers.filter((p) => visibleIndexes.has(p.rowIndex));
-  }, [players, effectivePlayers, yoyoFilter, categoryFilter, divFilter, search, selectedOnlyFilter, playerSelections, t]);
+  }, [players, effectivePlayers, yoyoFilters, categoryFilter, divFilter, search, selectedOnlyFilter, playerSelections, t]);
 
   const yoyoCounts = useMemo(() => {
     const q = search.toLowerCase();
@@ -3430,7 +3438,7 @@ function AdminPivotTable({
     const q = search.toLowerCase();
     const counts: Record<string, number> = {};
     players.filter((p) => {
-      if (yoyoFilter !== 'all' && yoyoCategory(p.coachEvals, t) !== yoyoFilter) return false;
+      if (yoyoFilters.length > 0 && !yoyoFilters.includes(yoyoCategory(p.coachEvals, t) as Exclude<YoyoFilterKey, 'all'>)) return false;
       if (divFilter !== 'all' && p.div !== divFilter) return false;
       if (q && !matchesSearch(p, q)) return false;
       return true;
@@ -3438,7 +3446,7 @@ function AdminPivotTable({
       if (p.category) counts[p.category] = (counts[p.category] || 0) + 1;
     });
     return counts;
-  }, [players, yoyoFilter, divFilter, search, t]);
+  }, [players, yoyoFilters, divFilter, search, t]);
 
   const [pivotSortCol, setPivotSortCol] = useState<string | null>(null);
   const [pivotSortDir, setPivotSortDir] = useState<'asc' | 'desc'>('desc');
@@ -3629,9 +3637,11 @@ function AdminPivotTable({
         <TableSearch value={search} onChange={setSearch} />
         <div className="flex items-center gap-1">
           {YOYO_FILTERS.filter((f) => f.key !== 'all').map((f) => {
-            const active = yoyoFilter === f.key;
+            const key = f.key as Exclude<YoyoFilterKey, 'all'>;
+            const active = yoyoFilters.includes(key);
             return (
-              <button key={f.key} onClick={() => setYoyoFilter(active ? 'all' : f.key)}
+              <button key={f.key}
+                onClick={() => setYoyoFilters((prev) => active ? prev.filter((k) => k !== key) : [...prev, key])}
                 style={{
                   padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 700,
                   fontFamily: 'Barlow Condensed, sans-serif',
@@ -3645,6 +3655,12 @@ function AdminPivotTable({
               </button>
             );
           })}
+          {yoyoFilters.length > 0 && (
+            <button onClick={() => setYoyoFilters([])}
+              style={{ padding: '3px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: 'Barlow Condensed, sans-serif', background: 'rgba(192,57,43,0.12)', color: 'rgba(220,100,90,0.85)', border: '1px solid rgba(192,57,43,0.3)', cursor: 'pointer' }}>
+              ✕
+            </button>
+          )}
         </div>
         {allCategories.length > 0 && (
           <div className="flex items-center gap-1">

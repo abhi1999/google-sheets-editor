@@ -312,7 +312,7 @@ export function InGameRatingModal({ player, gameNumber, teamIndex, existingRatin
         </div>
 
         {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
           <SectionHeader title="Batting" />
           <div className="px-5 py-2.5">
             <label className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide" style={{ fontFamily: FONT, color: '#1a1a1a' }}>

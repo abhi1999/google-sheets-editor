@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { ScoutPlayer, PlayerEvaluation, SchemaType } from '@/types/scout';
 import {
   SCHEMAS,
@@ -95,20 +95,77 @@ export function SkillStars({
   value: number;
   onChange: (v: number) => void;
 }) {
-  const [hovered, setHovered] = useState(0);
-  const display = hovered || value;
+  const [dragRating, setDragRating] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const movedRef = useRef(false);
+  const display = dragRating ?? value;
+
+  function ratingFromX(clientX: number): number {
+    if (!containerRef.current) return 1;
+    const rect = containerRef.current.getBoundingClientRect();
+    return Math.min(5, Math.max(1, Math.ceil(((clientX - rect.left) / rect.width) * 5)));
+  }
 
   return (
-    <div className="flex gap-1 flex-shrink-0" onMouseLeave={() => setHovered(0)}>
+    <div
+      ref={containerRef}
+      className="flex flex-shrink-0"
+      style={{
+        // pan-y lets the page scroll vertically while horizontal drag sets the rating.
+        // Without this, iOS would cancel pointer events whenever it guesses "scroll".
+        touchAction: 'pan-y',
+        userSelect: 'none',
+        cursor: 'pointer',
+      }}
+      onPointerDown={(e) => {
+        draggingRef.current = true;
+        movedRef.current = false;
+        setDragRating(ratingFromX(e.clientX));
+      }}
+      onPointerMove={(e) => {
+        if (!draggingRef.current) return;
+        movedRef.current = true;
+        setDragRating(ratingFromX(e.clientX));
+      }}
+      onPointerUp={(e) => {
+        if (!draggingRef.current) return;
+        draggingRef.current = false;
+        const r = ratingFromX(e.clientX);
+        // tap (no drag): toggle off if same star; drag: always commit to final position
+        onChange(movedRef.current ? r : r === value ? 0 : r);
+        setDragRating(null);
+      }}
+      onPointerLeave={(e) => {
+        // Finger slid off the edge while dragging — commit to boundary star
+        if (!draggingRef.current) return;
+        draggingRef.current = false;
+        onChange(ratingFromX(e.clientX));
+        setDragRating(null);
+      }}
+      onPointerCancel={() => {
+        // Browser took over (e.g. scroll gesture won) — cancel without committing
+        draggingRef.current = false;
+        setDragRating(null);
+      }}
+    >
       {[1, 2, 3, 4, 5].map((i) => (
         <span
           key={i}
-          className={`text-2xl cursor-pointer select-none transition-all leading-none ${
-            i <= display ? 'text-[#c8a84b]' : 'text-gray-300'
-          } hover:scale-110`}
-          onMouseEnter={() => setHovered(i)}
-          onClick={() => { const v = i === value ? 0 : i; if (v === 0) setHovered(0); onChange(v); }}
           title={`${i} — ${['Poor', 'Below Average', 'Average', 'Good', 'Excellent'][i - 1]}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            // 10px vertical padding pushes the touch target to ~44px — Apple HIG minimum
+            padding: '10px 3px',
+            minWidth: 28,
+            fontSize: 22,
+            lineHeight: 1,
+            color: i <= display ? '#c8a84b' : 'rgba(0,0,0,0.15)',
+            // Instant color during drag; subtle transition otherwise
+            transition: draggingRef.current ? 'none' : 'color 0.1s',
+          }}
         >
           ★
         </span>
@@ -160,6 +217,13 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving, isAdmi
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
+  }, []);
+  // Lock background scroll while modal is open — on iOS the page under a fixed overlay
+  // still scrolls on touch, which is disorienting during evaluations.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
   }, []);
 
   const schemaScores = useMemo(
@@ -428,7 +492,7 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving, isAdmi
         </div>
 
         {/* Tab content — single scroll container on mobile, transparent wrapper on desktop */}
-        <div className="flex-1 min-h-0 overflow-y-auto md:flex-none md:overflow-visible">
+        <div className="flex-1 min-h-0 overflow-y-auto md:flex-none md:overflow-visible" style={{ overscrollBehavior: 'contain' }}>
 
         {/* My Evaluation tab */}
         {activeTab === 'mine' && (
@@ -465,7 +529,7 @@ export function PlayerModal({ player, userEmail, onClose, onSave, saving, isAdmi
             </div>
 
             {/* Evaluation sections — all 3 schemas */}
-            <div className="overflow-y-auto" style={{ maxHeight: isMobile ? 'none' : '55vh' }}>
+            <div className="overflow-y-auto" style={{ maxHeight: isMobile ? 'none' : '55vh', overscrollBehavior: 'contain' }}>
               {(Object.entries(SCHEMAS) as [SchemaType, (typeof SCHEMAS)[SchemaType]][]).map(([schemaName, schemaDef]) => (
                 <div key={schemaName}>
                   {/* Schema group header */}
