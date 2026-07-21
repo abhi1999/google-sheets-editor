@@ -31,10 +31,39 @@ export const BATTING_SKILL_SECTIONS: InGameSkillSection[] = sectionsFor('Batsman
 export const FAST_BOWLING_SKILL_SECTIONS: InGameSkillSection[] = sectionsFor('Fast Bowler', ['F']);
 export const SPIN_BOWLING_SKILL_SECTIONS: InGameSkillSection[] = sectionsFor('Spin Bowler', ['F']);
 
+export const WK_SKILL_SECTIONS: InGameSkillSection[] = [
+  {
+    letter: 'A',
+    name: 'Wicket Keeping Skills',
+    skills: [
+      { name: 'Footwork & Movement',         desc: 'Quick, balanced, and efficient movement behind the stumps.' },
+      { name: 'Catching Technique',           desc: 'Safe hands, soft grip, and consistent catching ability.' },
+      { name: 'Keeping Against Spin Bowling', desc: 'Positioning, anticipation, and clean glove work against spin.' },
+      { name: 'Keeping Against Pace Bowling', desc: 'Reflexes, technique, and handling pace with confidence.' },
+      { name: 'Ball Collection & Gathering',  desc: 'Clean collection, quick pickups, and effective ball control for run-out and stumping opportunities.' },
+    ],
+  },
+];
+
+export const FIELDING_SKILL_SECTIONS: InGameSkillSection[] = [
+  {
+    letter: 'A',
+    name: 'Fielding Skills',
+    skills: [
+      { name: 'Groundfielding',         desc: 'Stopping, retrieving, and throwing the ball cleanly from the outfield and infield.' },
+      { name: 'Awareness in the Field', desc: 'Positioning, backing up, and reading the game situation.' },
+      { name: 'Catching Ability',       desc: 'Taking catches reliably at any position.' },
+      { name: 'Utility',                desc: 'Ability to field effectively in any position across the ground.' },
+    ],
+  },
+];
+
 // Flat lists for places that just need a single defs array (e.g. score-presence checks).
 export const BATTING_SKILLS: InGameSkillDef[] = BATTING_SKILL_SECTIONS.flatMap((s) => s.skills);
 export const FAST_BOWLING_SKILLS: InGameSkillDef[] = FAST_BOWLING_SKILL_SECTIONS.flatMap((s) => s.skills);
 export const SPIN_BOWLING_SKILLS: InGameSkillDef[] = SPIN_BOWLING_SKILL_SECTIONS.flatMap((s) => s.skills);
+export const WK_SKILLS: InGameSkillDef[] = WK_SKILL_SECTIONS.flatMap((s) => s.skills);
+export const FIELDING_SKILLS: InGameSkillDef[] = FIELDING_SKILL_SECTIONS.flatMap((s) => s.skills);
 
 export const GAME_NUMBERS = [1, 2, 3, 4, 5, 6] as const;
 
@@ -53,8 +82,10 @@ export function emptyInGameRating(): InGameRating {
     spinBowlingCatchesDropped: [],
     spinBowlingNotes: '',
     keptWicket: false,
+    wkSkills: {},
     wkNotes: '',
     wkEvents: [],
+    fieldingSkills: {},
     fieldingNotes: '',
     fieldingEntries: [],
     overallNotes: '',
@@ -92,8 +123,12 @@ export function parseInGameRating(json: string): InGameRating {
       spinBowlingCatchesDropped: asEntryArray(parsed.spinBowlingCatchesDropped),
       spinBowlingNotes: typeof parsed.spinBowlingNotes === 'string' ? parsed.spinBowlingNotes : '',
       keptWicket: !!parsed.keptWicket,
+      wkSkills:
+        typeof parsed.wkSkills === 'object' && parsed.wkSkills !== null ? parsed.wkSkills : {},
       wkNotes: typeof parsed.wkNotes === 'string' ? parsed.wkNotes : '',
       wkEvents: Array.isArray(parsed.wkEvents) ? parsed.wkEvents : [],
+      fieldingSkills:
+        typeof parsed.fieldingSkills === 'object' && parsed.fieldingSkills !== null ? parsed.fieldingSkills : {},
       fieldingNotes: typeof parsed.fieldingNotes === 'string' ? parsed.fieldingNotes : '',
       fieldingEntries: Array.isArray(parsed.fieldingEntries) ? parsed.fieldingEntries : [],
       overallNotes: typeof parsed.overallNotes === 'string' ? parsed.overallNotes : '',

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import type { ScoutPlayer, InGameRating, InGameRatingPayload, WkEvent, WkEventType, FieldingEntry, FieldingEntryType, CatchDroppedEntry } from '@/types/scout';
 import { playerInitials } from '@/lib/scout-schemas';
-import { BATTING_SKILL_SECTIONS, FAST_BOWLING_SKILL_SECTIONS, SPIN_BOWLING_SKILL_SECTIONS, emptyInGameRating } from '@/lib/ingame-schemas';
+import { BATTING_SKILL_SECTIONS, FAST_BOWLING_SKILL_SECTIONS, SPIN_BOWLING_SKILL_SECTIONS, WK_SKILL_SECTIONS, FIELDING_SKILL_SECTIONS, emptyInGameRating } from '@/lib/ingame-schemas';
 import type { InGameSkillSection } from '@/lib/ingame-schemas';
 import { SkillStars } from './PlayerModal';
 
@@ -259,7 +259,7 @@ export function InGameRatingModal({ player, gameNumber, teamIndex, existingRatin
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  const setSkill = (group: 'battingSkills' | 'fastBowlingSkills' | 'spinBowlingSkills', name: string, value: number) => {
+  const setSkill = (group: 'battingSkills' | 'fastBowlingSkills' | 'spinBowlingSkills' | 'wkSkills' | 'fieldingSkills', name: string, value: number) => {
     setRating((prev) => ({ ...prev, [group]: { ...prev[group], [name]: value } }));
   };
 
@@ -434,6 +434,14 @@ export function InGameRatingModal({ player, gameNumber, teamIndex, existingRatin
           </div>
           {rating.keptWicket && (
             <>
+              {WK_SKILL_SECTIONS.map((sec) => (
+                <SkillSectionGroup
+                  key={sec.letter}
+                  section={sec}
+                  values={rating.wkSkills}
+                  onChange={(name, v) => setSkill('wkSkills', name, v)}
+                />
+              ))}
               <NotesBox
                 value={rating.wkNotes}
                 placeholder="Notes on wicketkeeping performance…"
@@ -447,6 +455,14 @@ export function InGameRatingModal({ player, gameNumber, teamIndex, existingRatin
           )}
 
           <SectionHeader title="Fielding" />
+          {FIELDING_SKILL_SECTIONS.map((sec) => (
+            <SkillSectionGroup
+              key={sec.letter}
+              section={sec}
+              values={rating.fieldingSkills}
+              onChange={(name, v) => setSkill('fieldingSkills', name, v)}
+            />
+          ))}
           <NotesBox
             value={rating.fieldingNotes}
             placeholder="General comments on fielding…"

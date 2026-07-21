@@ -135,8 +135,10 @@ export interface InGameRating {
   spinBowlingCatchesDropped: CatchDroppedEntry[];
   spinBowlingNotes: string;
   keptWicket: boolean;
+  wkSkills: Record<string, number>;
   wkNotes: string;
   wkEvents: WkEvent[];
+  fieldingSkills: Record<string, number>;
   fieldingNotes: string;
   fieldingEntries: FieldingEntry[];
   overallNotes: string;

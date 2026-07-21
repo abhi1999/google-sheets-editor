@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { ScoutPlayer, InGameRatingRecord, InGameRating, WkEvent, FieldingEntry, CatchDroppedEntry } from '@/types/scout';
 import { playerInitials } from '@/lib/scout-schemas';
-import { BATTING_SKILL_SECTIONS, FAST_BOWLING_SKILL_SECTIONS, SPIN_BOWLING_SKILL_SECTIONS } from '@/lib/ingame-schemas';
+import { BATTING_SKILL_SECTIONS, FAST_BOWLING_SKILL_SECTIONS, SPIN_BOWLING_SKILL_SECTIONS, WK_SKILL_SECTIONS, FIELDING_SKILL_SECTIONS } from '@/lib/ingame-schemas';
 import type { InGameSkillSection } from '@/lib/ingame-schemas';
 
 const FONT = 'Barlow Condensed, sans-serif';
@@ -155,13 +155,15 @@ function RatingRecordCard({ record, teamName, isMe, onDelete }: { record: InGame
 
       {r.keptWicket && (
         <SectionBlock title="Wicket Keeping">
+          <SkillList skills={r.wkSkills} sections={WK_SKILL_SECTIONS} />
           <WkEventsLine events={r.wkEvents} />
           <NotesLine value={r.wkNotes} />
         </SectionBlock>
       )}
 
-      {(r.fieldingEntries.length > 0 || r.fieldingNotes.trim()) && (
+      {(Object.keys(r.fieldingSkills || {}).length > 0 || r.fieldingEntries.length > 0 || r.fieldingNotes.trim()) && (
         <SectionBlock title="Fielding">
+          <SkillList skills={r.fieldingSkills || {}} sections={FIELDING_SKILL_SECTIONS} />
           <FieldingEntriesLine entries={r.fieldingEntries} />
           <NotesLine value={r.fieldingNotes} />
         </SectionBlock>
